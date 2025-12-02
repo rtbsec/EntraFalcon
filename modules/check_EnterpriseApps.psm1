@@ -951,16 +951,6 @@ function Invoke-CheckEnterpriseApps {
             }
         }
 
-        #Mark foreign non-default apps as risky
-        if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
-            $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
-            if ($ImpactScore -gt 0) {
-                $Warnings += "Foreign with permission"
-            }
-        } elseif ($DefaultMS -eq $false -and $ForeignTenant -eq $false) {
-            $LikelihoodScore += $SPLikelihoodScore["InternApp"]
-        }
-
         # Build the warning parts dynamically
         [string[]]$severities = @()
         if ($WarningsDangerousPermission) { $severities += "dangerous" }
@@ -1007,7 +997,7 @@ function Invoke-CheckEnterpriseApps {
             if ($DelegateApiPermssionCount.High -ge 1) {
                 $ImpactScore += $SPImpactScore["APIDelegatedHigh"]
                 $WarningsHighDelegatedPermission = $true
-            }else {
+            } else {
                 $WarningsHighDelegatedPermission = $false
             }
 
@@ -1051,6 +1041,17 @@ function Invoke-CheckEnterpriseApps {
                 $Warnings += "Known $joined delegated API permission$plural!"
             }
         }
+
+        #Mark foreign non-default apps as risky
+        if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
+            $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
+            if ($ImpactScore -gt 10) {
+                $Warnings += "Foreign with permission"
+            }
+        } elseif ($DefaultMS -eq $false -and $ForeignTenant -eq $false) {
+            $LikelihoodScore += $SPLikelihoodScore["InternApp"]
+        }
+
 
         #Format warning messages
         $Warnings = if ($null -ne $Warnings) {
