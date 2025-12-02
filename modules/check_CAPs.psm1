@@ -220,7 +220,7 @@ function ConvertTo-Yaml {
     $headers = @{ 'Accept' = 'application/json; odata.metadata=none' }
     $AllPolicies = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -AdditionalHeaders $headers -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
-    $AllPoliciesCount = $AllPolicies.count
+    $AllPoliciesCount = @($AllPolicies).count
     write-host "[+] Got $AllPoliciesCount policies"
 
     #Check Named locations
@@ -342,8 +342,6 @@ function ConvertTo-Yaml {
         }
     }
     Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Prepared HT ScopedAssignments $($ScopedAssignments.Count)"
-
-
 
 
     if ($AllPoliciesCount -gt 0) {
