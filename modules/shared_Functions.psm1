@@ -106,7 +106,7 @@ $global:GLOBALJavaScript = @'
                 },
                 {
                     label: "Public M365 Groups",
-                    filters: { Visibility: "=Public", Type: "=M365 Group" },
+                    filters: { Visibility: "=Public", Type: "=M365 Group", Dynamic: "=false" },
                     columns: ["DisplayName", "Type", "SecurityEnabled", "Visibility", "Users", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
