@@ -89,7 +89,7 @@ function Invoke-CheckManagedIdentities {
     write-host "[*] Get Managed Identities"
     $QueryParameters = @{
         '$filter' = "ServicePrincipalType eq 'ManagedIdentity'"
-        '$select' = "Id,DisplayName,AppId,AppRoles,servicePrincipalType,PasswordCredentials,KeyCredentials,AlternativeNames"
+        '$select' = "Id,DisplayName,AppId,AppRoles,servicePrincipalType,createdDateTime,PasswordCredentials,KeyCredentials,AlternativeNames"
         '$top' = $ApiTop
     }
     $ManagedIdentities = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
@@ -546,6 +546,11 @@ function Invoke-CheckManagedIdentities {
             }
         }
 
+        #Calculate days since creation
+        $CreationInDays = if ($item.createdDateTime) {
+            (New-TimeSpan -Start $item.createdDateTime.ToUniversalTime()).Days
+        } else { "-" }
+
         # Build the warning parts dynamically
         [string[]]$severities = @()
         if ($WarningsDangerousPermission) { $severities += "dangerous" }
@@ -599,6 +604,8 @@ function Invoke-CheckManagedIdentities {
             AppPermission = $AppAssignments
             IsExplicit = $IsExplicit
             MiPath = $MiPath
+            CreationDate = $item.createdDateTime
+            CreationInDays = $CreationInDays
             AzureRoles = $AzureRoleCount
             AzureRoleDetails = $AzureRoleDetails
             OwnerSPDetails = $OwnerSPDetails
@@ -686,7 +693,7 @@ function Invoke-CheckManagedIdentities {
     write-host "[*] Generating reports"
 
     #Define output of the main table
-    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,IsExplicit,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AppCredentials,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AppCredentials,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     
     #Define the apps to be displayed in detail and sort them by risk score
     $details = $AllServicePrincipal | Sort-Object Risk -Descending
@@ -713,13 +720,14 @@ function Invoke-CheckManagedIdentities {
             "App Name" = $($item.DisplayName)
             "App Client-ID" = $($item.AppId)
             "App Object-ID" = $($item.Id)
+            "CreationDate" = $($item.CreationDate)
             "Custom Identity" = $($item.IsExplicit)
             "Object Path" = $($item.MiPath)
             "RiskScore" = $($item.Risk)
         }
 
         #Build dynamic TXT report property list
-        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","Custom Identity","Object Path","RiskScore")
+        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","CreationDate","Custom Identity","Object Path","RiskScore")
 
         if ($item.Warnings -ne '') {
             $ReportingMIInfo | Add-Member -NotePropertyName Warnings -NotePropertyValue $item.Warnings
@@ -938,7 +946,7 @@ function Invoke-CheckManagedIdentities {
     write-host "[*] Writing log files"
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},IsExplicit,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -989,8 +997,8 @@ Appendix: Used API permission reference
 
         #Write TXT and CSV files
         $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $tableOutput | format-table DisplayName,IsExplicit,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $tableOutput | select-object DisplayName,IsExplicit,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $tableOutput | format-table DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $tableOutput | select-object DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
         $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $AppendixHeaderTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $ApiPermissionReference | Format-Table -AutoSize | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
