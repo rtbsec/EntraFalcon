@@ -252,7 +252,7 @@ function Invoke-CheckManagedIdentities {
             }
         }
 
-        # Define sort order
+        # Define sort order. This is used for the appendix as well
         $categorizationOrder = @{
             'Dangerous'     = 1
             'High'          = 2
@@ -990,7 +990,24 @@ Appendix: Used API permission reference
 
     #It could be that the tenant does not contain managed identities.
     if ($ManagedIdentitiesCount -ge 1) {
-        $ApiPermissionReference = $details | Select-Object -ExpandProperty AppApiPermission | select-object ApiName, ApiPermissionCategorization,ApiPermission, ApiPermissionDescription | Sort-Object -Property ApiName,ApiPermission -Unique
+        
+        # Create and sort the permission appendix
+        $ApiPermissionReference =
+            $details |
+            Select-Object -ExpandProperty AppApiPermission |
+            Select-Object ApiName,
+                        @{Name='Category'; Expression = { $_.ApiPermissionCategorization }},
+                        ApiPermission,
+                        ApiPermissionDescription,
+                        @{Name='CategorySort'; Expression = {
+                            if ($categorizationOrder.ContainsKey($_.ApiPermissionCategorization)) {
+                                $categorizationOrder[$_.ApiPermissionCategorization]
+                            } else {
+                                99
+                            }
+                        }} |
+            Sort-Object ApiName, CategorySort, ApiPermission, ApiPermissionDescription -Unique |
+            Select-Object ApiName, Category, ApiPermission, ApiPermissionDescription
 
         # Prepare HTML output
         $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"

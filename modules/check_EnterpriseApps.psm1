@@ -440,7 +440,7 @@ function Invoke-CheckEnterpriseApps {
             }
         }
 
-        # Define sort order
+        # Define sort order. This is used for the appendix as well
         $categorizationOrder = @{
             'Dangerous'     = 1
             'High'          = 2
@@ -1681,9 +1681,24 @@ Appendix: Used API Permission Reference
 =======================================================================================================================
 "
 
+    # Create and sort the permission appendix
+    $ApiPermissionReference =
+        $details |
+        Select-Object -ExpandProperty AppApiPermission |
+        Select-Object ApiName,
+                    @{Name='Category'; Expression = { $_.ApiPermissionCategorization }},
+                    ApiPermission,
+                    ApiPermissionDescription,
+                    @{Name='CategorySort'; Expression = {
+                        if ($categorizationOrder.ContainsKey($_.ApiPermissionCategorization)) {
+                            $categorizationOrder[$_.ApiPermissionCategorization]
+                        } else {
+                            99
+                        }
+                    }} |
+        Sort-Object ApiName, CategorySort, ApiPermission, ApiPermissionDescription -Unique |
+        Select-Object ApiName, Category, ApiPermission, ApiPermissionDescription
 
-
-    $ApiPermissionReference = $details | Select-Object -ExpandProperty AppApiPermission | select-object ApiName, ApiPermissionCategorization,ApiPermission, ApiPermissionDescription | Sort-Object -Property ApiName,ApiPermission -Unique
 
     # Prepare HTML output
     $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
