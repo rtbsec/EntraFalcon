@@ -1040,6 +1040,7 @@ function Invoke-CheckUsers {
             "Display Name" = $item.DisplayName
             "User UPN" = $item.Upn
             "User ObjectID" = $item.Id
+            "Enabled" = $item.Enabled
             "Protected" = $item.Protected
             "RiskScore" = $item.Risk
             "UserType" = $item.UserType
