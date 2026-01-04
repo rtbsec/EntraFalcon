@@ -599,54 +599,75 @@ $global:GLOBALJavaScript = @'
 
             exportBtn.onclick = () => {
             const csvRows = [];
+            const visibleColumns = getVisibleColumns();
+            const special = isRoleAssignmentsReport();
 
-            const allColumns = Object.keys(data[0]);
-            const linkColumn = allColumns[0]; // always treat first data column as link
-            const visibleColumns = getVisibleColumns().filter(col => col !== linkColumn);
+            // ---------------------------
+            // RoleAssignmentReports: just visible columns
+            // ---------------------------
+            if (special) {
+                csvRows.push(visibleColumns.join(","));
 
-            // Final header: ID, DisplayName, then all other visible columns
-            const header = ["ID", "DisplayName", ...visibleColumns];
-            csvRows.push(header.join(","));
-    
-            filteredData.forEach(row => {
+                filteredData.forEach(row => {
                 const line = [];
 
-                // Extract from first column, even if it's hidden
-                const cellValue = row[linkColumn];
-                if (typeof cellValue === "string") {
-                    const match = cellValue.match(/<a\s+href=#([a-f0-9-]+)>(.*?)<\/a>/i);
-                    if (match) {
-                        line.push(`"${match[1]}"`); // GUID
-                        line.push(`"${match[2].replace(/"/g, '""')}"`); // DisplayName
-                    } else {
-                        line.push(`""`);
-                        line.push(`"${cellValue.replace(/"/g, '""')}"`);
-                    }
-                } else {
-                    line.push(`""`, `""`);
-                }
-
-                // Add remaining visible columns
                 visibleColumns.forEach(col => {
-                    const val = row[col];
-                    line.push(`"${String(val).replace(/"/g, '""')}"`);
+                    let val = row[col];
+
+                    // Make Principal human-readable
+                    if (col.toLowerCase() === "principal") {
+                    val = stripHtmlToText(val);
+                    }
+
+                    line.push(`"${String(val ?? "").replace(/"/g, '""')}"`);
                 });
 
                 csvRows.push(line.join(","));
-            });
-    
+                });
+            }
+            // ---------------------------
+            // NORMAL REPORTS: add ID + DisplayName from FIRST COLUMN LINK
+            // ---------------------------
+            else {
+                const allColumns = Object.keys(data[0] || {});
+                const linkColumn = allColumns[0]; // your original assumption
+                const restVisible = visibleColumns.filter(c => c !== linkColumn);
+
+                csvRows.push(["ID", "DisplayName", ...restVisible].join(","));
+
+                filteredData.forEach(row => {
+                const line = [];
+
+                const { id, text } = extractAnchorIdAndText(row[linkColumn]);
+                line.push(`"${String(id).replace(/"/g, '""')}"`);
+                line.push(`"${String(text).replace(/"/g, '""')}"`);
+
+                restVisible.forEach(col => {
+                    const val = row[col];
+                    line.push(`"${String(val ?? "").replace(/"/g, '""')}"`);
+                });
+
+                csvRows.push(line.join(","));
+                });
+            }
+
+            // download
             const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
+
             const baseName = decodeURIComponent(window.location.pathname
-                .split('/')
+                .split("/")
                 .pop()
-                .replace(/\.[^/.]+$/, '')) || "export"; // fallback
+                .replace(/\.[^/.]+$/, "")) || "export";
+
             a.download = `${baseName}_table_export.csv`;
             a.click();
             URL.revokeObjectURL(url);
-        };
+            };
+
+
 
         function applyPredefinedView(view) {
             columnFilters = {};
@@ -684,6 +705,31 @@ $global:GLOBALJavaScript = @'
             createColumnSelector();
         }
             
+        function isRoleAssignmentsReport() {
+            const h1 = document.querySelector("h1")?.textContent?.trim() || "";
+            return h1.includes("Role Assignments Entra ID") || h1.includes("Role Assignments Azure IAM");
+        }
+
+        function stripHtmlToText(html) {
+            if (html == null) return "";
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = String(html);
+            return (tempDiv.textContent || tempDiv.innerText || "").trim();
+            }
+
+            // Extract GUID + visible text from "<a href=#GUID>Text</a>"
+            function extractAnchorIdAndText(cellValue) {
+            if (cellValue == null) return { id: "", text: "" };
+            const s = String(cellValue);
+
+            // Normal reports: <a href=#GUID>...</a>
+            const m = s.match(/<a\s+href=#([a-f0-9-]{36})[^>]*>(.*?)<\/a>/i);
+            if (m) return { id: m[1], text: stripHtmlToText(m[2]) };
+
+            // Fallback: treat as plain text
+            return { id: "", text: stripHtmlToText(s) };
+        }
+
         function createPresetFilterModal() {
             const title = document.querySelector("h1")?.textContent || "";
             const type = title.includes("Users Enumeration") ? "User" :
