@@ -121,7 +121,7 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20251222"
+$EntraFalconVersion = "V20260104"
 
 
 #Splat AuthMethods
