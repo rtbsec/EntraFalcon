@@ -3062,6 +3062,7 @@ function Get-AllAzureIAMAssignmentsNative {
             }
             $AzurePIM = $false
         }
+        $AssignmentsEligible = @()
         if ($AzurePIM) {
             $AssignmentsEligible = $response.value | ForEach-Object {
                 $RoleDetails = $roleHashTable[(($_.properties.roleDefinitionId -split '/')[-1])]
@@ -3086,8 +3087,8 @@ function Get-AllAzureIAMAssignmentsNative {
             }    
         }
    
+        $AllAssignments = @($AssignmentsActive) + @($AssignmentsEligible)
 
-        $AllAssignments = $AssignmentsActive + $assignmentsEligible
         foreach ($assignment in $AllAssignments) {
             # Create a unique key for each role assignment
             $uniqueKey = "$($assignment.ObjectId)|$($assignment.RoleDefinitionName)|$($assignment.Scope)|$($assignment.AssignmentType)"
