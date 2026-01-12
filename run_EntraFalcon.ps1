@@ -55,8 +55,12 @@
     Includes Microsoft-owned enterprise applications in the enumeration and analysis.  
     By default, these are excluded to reduce noise.
 
-    .PARAMETER Verbose
-    Enables verbose output for troubleshooting and status updates during processing, especially useful in large tenants.
+    .PARAMETER LogLevel
+    Controls runtime status output.
+    - `Off` (default): No additional status output
+    - `Verbose`: High-level status messages
+    - `Debug`: Includes Verbose plus additional details usful for debugging
+    - `Trace`: Includes Debug plus very detailed output (may be noisy)
 
     .PARAMETER QAMode
     Dumps the AllGroups and AllUsers objects as JSON for QA tests.
