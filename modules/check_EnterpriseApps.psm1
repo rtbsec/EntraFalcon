@@ -319,7 +319,7 @@ function Invoke-CheckEnterpriseApps {
     foreach ($app in $EnterpriseApps) {
         if (-not $AppRolesAssignedToRaw.ContainsKey($app.Id)) { continue }
     
-        $userRoles = $app.AppRoles | Where-Object { $_.AllowedMemberTypes -contains 'User' }
+        $userRoles = $app.AppRoles
     
         foreach ($assignment in $AppRolesAssignedToRaw[$app.Id]) {
             
@@ -332,7 +332,7 @@ function Invoke-CheckEnterpriseApps {
                     AppRoleAssignmentDisplayName  = $assignment.PrincipalDisplayName
                     AppRoleAssignmentPrincipalId  = $assignment.PrincipalId
                     AppRoleAssignmentType         = $assignment.PrincipalType
-                    AppRoleValue                  = $null
+                    AppRoleClaim                  = "-"
                     AppRoleDisplayName            = "Default Access"
                     AppRoleDescription            = "Default app role"
                     AppRoleEnabled                = $false
@@ -352,7 +352,7 @@ function Invoke-CheckEnterpriseApps {
                         AppRoleAssignmentDisplayName  = $assignment.PrincipalDisplayName
                         AppRoleAssignmentPrincipalId  = $assignment.PrincipalId
                         AppRoleAssignmentType         = $assignment.PrincipalType
-                        AppRoleValue                  = $role.Value
+                        AppRoleClaim                  = $role.Value
                         AppRoleDisplayName            = $role.DisplayName
                         AppRoleDescription            = $role.Description
                         AppRoleEnabled                = $role.IsEnabled
@@ -506,9 +506,8 @@ function Invoke-CheckEnterpriseApps {
                     AppRoleName = $role.AppRoleDisplayName
                     AppRoleMember  = $role.AppRoleAssignmentDisplayName
                     AppRoleMemberId  = $role.AppRoleAssignmentPrincipalId
-                    RoleValue     = $role.AppRoleValue
                     RoleEnabled   = $role.AppRoleEnabled
-                    AppRoleValue = $role.AppRoleValue
+                    AppRoleClaim = $role.AppRoleClaim
                     AppRoleAssignmentType = $role.AppRoleAssignmentType
                     AppRoleDescription = $description
                 }
@@ -1222,6 +1221,12 @@ function Invoke-CheckEnterpriseApps {
     #Define the apps to be displayed in detail and sort them by risk score
     $details = $AllServicePrincipal | Sort-Object Risk -Descending
 
+    #Convert to Hashtable for faster searches and use for lookups in the details section
+    $AllServicePrincipalHT = @{}
+    foreach ($item in $AllServicePrincipal) {
+        $AllServicePrincipalHT[$item.Id] = $item
+    }
+
     #Define stringbuilder to avoid performance impact
     $DetailTxtBuilder = [System.Text.StringBuilder]::new()
 
@@ -1482,14 +1487,21 @@ function Invoke-CheckEnterpriseApps {
                         break
                     }
                     'ServicePrincipal' {
-                        $AppRoleMemberLink = "<a href=#$($object.AppRoleMemberId)>$($object.AppRoleMember)</a>"
+                        #Only add the link if the SP exist in this report
+                        if ($AllServicePrincipalHT.ContainsKey($object.AppRoleMemberId)) {
+                            $AppRoleMemberLink = "<a href=#$($object.AppRoleMemberId)>$($object.AppRoleMember)</a>"
+                        } else {
+                            $AppRoleMemberLink = $object.AppRoleMember
+                        }
                         break
                     }
                     Default {
                         $AppRoleMemberLink = $object.AppRoleMember
+                        Write-Log -Level Debug -Message "Unknown AppRoleAssignmentType: $($object.AppRoleAssignmentType) / object: $($object.AppRoleMemberId)"
                     }
                 }
                 [pscustomobject]@{ 
+                    "AppRoleClaim" = $($object.AppRoleClaim)
                     "AppRoleName" = $($object.AppRoleName)
                     "RoleEnabled" = $($object.RoleEnabled)
                     "AppRoleAssignmentType" = $($object.AppRoleAssignmentType)
@@ -1506,10 +1518,11 @@ function Invoke-CheckEnterpriseApps {
             #Rebuild for HTML report
             $ReportingAppRoles = foreach ($obj in $ReportingAppRoles) {
                 [pscustomobject]@{
-                    AppRoleName             = $obj.AppRoleName
-                    RoleEnabled             = $obj.RoleEnabled
-                    AppRoleAssignmentType   = $obj.AppRoleAssignmentType
-                    AppRoleMember           = $obj.AppRoleMemberLink
+                    Claim            = $obj.AppRoleClaim
+                    Name             = $obj.AppRoleName
+                    RoleEnabled      = $obj.RoleEnabled
+                    AssignmentType   = $obj.AppRoleAssignmentType
+                    Member           = $obj.AppRoleMemberLink
                 }
             }
         }
@@ -1776,12 +1789,6 @@ Appendix: Used API Permission Reference
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Medium = $AppApiMedium
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Low = $AppApiLow
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Misc = $AppApiMisc
-
-    #Convert to Hashtable for faster searches
-    $AllServicePrincipalHT = @{}
-    foreach ($item in $AllServicePrincipal) {
-        $AllServicePrincipalHT[$item.Id] = $item
-    }
 
     Return $AllServicePrincipalHT
 
