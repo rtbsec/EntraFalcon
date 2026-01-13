@@ -2991,44 +2991,45 @@ function Get-AllAzureIAMAssignmentsNative {
         Write-Log -Level Debug -Message "Subscription $($sub.DisplayName) $($sub.Id) | ManagedByTenants: $managedTenantCount"
     }
 
-
-    foreach ($subscription in $subscriptions) {
-        #Get all Azure roles for lookupp
-        $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
-        $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
-        $roleHashTable = @{}
-        $response.value | ForEach-Object {
-            # Extract RoleName and ObjectId
-            $roleName = $_.properties.RoleName
-            $RoleType = $_.properties.type
-            $objectId = ($_.id -split '/')[-1]
-        
-            # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
-            $roleHashTable[$objectId] = @{
-                RoleName = $roleName
-                RoleType = $roleType
-                RoleId   = $objectId
-            }
+    #Get all Azure roles for lookup
+    $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
+    $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
+    $roleHashTable = @{}
+    $response.value | ForEach-Object {
+        # Extract RoleName and ObjectId
+        $roleName = $_.properties.RoleName
+        $RoleType = $_.properties.type
+        $objectId = ($_.id -split '/')[-1]
+    
+        # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
+        $roleHashTable[$objectId] = @{
+            RoleName = $roleName
+            RoleType = $roleType
+            RoleId   = $objectId
         }
+    }
 
-        #Get all custom roles and add them to the HT
-        $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?`$filter=type+eq+'CustomRole'&api-version=2022-04-01"
-        $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
+    #Get all custom roles and add them to the HT
+    $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?`$filter=type+eq+'CustomRole'&api-version=2022-04-01"
+    $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
 
-        $response.value | ForEach-Object {
-            # Extract RoleName and ObjectId
-            $roleName = $_.properties.RoleName
-            $RoleType = $_.properties.type
-            $objectId = ($_.id -split '/')[-1]
-        
-            # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
-            $roleHashTable[$objectId] = @{
-                RoleName = $roleName
-                RoleType = $roleType
-                RoleId   = $objectId
-            }
+    $response.value | ForEach-Object {
+        # Extract RoleName and ObjectId
+        $roleName = $_.properties.RoleName
+        $RoleType = $_.properties.type
+        $objectId = ($_.id -split '/')[-1]
+    
+        # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
+        $roleHashTable[$objectId] = @{
+            RoleName = $roleName
+            RoleType = $roleType
+            RoleId   = $objectId
         }
-        
+    }
+    Write-Log -Level Debug -Message "Got $($roleHashTable.count) role definitions"
+
+
+    foreach ($subscription in $subscriptions) {       
         #Active Roles
         $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
         $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
@@ -3062,11 +3063,13 @@ function Get-AllAzureIAMAssignmentsNative {
                 AssignmentType     = "Active"
             }
         }
+        Write-Log -Level Debug -Message "Got $($AssignmentsActive.count) active role assignments"
 
         #Eligible Roles
         # If HTTP 400 assuing error message is "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.",
         $AzurePIM = $true
         try {
+            Write-Log -Level Debug -Message "Checking PIM assignments for subscription $($subscription.Id)"
             $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01-preview"
             $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
         } catch {
@@ -3099,7 +3102,8 @@ function Get-AllAzureIAMAssignmentsNative {
                     PrincipalType      = $_.properties.principalType
                     AssignmentType     = "Eligible"
                 }
-            }    
+            }
+            Write-Log -Level Debug -Message "Got $($AssignmentsEligible.count) eligible role assignments"
         }
    
         $AllAssignments = @($AssignmentsActive) + @($AssignmentsEligible)
