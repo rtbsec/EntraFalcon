@@ -129,6 +129,7 @@ function Invoke-CheckManagedIdentities {
                 }
             }
         }
+        Write-Log -Level Debug -Message "Got $($AllPermissions.count) permissions"
 
         Write-Host "[*] Get all applications API permissions assignments"
         $Requests = @()
@@ -147,6 +148,7 @@ function Invoke-CheckManagedIdentities {
                 $AppAssignmentsRaw[$item.id] = $item.response.value
             }
         }
+        Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.count) assignments"
 
 
 
@@ -168,6 +170,7 @@ function Invoke-CheckManagedIdentities {
                 $GroupMemberRaw[$item.id] = $item.response.value
             }
         }
+        Write-Log -Level Debug -Message "Got $($GroupMemberRaw.count) memberships"
 
         Write-Host "[*] Get all applications objects ownerships"
         $Requests = @()
@@ -186,6 +189,7 @@ function Invoke-CheckManagedIdentities {
                 $OwnedObjectsRaw[$item.id] = $item.response.value
             }
         }
+        Write-Log -Level Debug -Message "Got $($OwnedObjectsRaw.count) ownerships"
     }
 
 
@@ -214,9 +218,29 @@ function Invoke-CheckManagedIdentities {
             Write-Host "[*] Status: Processing managed identity $ProgressCounter of $ManagedIdentitiesCount..."
         }
 
-        #Get details
-        $IsExplicit = ($item.AlternativeNames | Select-String -Pattern "isExplicit=").ToString().Split('=')[1].Trim()
-        $MiPath = ($item.AlternativeNames | Select-String -NotMatch "isExplicit=").ToString().Trim()
+        # Check AlternativeNames in a safe way
+        $IsExplicit = $false
+        $MiPath = "Unknown"
+        $explicitEntry = $null
+        if ($item.AlternativeNames -and $item.AlternativeNames.Count -gt 0) {
+            $explicitEntry = $item.AlternativeNames | Where-Object { $_ -like 'isExplicit=*' } | Select-Object -First 1
+            if ($explicitEntry -and $explicitEntry -match '^isExplicit=(?<val>true|false)$') {
+                $IsExplicit = [bool]::Parse($Matches['val'])
+            }
+
+            $pathEntry = $item.AlternativeNames | Where-Object { $_ -and $_ -notlike 'isExplicit=*' } | Select-Object -First 1
+            if (-not [string]::IsNullOrWhiteSpace($pathEntry)) {
+                $MiPath = $pathEntry.Trim()
+            }
+        }
+
+        if (-not $item.AlternativeNames) {
+            Write-Log -Level Trace -Message "Managed Identity '$($item.DisplayName)' ($($item.Id)) has no AlternativeNames"
+        } elseif (-not $explicitEntry) {
+            Write-Log -Level Trace -Message "Managed Identity '$($item.DisplayName)' ($($item.Id)) AlternativeNames missing isExplicit=..."
+        } elseif ($MiPath -eq 'Unknown') {
+            Write-Log -Level Trace -Message "Managed Identity '$($item.DisplayName)' ($($item.Id)) AlternativeNames missing resource path"
+        }
 
         #Process API permissions (AKA. RoleAssignments) for this app
         $AppAssignments = [System.Collections.ArrayList]::new()
@@ -335,7 +359,6 @@ function Invoke-CheckManagedIdentities {
         if ($OwnedObjectsRaw.ContainsKey($item.Id)) {
             foreach ($OwnedObject in $OwnedObjectsRaw[$item.Id]) {
                 switch ($OwnedObject.'@odata.type') {
-
                     '#microsoft.graph.servicePrincipal' {
                         [void]$OwnedSP.Add(
                             [PSCustomObject]@{
@@ -632,67 +655,6 @@ function Invoke-CheckManagedIdentities {
         }
         [void]$AllServicePrincipal.Add($SPInfo)
     }
-    ########################################## SECTION: POST-PROCESSING ##########################################
-    if ($ManagedIdentitiesCount -ge 1) {write-host "[*] Post-processing SP owns apps"}
-
-    $SPOwningApps = $AllServicePrincipal | Where-Object { $_.AppOwnership -ge 1 }
-
-    #For each object which owns an App registration
-    foreach ($SpObject in $SPOwningApps) {
-        
-        # For each owned App Registration
-        foreach ($AppRegistration in $SpObject.OwnedApplicationsDetails) {
-            
-            #For each corresponding SP object of the App Registration
-            foreach ($OwnedSP in $AllServicePrincipal | Where-Object { $_.AppId -eq $AppRegistration.AppId }) {
-
-                # Increment/Recalculate RiskScore of the SP objects which is indirectly
-                $OwnedSP.Likelihood += [math]::Round($SpObject.Likelihood)
-                $OwnedSP.Risk = [math]::Round(($OwnedSP.ImpactScore * $OwnedSP.Likelihood))
-
-                # Append the Message to Warnings of the SP objects which is indirectly
-                $warningMessage = "AppReg. owned by other SP"
-                if ($OwnedSP.Warnings -and $OwnedSP.Warnings -notmatch $warningMessage) {
-                    $OwnedSP.Warnings += " / $warningMessage"
-                } else {
-                    $OwnedSP.Warnings = $warningMessage
-                }
-
-                # Increment/Recalculate Impactscore of the SP which owns the other SP with it's impact score
-                $SpObject.Impact += [math]::Round($OwnedSP.Impact)
-                $SpObject.Risk = [math]::Round(($SpObject.Impact * $SpObject.Likelihood))
-            }
-        }
-    }
-
-   #For each object which owns an App registration
-   foreach ($SpObject in $SPOwningApps) {
-        
-    # For each owned App Registration
-    foreach ($AppRegistration in $SpObject.OwnedApplicationsDetails) {
-        
-        #For each corresponding SP get  object of the App Registration
-        foreach ($OwnedSP in $AllServicePrincipal | Where-Object { $_.AppId -eq $AppRegistration.AppId }) {
-
-            # Increment/Recalculate RiskScore of the SP objects which is indirectly
-            $OwnedSP.Likelihood += [math]::Round($SpObject.Likelihood)
-            $OwnedSP.Risk = [math]::Round(($OwnedSP.Impact * $OwnedSP.Likelihood))
-
-            # Append the Message to Warnings of the SP objects which is indirectly
-            $warningMessage = "AppReg. owned by other SP"
-            if ($OwnedSP.Warnings -and $OwnedSP.Warnings -notmatch $warningMessage) {
-                $OwnedSP.Warnings += " / $warningMessage"
-            } else {
-                $OwnedSP.Warnings = $warningMessage
-            }
-
-            # Increment/Recalculate Impactscore of the SP which owns the other SP with it's impact score
-            $SpObject.Impact += [math]::Round($OwnedSP.Impact)
-            $SpObject.Risk = [math]::Round(($SpObject.Impact * $SpObject.Likelihood))
-
-        }
-    }
-}
 
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
     write-host "[*] Generating reports"
