@@ -391,9 +391,11 @@ function Invoke-CheckUsers {
         }
 
         #Get users owned objects (do not contain devices)
-        $UserOwnedSP        = [System.Collections.Generic.List[object]]::new()
-		$UserOwnedAppRegs   = [System.Collections.Generic.List[object]]::new()
-        $UserOwnedGroups  	= [System.Collections.Generic.List[object]]::new()
+        $UserOwnedSP                        = [System.Collections.Generic.List[object]]::new()
+		$UserOwnedAppRegs                   = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedGroups  	                = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedAgentIdentitys  	        = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedAgentIdentityBlueprint 	= [System.Collections.Generic.List[object]]::new()
         if ($UserOwnedObjectsRaw.ContainsKey($item.Id)) {
             foreach ($OwnedObject in $UserOwnedObjectsRaw[$item.Id]) {
                 switch ($OwnedObject.'@odata.type') {
@@ -413,7 +415,25 @@ function Invoke-CheckUsers {
                             }
                         )
                     }
-        
+
+                    '#microsoft.graph.agentIdentity' {
+                        Write-Log -Level Verbose -Message "The user $($user.Id) owns the AgentIdentity $($OwnedObject.Id)"
+                        [void]$UserOwnedAgentIdentitys.Add(
+                            [PSCustomObject]@{
+                                Id = $OwnedObject.Id
+                            }
+                        )
+                    }
+
+                    '#microsoft.graph.agentIdentityBlueprint' {
+                        Write-Log -Level Verbose -Message "The user $($user.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
+                        [void]$UserOwnedAgentIdentityBlueprint.Add(
+                            [PSCustomObject]@{
+                                Id = $OwnedObject.Id
+                            }
+                        )
+                    }
+
                     '#microsoft.graph.group' {
                         [void]$UserOwnedGroups.Add(
                             [PSCustomObject]@{
