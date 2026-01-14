@@ -23,10 +23,19 @@ function Invoke-CheckRoles {
 
     ############################## Function section ########################
 
-    #Function to get details about specific objects
-    function Get-ObjectDetails($ObjectID,$type="unknown"){
+    $ObjectDetailsCache = @{}
 
-        if ($type -eq "unknown" -or $type -eq "user" ) {
+    #Function to get details about specific objects
+    function Get-ObjectDetails($ObjectID, $type = "unknown") {
+        $normalizedType = $type.ToString().ToLowerInvariant()
+        $cacheKey = "$normalizedType|$ObjectID"
+
+        if ($ObjectDetailsCache.ContainsKey($cacheKey)) {
+
+            return $ObjectDetailsCache[$cacheKey]
+        }
+
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "user") {
             $MatchingUser = $Users[$($ObjectID)]
             if ($MatchingUser) {
                 $object = [PSCustomObject]@{ 
@@ -34,11 +43,12 @@ function Invoke-CheckRoles {
                     DisplayNameLink = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingUser.UPN)</a>"
                     Type = "User"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             }
         }
 
-        if ($type -eq "unknown" -or $type -eq "group" ) {
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "group" ) {
             $MatchingGroup = $AllGroupsDetails[$($ObjectID)]
             if ($MatchingGroup) {
                 $object = [PSCustomObject]@{ 
@@ -46,11 +56,12 @@ function Invoke-CheckRoles {
                     DisplayNameLink = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingGroup.DisplayName)</a>"
                     Type = "Group"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             } 
         }
 
-        if ($type -eq "unknown" -or $type -eq "ServicePrincipal" ) {
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "serviceprincipal") {
             $MatchingEnterpriseApp = $EnterpriseApps[$($ObjectID)]
             if ($MatchingEnterpriseApp) {
                 $object = [PSCustomObject]@{ 
@@ -58,11 +69,12 @@ function Invoke-CheckRoles {
                     DisplayNameLink = "<a href=EnterpriseApps_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingEnterpriseApp.DisplayName)</a>"
                     Type = "Enterprise Application"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             }
         }
 
-        if ($type -eq "unknown" -or $type -eq "ManagedIdentity" -or $type -eq "ServicePrincipal" ) {
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "managedidentity" -or $normalizedType -eq "serviceprincipal") {
             $MatchingManagedIdentity = $ManagedIdentities[$($ObjectID)]
             if ($MatchingManagedIdentity) {
                 $object = [PSCustomObject]@{ 
@@ -70,11 +82,12 @@ function Invoke-CheckRoles {
                     DisplayNameLink = "<a href=ManagedIdentities_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingManagedIdentity.DisplayName)</a>"
                     Type = "Managed Identity"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             }
         }
     
-        if ($type -eq "unknown" -or $type -eq "AppRegistration" ) {
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "AppRegistration" ) {
             $MatchingAppRegistration = $AppRegistrations[$($ObjectID)]
             if ($MatchingAppRegistration) {
                 $object = [PSCustomObject]@{ 
@@ -82,11 +95,12 @@ function Invoke-CheckRoles {
                     DisplayNameLink = "<a href=AppRegistration_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingAppRegistration.DisplayName)</a>"
                     Type = "App Registration"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             }
         }
     
-        if ($type -eq "unknown" -or $type -eq "AdministrativeUnit" ) {
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "administrativeunit") {
             $MatchingAdministrativeUnit = $AdminUnitWithMembers | Where-Object { $_.AuId -eq $ObjectID }
             if ($MatchingAdministrativeUnit) {
                 $object = [PSCustomObject]@{ 
@@ -94,30 +108,154 @@ function Invoke-CheckRoles {
                     DisplayNameLink = $MatchingAdministrativeUnit.DisplayName
                     Type = "Administrative Unit"
                 }
+                $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             }
         }
 
-        #Fallback for MS Enterprise App that has not been enumerated
-        if ($type -eq "unknown") {
 
-            $QueryParameters = @{
-                '$select' = "Id,DisplayName"
+        # Fallback: resolve unknown objects via directoryObjects/getByIds (expensive but should be OK with caching)
+        if ($normalizedType -eq "unknown" -or $normalizedType -like "*foreign*") {
+
+        
+            Write-Log -Level Trace -Message "Manually resolve $ObjectID"
+            # Not sure if device make sense, but the Azure Portal use it as well
+            $Body = @{
+                ids   = @($ObjectID)
+                types = @(
+                    "user",
+                    "group",
+                    "servicePrincipal",
+                    "device",
+                    "directoryObjectPartnerReference"
+                )
             }
-            $MatchingMSEnterpriseApp = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/servicePrincipals/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
-            if ($MatchingMSEnterpriseApp) {
-                $object = [PSCustomObject]@{ 
-                    DisplayName = $MatchingMSEnterpriseApp.DisplayName
-                    DisplayNameLink = $MatchingMSEnterpriseApp.DisplayName
-                    Type = "Enterprise Application"
+            $ResolvedDirectoryObject = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method POST -Uri "/directoryObjects/getByIds" -Body $Body -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+
+            if ($ResolvedDirectoryObject) {
+
+                if ($ResolvedDirectoryObject -is [System.Array]) {
+                    $ResolvedDirectoryObject = $ResolvedDirectoryObject | Select-Object -First 1
                 }
-                Return $object
+
+                $odataType = $ResolvedDirectoryObject.'@odata.type'
+                $resolvedType = "Unknown Object"
+
+                #Special handling for foreign partner objects
+                if ($odataType -eq "#microsoft.graph.directoryObjectPartnerReference") {
+                    switch ($ResolvedDirectoryObject.objectType) {
+                        "User" { $resolvedType = "User" }
+                        "Group" { $resolvedType = "Group" }
+                        "ServicePrincipal" { $resolvedType = "Enterprise Application" }
+                        "Device" { $resolvedType = "Device" }
+                        default { $resolvedType = "Unknown Object" }
+                    }
+                } else {
+                    switch ($odataType) {
+                        "#microsoft.graph.user" { $resolvedType = "User" }
+                        "#microsoft.graph.group" { $resolvedType = "Group" }
+                        "#microsoft.graph.servicePrincipal" { $resolvedType = "Service Principal" }
+                        "#microsoft.graph.device" { $resolvedType = "Device" }
+                        default { $resolvedType = "Unknown Object" }
+                    }
+                }
+
+                # Check what kind of SP
+                if ($odataType -eq "#microsoft.graph.servicePrincipal") {
+                    switch ($ResolvedDirectoryObject.servicePrincipalType) {
+                        "Application" { $resolvedType = "Enterprise Application" }
+                        "ManagedIdentity" { $resolvedType = "Managed Identity" }
+                        "ServiceIdentity" { $resolvedType = "Service Identity" }
+                        default { $resolvedType = "Service Principal" }
+                    }
+                }
+
+                $resolvedName = $null
+                if ($ResolvedDirectoryObject.PSObject.Properties.Match('userPrincipalName').Count -gt 0 -and $ResolvedDirectoryObject.userPrincipalName) {
+                    $resolvedName = [string]$ResolvedDirectoryObject.userPrincipalName
+                } elseif ($ResolvedDirectoryObject.PSObject.Properties.Match('displayName').Count -gt 0 -and $ResolvedDirectoryObject.displayName) {
+                    $resolvedName = [string]$ResolvedDirectoryObject.displayName
+                }
+
+                if (-not $resolvedName) {
+                    $resolvedName = $ObjectID
+                }
+
+                if ($normalizedType -like "*foreign*") {
+                    $resolvedName = "$resolvedName (Foreign)"
+                }
+
+                # Define returned objects. Since the object have not been found in the internal lists they are not linked.
+                switch ($resolvedType) {
+                    "User" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "User"
+                        }
+                    }
+                    "Group" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Group"
+                        }
+                    }
+                    "Enterprise Application" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Enterprise Application"
+                        }
+                    }
+                    "Managed Identity" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Managed Identity"
+                        }
+                    }
+                    "Service Identity" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Service Identity"
+                        }
+                    }
+
+                    "Service Principal" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Service Principal"
+                        }
+                    }
+
+                    "Device" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Device"
+                        }
+                    }
+
+                    default {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "Unknown Object"
+                        }
+                    }
+                }
+
+                $ObjectDetailsCache[$cacheKey] = $object
+                return $object
             }
         }
 
         #Unknown Object
-        if ($type -eq "unknown") {
+        if ($normalizedType -eq "unknown") {
 
             $object = [PSCustomObject]@{ 
                 DisplayName = $ObjectID
@@ -125,6 +263,7 @@ function Invoke-CheckRoles {
                 Type = "Unknown Object"
             }
             Write-Log -Level Debug -Message "Unknown Object: $ObjectID"
+            $ObjectDetailsCache[$cacheKey] = $object
             Return $object
         }
     }
@@ -144,14 +283,12 @@ function Invoke-CheckRoles {
     write-host "[*] Process Entra role assignments"
 
     # Flatten the merged hash table into a single array
-    $FlattenedAssignments = $TenantRoleAssignments.GetEnumerator() | ForEach-Object {
-        $_.Value
-    } | ForEach-Object {
-        $_
+    $FlattenedAssignments = foreach ($entry in $TenantRoleAssignments.GetEnumerator()) {
+        foreach ($a in @($entry.Value)) { $a }
     }
 
     $EntraRoles = foreach ($item in $FlattenedAssignments) {
-        $PrincipalDetails = Get-ObjectDetails -Object $item.PrincipalId
+        $PrincipalDetails = Get-ObjectDetails -ObjectID $item.PrincipalId
 
         $ScopeDetails = if ($item.DirectoryScopeId -eq "/") {
             [PSCustomObject]@{
@@ -161,10 +298,10 @@ function Invoke-CheckRoles {
             }
         } elseif ($($item.DirectoryScopeId).Contains("administrativeUnits")) {
             $ObjectID = $($item.DirectoryScopeId).Replace("/administrativeUnits/", "")
-            Get-ObjectDetails -Object $ObjectID -type AdministrativeUnit
+            Get-ObjectDetails -ObjectID $ObjectID -type AdministrativeUnit
         }else {
             $ObjectID = $item.DirectoryScopeId.Replace("/", "")
-            Get-ObjectDetails -Object $ObjectID
+            Get-ObjectDetails -ObjectID $ObjectID
         }
         #Convert Tier-Level to text
         switch ($item.RoleTier) {
@@ -190,166 +327,159 @@ function Invoke-CheckRoles {
         }
     }
 
-# Custom sort order
-$SortedEntraRoles = $EntraRoles | Sort-Object @{
-    Expression = { $_.Role -eq "Global Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role -eq "Privileged Role Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role -eq "Privileged Authentication Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role -eq "Application Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.RoleTier -eq "Tier-0" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role -eq "User Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role -eq "Groups Administrator" }
-    Descending = $true
-}, @{
-    Expression = { $_.RoleTier -eq "Tier-1" }
-    Descending = $true
-}, @{
-    Expression = { $_.IsPrivileged }
-    Descending = $true
-}, @{
-    Expression = { $_.RoleTier -eq "Tier-2" }
-    Descending = $true
-}, @{
-    Expression = { $_.Role }
-    Descending = $false
-}
+    # Custom sort order
+    $SortedEntraRoles = $EntraRoles | Sort-Object @{
+        Expression = { $_.Role -eq "Global Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role -eq "Privileged Role Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role -eq "Privileged Authentication Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role -eq "Application Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.RoleTier -eq "Tier-0" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role -eq "User Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role -eq "Groups Administrator" }
+        Descending = $true
+    }, @{
+        Expression = { $_.RoleTier -eq "Tier-1" }
+        Descending = $true
+    }, @{
+        Expression = { $_.IsPrivileged }
+        Descending = $true
+    }, @{
+        Expression = { $_.RoleTier -eq "Tier-2" }
+        Descending = $true
+    }, @{
+        Expression = { $_.Role }
+        Descending = $false
+    }
 
 
-write-host "[*] Process Azure role assignments"
-# Convert hashtable to normal objects
-$SortedAzureRoles = @()
+    write-host "[*] Process Azure role assignments"
+    # Convert hashtable to normal objects
+    $SortedAzureRolesList = [System.Collections.Generic.List[object]]::new()
 
-$AzureIAMAssignments.GetEnumerator() | ForEach-Object {
-    $PrincipalId = $_.Key
-    $Assignments = $_.Value
-    $PrincipalType = $_.Value.PrincipalType
+    $AzureIAMAssignments.GetEnumerator() | ForEach-Object {
+        $PrincipalId = $_.Key
+        $Assignments = @($_.Value)
 
-    if ($PrincipalType -and $PrincipalType -notlike "Foreign*") {
-        $PrincipalDetails = Get-ObjectDetails -Object $PrincipalId -type $_.Value.PrincipalType
-
-        #Fallback
-        if ($PrincipalDetails) {
-            $PrincipalDetails = Get-ObjectDetails -Object $PrincipalId
+        $PrincipalType = $null
+        if ($Assignments.Count -gt 0) {
+            $PrincipalType = $Assignments[0].PrincipalType
         }
-        if ($PrincipalDetails) {
-            $PrincipalDisplayName = $($PrincipalDetails.DisplayName)
-            $PrincipalDisplayNameLink = $($PrincipalDetails.DisplayNameLink)
+
+        if ($PrincipalType -and $PrincipalType -notlike "Foreign*") {
+            $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId -type $PrincipalType
+
+            # Fallback
+            if (-not $PrincipalDetails -or $PrincipalDetails.Type -eq "Unknown Object") {
+                $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId
+            }
+
+            if (-not $PrincipalDetails -or $PrincipalDetails.Type -eq "Unknown Object") {
+                $PrincipalDisplayName = "$PrincipalId (Unknown)"
+                $PrincipalDisplayNameLink = "$PrincipalId (Unknown)"
+            } else {
+                $PrincipalDisplayName = $PrincipalDetails.DisplayName
+                $PrincipalDisplayNameLink = $PrincipalDetails.DisplayNameLink
+            }
+
+            foreach ($Assignment in $Assignments) {
+                $SortedAzureRolesList.Add([PSCustomObject]@{
+                    PrincipalId               = $PrincipalId
+                    PrincipalDisplayName      = $PrincipalDisplayName
+                    PrincipalDisplayNameLink  = $PrincipalDisplayNameLink
+                    PrincipalType             = $Assignment.PrincipalType
+                    RoleType                  = $Assignment.RoleType
+                    Conditions                = $Assignment.Conditions
+                    Role                      = $Assignment.RoleDefinitionName
+                    Scope                     = $Assignment.Scope
+                    AssignmentType            = $Assignment.AssignmentType
+                })
+            }
         } else {
-            $PrincipalDisplayName = "$PrincipalId (Unknown)"
-            $PrincipalDisplayNameLink = "$PrincipalId (Unknown)"
-        }
-        
-        foreach ($Assignment in $Assignments) {
-            $SortedAzureRoles += [PSCustomObject]@{
-                PrincipalId        = $PrincipalId
-                "PrincipalDisplayName" = $PrincipalDisplayName
-                "PrincipalDisplayNameLink" = $PrincipalDisplayNameLink
-                "PrincipalType" = $Assignment.PrincipalType
-                RoleType = $Assignment.RoleType
-                Conditions = $Assignment.Conditions
-                Role = $Assignment.RoleDefinitionName
-                Scope              = $Assignment.Scope
-                AssignmentType              = $Assignment.AssignmentType
-            }
-        }
-    } elseif ($PrincipalType -like "*Foreign*") {
-        foreach ($Assignment in $Assignments) {
-            $SortedAzureRoles += [PSCustomObject]@{
-                PrincipalId        = $PrincipalId
-                "PrincipalDisplayName" = "$PrincipalId (Foreign)"
-                "PrincipalDisplayNameLink" = "$PrincipalId (Foreign)"
-                "PrincipalType" = $Assignment.PrincipalType
-                RoleType = $Assignment.RoleType
-                Conditions = $Assignment.Conditions
-                Role = $Assignment.RoleDefinitionName
-                Scope              = $Assignment.Scope
-                AssignmentType              = $Assignment.AssignmentType
-            }
-        }
-        
-    } else {
-        $PrincipalDetails = Get-ObjectDetails -Object $PrincipalId
-        foreach ($Assignment in $Assignments) {
-            $SortedAzureRoles += [PSCustomObject]@{
-                PrincipalId        = $PrincipalId
-                "PrincipalDisplayName" = $($PrincipalDetails.DisplayName)
-                "PrincipalDisplayNameLink" = $($PrincipalDetails.DisplayNameLink)
-                "PrincipalType" = $($PrincipalDetails.Type)
-                RoleType = $Assignment.RoleType
-                Conditions = $Assignment.Conditions
-                Role = $Assignment.RoleDefinitionName
-                Scope              = $Assignment.Scope
-                AssignmentType     = $Assignment.AssignmentType
+            $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId
+
+            foreach ($Assignment in $Assignments) {
+                $SortedAzureRolesList.Add([PSCustomObject]@{
+                    PrincipalId               = $PrincipalId
+                    PrincipalDisplayName      = $PrincipalDetails.DisplayName
+                    PrincipalDisplayNameLink  = $PrincipalDetails.DisplayNameLink
+                    PrincipalType             = $PrincipalDetails.Type
+                    RoleType                  = $Assignment.RoleType
+                    Conditions                = $Assignment.Conditions
+                    Role                      = $Assignment.RoleDefinitionName
+                    Scope                     = $Assignment.Scope
+                    AssignmentType            = $Assignment.AssignmentType
+                })
             }
         }
     }
 
-}
+    $SortedAzureRoles = $SortedAzureRolesList
 
-# Define custom sorting logic for Scope
-$SortedAzureRoles = $SortedAzureRoles | Sort-Object -Property @{
-    # Primary sorting: Scope depth and specific path rules
-    Expression = {
-        if ($_['Scope'] -eq '/') {
-            0  # Root path should come first
-        } elseif ($_['Scope'] -like '/providers/Microsoft.Management/managementGroups/*') {
-            1  # Management group paths come second
-        } else {
-            2 + ($_['Scope'] -split '/').Count  # Subscription paths sorted by depth
+
+    # Define custom sorting logic for Scope
+    $SortedAzureRoles = $SortedAzureRoles | Sort-Object -Property @{
+        # Primary sorting: Scope depth and specific path rules
+        Expression = {
+            if ($_['Scope'] -eq '/') {
+                0  # Root path should come first
+            } elseif ($_['Scope'] -like '/providers/Microsoft.Management/managementGroups/*') {
+                1  # Management group paths come second
+            } else {
+                2 + ($_['Scope'] -split '/').Count  # Subscription paths sorted by depth
+            }
+        }
+    }, @{
+        # Secondary sorting: Scope alphabetically (to maintain proper order within same depth)
+        Expression = {$_.Scope}
+    }, @{
+        # Tertiary sorting: RoleDefinitionName priority (within same Scope)
+        Expression = {
+            switch ($_.Role) {
+                "Owner" { 0 }                      # Owner comes first
+                "User Access Administrator" { 1 }
+                "Contributor" { 2 }
+                "Role Based Access Control Administrator" { 3 }
+                "Reservations Administrator" { 4 }
+                default { 5 + [string]::Compare($_.Role, '') } # Alphabetical for others
+            }
         }
     }
-}, @{
-    # Secondary sorting: Scope alphabetically (to maintain proper order within same depth)
-    Expression = {$_.Scope}
-}, @{
-    # Tertiary sorting: RoleDefinitionName priority (within same Scope)
-    Expression = {
-        switch ($_.Role) {
-            "Owner" { 0 }                      # Owner comes first
-            "User Access Administrator" { 1 }
-            "Contributor" { 2 }
-            "Role Based Access Control Administrator" { 3 }
-            "Reservations Administrator" { 4 }
-            default { 5 + [string]::Compare($_.Role, '') } # Alphabetical for others
-        }
+
+
+
+    write-host "[*] Writing log files"
+
+    $mainEntraTable = $SortedEntraRoles | select-object -Property Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}},PrincipalType,@{Name = "Scope"; Expression = { $_.ScopeResolvedLink}}
+    $mainEntraTableJson  = $mainEntraTable | ConvertTo-Json -Depth 5 -Compress
+
+    $mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
+
+
+    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleType,Conditions,AssignmentType,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    $mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
+
+    $mainAzureTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainAzureTableJson + "`n" + '</script>'
+
+
+
+    #Define header HTML
+    $headerHTML = [pscustomobject]@{ 
+        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
+        "Executed at" = "$StartTimestamp "
+        "Execution Warnings" = $WarningReport -join ' / '
     }
-}
-
-
-
-write-host "[*] Writing log files"
-
-$mainEntraTable = $SortedEntraRoles | select-object -Property Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}},PrincipalType,@{Name = "Scope"; Expression = { $_.ScopeResolvedLink}}
-$mainEntraTableJson  = $mainEntraTable | ConvertTo-Json -Depth 5 -Compress
-
-$mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
-
-
-$mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleType,Conditions,AssignmentType,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
-$mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
-
-$mainAzureTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainAzureTableJson + "`n" + '</script>'
-
-
-
-#Define header HTML
-$headerHTML = [pscustomobject]@{ 
-    "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-    "Executed at" = "$StartTimestamp "
-    "Execution Warnings" = $WarningReport -join ' / '
-}
 #Define header
 $headerTXT = "************************************************************************************************************************
 $Title Enumeration
