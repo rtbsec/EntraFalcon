@@ -3642,9 +3642,26 @@ function Get-APIPermissionCategory{
 
 #Function to provide detailed info about an object. Since the object type is not always known (Get-MgBetaRoleManagementDirectoryRoleAssignment) the type has to be determined first.
 #The type can specified to save some GraphAPI calls
-function Get-ObjectInfo($ObjectID,$type="unknown"){
+if (-not $script:ObjectInfoCache) {
+    $script:ObjectInfoCache = @{}
+}
+function Get-ObjectInfo {
+    param(
+        [Parameter(Mandatory)][string]$ObjectID,
+        [string]$type = "unknown"
+    )
 
-    if ($type -eq "unknown" -or $type -eq "ServicePrincipal" ) {
+    # Caching
+    $normalizedType = $type.ToString().ToLowerInvariant()
+    $cacheKey = "$normalizedType|$ObjectID"
+    if ($script:ObjectInfoCache.ContainsKey($cacheKey)) {
+        Write-Log -Level Trace -Message "Cache hit for $ObjectID"
+        return $script:ObjectInfoCache[$cacheKey]
+    }
+
+    Write-Log -Level Trace -Message "Manually resolve $ObjectID"
+
+    if ($normalizedType -eq "unknown" -or $normalizedType -eq "serviceprincipal" ) {
         $QueryParameters = @{
             '$select' = "Id,DisplayName"
         }
@@ -3654,11 +3671,13 @@ function Get-ObjectInfo($ObjectID,$type="unknown"){
                 DisplayName = $EnterpriseApp.DisplayName
                 Type = "Enterprise Application"
             }
+
+            $script:ObjectInfoCache[$cacheKey] = $object
             Return $object
         }
     }
 
-    if ($type -eq "unknown" -or $type -eq "AppRegistration" ) {
+    if ($normalizedType -eq "unknown" -or $normalizedType -eq "appregistration" ) {
         $QueryParameters = @{
             '$select' = "Id,DisplayName"
         }
@@ -3668,11 +3687,13 @@ function Get-ObjectInfo($ObjectID,$type="unknown"){
                 DisplayName = $AppRegistration.DisplayName
                 Type = "App Registration"
             }
+
+            $script:ObjectInfoCache[$cacheKey] = $object
             Return $object
         }
     }
 
-    if ($type -eq "unknown" -or $type -eq "AdministrativeUnit" ) {
+    if ($normalizedType -eq "unknown" -or $normalizedType -eq "administrativeunit" ) {
         $QueryParameters = @{
             '$select' = "DisplayName"
         }
@@ -3682,11 +3703,13 @@ function Get-ObjectInfo($ObjectID,$type="unknown"){
                 DisplayName = $AdministrativeUnit.DisplayName
                 Type = "Administrative Unit"
             }
+
+            $script:ObjectInfoCache[$cacheKey] = $object
             Return $object
         }
     }
 
-    if ($type -eq "unknown" -or $type -eq "user" ) {
+    if ($normalizedType -eq "unknown" -or $normalizedType -eq "user" ) {
         $QueryParameters = @{
             '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,OnPremisesSyncEnabled,JobTitle,Department"
         }
@@ -3702,11 +3725,13 @@ function Get-ObjectInfo($ObjectID,$type="unknown"){
                 JobTitle = $user.JobTitle
                 Department = $user.Department
             }
+
+            $script:ObjectInfoCache[$cacheKey] = $object
             Return $object
         }
     }
 
-    if ($type -eq "unknown" -or $type -eq "group" ) {
+    if ($normalizedType -eq "unknown" -or $normalizedType -eq "group" ) {
         $QueryParameters = @{
             '$select' = "Id,DisplayName,SecurityEnabled,IsAssignableToRole"
         }
@@ -3720,15 +3745,21 @@ function Get-ObjectInfo($ObjectID,$type="unknown"){
                 SecurityEnabled = $group.SecurityEnabled
                 IsAssignableToRole = $isAssignabletoRole
             }
+
+            $script:ObjectInfoCache[$cacheKey] = $object
             Return $object
         } 
     }
 
-    if ($type -eq "unknown") {
+    if ($normalizedType -eq "unknown") {
+        Write-Log -Level Debug -Message "Unknown Object: $ObjectID"
         $object = [PSCustomObject]@{ 
             DisplayName = $ObjectID
             Type = "Unknown"
         }
+
+        $script:ObjectInfoCache[$cacheKey] = $object
+        return $object
     }
 }
 
