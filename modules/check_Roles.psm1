@@ -156,6 +156,7 @@ function Invoke-CheckRoles {
                         "#microsoft.graph.user" { $resolvedType = "User" }
                         "#microsoft.graph.group" { $resolvedType = "Group" }
                         "#microsoft.graph.servicePrincipal" { $resolvedType = "Service Principal" }
+                        "#microsoft.graph.application" { $resolvedType = "App Registration" }
                         "#microsoft.graph.device" { $resolvedType = "Device" }
                         default { $resolvedType = "Unknown Object" }
                     }
@@ -232,6 +233,13 @@ function Invoke-CheckRoles {
                         }
                     }
 
+                    "App Registration" {
+                        $object = [PSCustomObject]@{
+                            DisplayName     = $resolvedName
+                            DisplayNameLink = $resolvedName
+                            Type            = "App Registration"
+                        }
+                    }
                     "Device" {
                         $object = [PSCustomObject]@{
                             DisplayName     = $resolvedName
