@@ -48,6 +48,12 @@
 .PARAMETER JsonDepthResponse
     Specifies the depth for JSON conversion in the response (to use with -RawJson). Default is 10, but can be increased for complex objects.
 
+.PARAMETER Silent
+    Suppresses error output (for example, when a sub-request returns an HTTP 400 error).
+
+.PARAMETER DisablePagination
+    If specified, prevents the function from automatically following @odata.nextLink for paginated results.
+
 .EXAMPLE
     $AccessToken = "YOUR_ACCESS_TOKEN"
     $Requests = @(
@@ -103,12 +109,14 @@ function Send-GraphBatchRequest {
         [int]$JsonDepthRequest = 10,
         [int]$JsonDepthResponse = 10,
         [string]$UserAgent = "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.19045; en-us) PowerShell/7.5.0",
-        [int]$BatchDelay = 0,
+        [double]$BatchDelay = 0,
         [string]$Proxy,
         [hashtable]$QueryParameters,
         [switch]$DebugMode,
         [switch]$VerboseMode,
+        [switch]$Silent,
         [switch]$BetaAPI,
+        [switch]$DisablePagination,
         [switch]$RawJson
     )
 
@@ -197,13 +205,17 @@ function Send-GraphBatchRequest {
                     if ($ResultData.value) {
                         $ResultData.value | ForEach-Object { $PagedResultsMap[$Resp.id].Add($_) }
                     }
-                    if ($ResultData.'@odata.nextLink') {
+                    if (-not $DisablePagination -and $ResultData.'@odata.nextLink') {
                         $GlobalNextLinks.Add("$($Resp.id)|$($ResultData.'@odata.nextLink')")
                     }
                 } else {
                     $ErrorCode = $Resp.body.error.code
                     $ErrorMessage = $Resp.body.error.message
-                    Write-Host "[!] Graph Batch Request: ID $($Resp.id) failed with status $($Resp.status): $ErrorCode - $ErrorMessage"
+
+                    #Output error if not silent
+                    if (-not $silent) {
+                        Write-Host "[!] Graph Batch Request: ID $($Resp.id) failed with status $($Resp.status): $ErrorCode - $ErrorMessage"
+                    }
                     if ($Resp.status -in @(429, 500, 502, 503, 504)) {
                         $FailedRequests += $Batch | Where-Object { $_.id -eq $Resp.id }
                         Start-Sleep -Seconds ([math]::Pow(2, $RetryCount))
@@ -222,7 +234,7 @@ function Send-GraphBatchRequest {
         }
     }
 
-	while ($GlobalNextLinks.Count -gt 0) {
+	 while (-not $DisablePagination -and $GlobalNextLinks.Count -gt 0) {
 		$ToFetch = $GlobalNextLinks[0..([math]::Min(19, $GlobalNextLinks.Count - 1))]
 		$GlobalNextLinks.RemoveRange(0, $ToFetch.Count)
 
