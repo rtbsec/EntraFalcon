@@ -129,7 +129,7 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20260115"
+$EntraFalconVersion = "V20260117"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -152,8 +152,8 @@ Import-Module (Join-Path $ScriptRoot 'modules\check_PIM.psm1') -Force
 $Global:GLOBALAuthMethods = @{ 
     AuthMethod = $AuthMethod
  }
-
 if ($BroCi) { $GLOBALAuthMethods.BroCi = $true }
+
 if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
 
     # Access tokens (JWT) typically start with 'ey'
