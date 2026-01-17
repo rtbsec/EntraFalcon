@@ -3639,6 +3639,53 @@ function Get-APIPermissionCategory{
     }
 }
 
+#Function to check if objects exist to determine if the reports wil lbe generated.
+function Get-TenantReportAvailability {
+    $requests = New-Object 'System.Collections.Generic.List[object]'
+
+    $requestSpecs = @(
+        @{ Name = 'Groups';           Url = '/groups' }
+        @{ Name = 'AppRegistrations'; Url = '/applications' }
+        @{ Name = 'ManagedIdenties';  Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ManagedIdentity'" } }
+        #@{ Name = 'EnterpriseApps';   Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'Application'" } }
+        #@{ Name = 'Agents';           Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ServiceIdentity'" } }
+    )
+
+    foreach ($spec in $requestSpecs) {
+        $req = @{
+            id     = $spec.Name
+            method = 'GET'
+            url    = $spec.Url
+        }
+
+        if ($spec.ContainsKey('Query') -and $spec.Query) {
+            $req.queryParameters = $spec.Query
+        }
+
+        $requests.Add($req)
+    }
+
+    $response = Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $requests -BetaAPI -UserAgent $GlobalAuditSummary.UserAgent.Name -QueryParameters @{ '$select' = 'id'; '$top' = '1' } -DisablePagination
+
+    $result = [ordered]@{}
+    foreach ($spec in $requestSpecs) {
+        $result[$spec.Name] = $false
+    }
+
+    foreach ($r in @($response)) {
+        if ($null -eq $r.id) { continue }
+        if (-not $result.Contains($r.id)) { continue }
+
+        if ($r.status -ge 200 -and $r.status -lt 300) {
+            $result[$r.id] = (@($r.response.value).Count -gt 0)
+        } else {
+            $result[$r.id] = $false
+        }
+    }
+
+    [pscustomobject]$result
+}
+
 #Function to provide detailed info about an object. Since the object type is not always known (Get-MgBetaRoleManagementDirectoryRoleAssignment) the type has to be determined first.
 #The type can specified to save some GraphAPI calls
 if (-not $script:ObjectInfoCache) {
@@ -4403,4 +4450,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks

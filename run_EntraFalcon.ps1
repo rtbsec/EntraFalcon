@@ -279,6 +279,36 @@ $Devices = Get-Devices -ApiTop $ApiTop
 # Get Basic User info
 $AllUsersBasicHT = Get-UsersBasic -ApiTop $ApiTop
 
+
+# Determine which reports will be generated
+$TenantReports = [pscustomobject]@{
+    Users                     = $true
+    Groups                    = $false
+    EnterpriseApps            = $true
+    ManagedIdenties           = $false
+    AppRegistrations          = $false
+    ConditionalAccessPolicies = $false
+    Agents                    = $false
+    EntraRoles                = $true
+    AzureRoles                = $false
+    PimForEntra               = $false
+    Summary                   = $true
+}
+
+$ReportsBasedOnObjects = Get-TenantReportAvailability -IncludeMsApps:$IncludeMsApps
+$TenantReports.ConditionalAccessPolicies = (@($Caps).Count -gt 0)
+$TenantReports.PimForEntra               = (@($TenantPimRoleAssignments).Count -gt 0)
+$TenantReports.AzureRoles                = (@($AzureIAMAssignments).Count -gt 0)
+$TenantReports.Groups           = $ReportsBasedOnObjects.Groups
+$TenantReports.AppRegistrations = $ReportsBasedOnObjects.AppRegistrations
+$TenantReports.ManagedIdenties  = $ReportsBasedOnObjects.ManagedIdenties
+#$TenantReports.EnterpriseApps   = $ReportsBasedOnObjects.EnterpriseApps
+#$TenantReports.Agents   = $ReportsBasedOnObjects.Agents
+
+$TenantReportsText = ($TenantReports.PSObject.Properties | Sort-Object Name | ForEach-Object { "{0} = {1}" -f $_.Name, $_.Value }) -join " | "
+Write-Log -Level Debug -Message ("Reports:{0}" -f $TenantReportsText)
+
+# Main enumeration
 write-host "`n********************************** [1/9] Enumerating Groups **********************************"
 $AllGroupsDetails = Invoke-CheckGroups -AdminUnitWithMembers $AdminUnitWithMembers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -OutputFolder $OutputFolder -Devices $Devices -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsUserandGroup
 
