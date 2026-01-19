@@ -21,7 +21,7 @@ $global:GLOBALMainTableDetailsHEAD = @'
 '@
 
 # JavaScript for improved HTML table output
-$global:GLOBALJavaScript = @'
+$global:GLOBALJavaScript_Table = @'
     <script>
         // Predefined Views
         const predefinedViews = {
@@ -570,13 +570,37 @@ $global:GLOBALJavaScript = @'
             "Conditions": "Has additional conditions"
         };
     
-        (function () {
+        (function () {    
+            const manifestEl = document.getElementById("report-manifest");
+            const manifest = manifestEl && manifestEl.textContent ? JSON.parse(manifestEl.textContent) : null;
+            window.__reportManifest = manifest;        
+
+            const mainTableDataEl = document.getElementById("mainTableData");
+            if (!mainTableDataEl) {
+                return;
+            }
+                
+            const container = document.getElementById("mainTableContainer");
+            if (!container) {
+                return;
+            }
+                
             let data = JSON.parse(document.getElementById("mainTableData").textContent);
             if (!Array.isArray(data)) {
                 data = [data]; // wrap single object into an array
             }
 
-            const container = document.getElementById("mainTableContainer");
+            const rowLowerKeyMap = Object.keys(data[0] || {}).reduce((map, col) => {
+                map[col.toLowerCase()] = col;
+                return map;
+            }, {});
+
+            const columns = Object.keys(data[0] || {});
+            const colIndexMap = {};
+            for (let i = 0; i < columns.length; i++) {
+                colIndexMap[columns[i]] = i;
+            }
+
             const wrapper = container.querySelector("#tableWrapper");
             const pageSizeSelector = container.querySelector("#pageSize");
             const pagination = container.querySelector("#paginationControls");
@@ -587,6 +611,24 @@ $global:GLOBALJavaScript = @'
             let currentSort = { column: null, asc: true };
             let columnFilters = {};
             let hiddenColumns = new Set();
+            let filterDebounceTimer = null;
+
+            container.addEventListener("input", (e) => {
+                const input = e.target;
+                if (!input || input.tagName !== "INPUT") return;
+
+                const col = input.getAttribute("data-filter");
+                if (!col) return;
+
+                const existingKey = Object.keys(columnFilters).find(k => k.toLowerCase() === col.toLowerCase());
+                columnFilters[existingKey || col] = input.value;
+
+                if (filterDebounceTimer) window.clearTimeout(filterDebounceTimer);
+                filterDebounceTimer = window.setTimeout(() => {
+                    filterData();
+                }, 800);
+            });
+
 
             const columnSelector = document.createElement("div");
             const exportBtn = document.createElement("button");
@@ -599,7 +641,7 @@ $global:GLOBALJavaScript = @'
             exportBtn.onclick = () => {
             const csvRows = [];
             const visibleColumns = getVisibleColumns();
-            const special = isRoleAssignmentsReport();
+            const special = isRoleAssignmentsReport(window.__reportManifest);
 
             // ---------------------------
             // RoleAssignmentReports: just visible columns
@@ -628,8 +670,7 @@ $global:GLOBALJavaScript = @'
             // NORMAL REPORTS: add ID + DisplayName from FIRST COLUMN LINK
             // ---------------------------
             else {
-                const allColumns = Object.keys(data[0] || {});
-                const linkColumn = allColumns[0]; // your original assumption
+                const linkColumn = columns[0];
                 const restVisible = visibleColumns.filter(c => c !== linkColumn);
 
                 csvRows.push(["ID", "DisplayName", ...restVisible].join(","));
@@ -673,13 +714,13 @@ $global:GLOBALJavaScript = @'
 
             // Filters
             Object.entries(view.filters || {}).forEach(([col, val]) => {
-                const match = Object.keys(data[0]).find(k => k.toLowerCase() === col.toLowerCase());
+                const match = columns.find(k => k.toLowerCase() === col.toLowerCase());
                 columnFilters[match || col] = val;
             });
 
             // Columns
             if (Array.isArray(view.columns)) {
-                const allCols = Object.keys(data[0]);
+                const allCols = columns;
                 const allowed = view.columns
                     .map(v => allCols.find(col => col.toLowerCase() === v.toLowerCase()))
                     .filter(Boolean); // Only valid column names
@@ -693,7 +734,7 @@ $global:GLOBALJavaScript = @'
 
             // Sort
             if (view.sort) {
-                const sortCol = Object.keys(data[0]).find(k => k.toLowerCase() === view.sort.column.toLowerCase());
+                const sortCol = columns.find(k => k.toLowerCase() === view.sort.column.toLowerCase());
                 if (sortCol) {
                     currentSort.column = sortCol;
                     currentSort.asc = view.sort.direction.toLowerCase() !== "desc";
@@ -703,11 +744,42 @@ $global:GLOBALJavaScript = @'
             filterData();
             createColumnSelector();
         }
-            
-        function isRoleAssignmentsReport() {
-            const h1 = document.querySelector("h1")?.textContent?.trim() || "";
-            return h1.includes("Role Assignments Entra ID") || h1.includes("Role Assignments Azure IAM");
+
+        function getReportTypeFromManifest(manifest) {
+            if (!manifest) return null;
+
+            var key = String(manifest.currentReportKey || "").trim();
+            var name = String(manifest.currentReportName || "").trim();
+
+            if (key === "Users") return "User";
+            if (key === "Groups") return "Groups";
+            if (key === "EA") return "Enterprise Apps";
+            if (key === "MI") return "Managed Identities";
+            if (key === "AR") return "App Registrations";
+            if (key === "CAP") return "Conditional Access Policies";
+            if (key === "PIM") return "PIM";
+            if (key === "RoleEntra") return "Role Assignments Entra ID";
+            if (key === "RoleAz") return "Role Assignments Azure IAM";
+
+            var lower = name.toLowerCase();
+            if (lower.indexOf("users") !== -1) return "User";
+            if (lower.indexOf("groups") !== -1) return "Groups";
+            if (lower.indexOf("enterprise") !== -1) return "Enterprise Apps";
+            if (lower.indexOf("managed identit") !== -1) return "Managed Identities";
+            if (lower.indexOf("app registr") !== -1) return "App Registrations";
+            if (lower.indexOf("conditional access") !== -1) return "Conditional Access Policies";
+            if (lower.indexOf("pim") !== -1) return "PIM";
+            if (lower.indexOf("role assignments entra") !== -1) return "Role Assignments Entra ID";
+            if (lower.indexOf("role assignments azure") !== -1) return "Role Assignments Azure IAM";
+
+            return null;
         }
+
+        function isRoleAssignmentsReport(manifest) {
+            var type = getReportTypeFromManifest(manifest);
+            return type === "Role Assignments Entra ID" || type === "Role Assignments Azure IAM";
+        }
+
 
         function stripHtmlToText(html) {
             if (html == null) return "";
@@ -729,28 +801,20 @@ $global:GLOBALJavaScript = @'
             return { id: "", text: stripHtmlToText(s) };
         }
 
-        function createPresetFilterModal() {
-            const title = document.querySelector("h1")?.textContent || "";
-            const type = title.includes("Users Enumeration") ? "User" :
-                        title.includes("Groups Enumeration") ? "Groups" :
-                        title.includes("EnterpriseApps Enumeration") ? "Enterprise Apps" :
-                        title.includes("AppRegistration Enumeration") ? "App Registrations" :
-                        title.includes("ManagedIdentities Enumeration") ? "Managed Identities" :
-                        title.includes("ConditionalAccessPolicies Enumeration") ? "Conditional Access Policies" :
-                        title.includes("PIM Enumeration") ? "PIM" :
-                        title.includes("Role Assignments Entra ID") ? "Role Assignments Entra ID" :
-                        title.includes("Role Assignments Azure IAM") ? "Role Assignments Azure IAM" : null;
+        function createPresetFilterModal(manifest) {
+            var type = getReportTypeFromManifest(manifest);
+            if (!type) return;
 
-            const views = predefinedViews[type];
-            if (!views?.length) return;
+            var views = predefinedViews[type];
+            if (!views || !views.length) return;
 
             const presetBtn = document.createElement("button");
             presetBtn.textContent = "\uD83E\uDDF0 Preset Views";
             presetBtn.style.margin = "10px 0px";
 
-			const resetViewBtn = document.createElement("button");
-			resetViewBtn.textContent = "\uD83D\uDD01 Reset View";
-			resetViewBtn.style.margin = "10px 0px";
+            const resetViewBtn = document.createElement("button");
+            resetViewBtn.textContent = "\uD83D\uDD01 Reset View";
+            resetViewBtn.style.margin = "10px 0px";
 
             const toolbarLeft = document.querySelector(".toolbar .left-section");
             if (toolbarLeft) {
@@ -885,7 +949,7 @@ $global:GLOBALJavaScript = @'
         }
 
         function getVisibleColumns() {
-            return Object.keys(data[0]).filter(col => !hiddenColumns.has(col));
+            return columns.filter(col => !hiddenColumns.has(col));
         }
         
         // Renders main table
@@ -899,7 +963,6 @@ $global:GLOBALJavaScript = @'
                 return renderTable();
             }
 
-            const columns = Object.keys(data[0] || {});
             const visibleCols = getVisibleColumns();
 
             //Capture active input to re-apply after filtering
@@ -932,8 +995,7 @@ $global:GLOBALJavaScript = @'
                 html += '<tr>';
                 visibleCols.forEach(col => {
                     const val = row[col];
-                    const colIndex = columns.indexOf(col);
-                    const columnHeader = columns[colIndex];
+                    const columnHeader = columns[colIndexMap[col]];
                     const columnHeaderLower = (columnHeader || "").toLowerCase();
 
                     const isLeftAligned =
@@ -972,26 +1034,16 @@ $global:GLOBALJavaScript = @'
                 };
             });
 
-            // Re-attach input listeners without losing focus
-            container.querySelectorAll("input[data-filter]").forEach(input => {
-                const col = input.getAttribute("data-filter");
-                let debounceTimer;
-                input.addEventListener("input", () => {
-                    const existingKey = Object.keys(columnFilters).find(k => k.toLowerCase() === col.toLowerCase());
-                    columnFilters[existingKey || col] = input.value;
-                    clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(() => {
-                        filterData();
-                    }, 800);
-                });
-            });
-
             renderPagination();
             renderInfo(start, end);
 
             const table = wrapper.querySelector("table");
-            if (table) colorCells(table);
-        
+            if (table) {
+                const headerCells = table.querySelectorAll("thead tr:first-child th");
+                const headers = Array.prototype.map.call(headerCells, th => th.getAttribute("data-col") || (th.textContent || "").trim());
+                window.requestAnimationFrame(() => colorCells(table, headers));
+            }
+
             //Re-apply filter to focus
             if (activeFilter) {
                 const newInput = container.querySelector(`input[data-filter="${activeFilter}"]`);
@@ -1165,7 +1217,7 @@ $global:GLOBALJavaScript = @'
 
             filteredData = data.filter(row => {
                 const defaultPass = (groups.default || []).every(f => {
-                    const colMatch = Object.keys(row).find(c => c.toLowerCase() === f.col.toLowerCase());
+                    const colMatch = rowLowerKeyMap[String(f.col || "").toLowerCase()];
                     if (!colMatch) return false;
                     return parseOperatorFilter(f.input.trim(), row[colMatch]);
                 });
@@ -1175,7 +1227,7 @@ $global:GLOBALJavaScript = @'
                 const orGroups = Object.entries(groups).filter(([g]) => g !== "default");
                 for (const [groupName, filters] of orGroups) {
                     const groupPass = filters.some(f => {
-                        const colMatch = Object.keys(row).find(c => c.toLowerCase() === f.col.toLowerCase());
+                        const colMatch = rowLowerKeyMap[String(f.col || "").toLowerCase()];
                         if (!colMatch) return false;
                         return parseOperatorFilter(f.input.trim(), row[colMatch]);
                     });
@@ -1206,7 +1258,7 @@ $global:GLOBALJavaScript = @'
             const toggleButton = document.createElement("button");
             toggleButton.className = "column-toggle-button";
 
-            const allColumns = Object.keys(data[0] || {});
+            const allColumns = columns;
             updateColumnCountLabel(toggleButton, allColumns); // INITIAL count
 
             wrapperDiv.appendChild(toggleButton);
@@ -1276,29 +1328,6 @@ $global:GLOBALJavaScript = @'
         }
 
 
-        // Dark and light mode
-        function applyTheme(theme) {
-            document.body.classList.remove("light-mode", "dark-mode");
-            document.body.classList.add(`${theme}-mode`);
-            localStorage.setItem("theme", theme);
-        }
-        
-        // Initializes theme on page load
-        function initTheme() {
-            const savedTheme = localStorage.getItem("theme") || "dark";
-            applyTheme(savedTheme);
-
-            const toggle = document.getElementById("themeToggle");
-            if (toggle) {
-                toggle.value = savedTheme;
-                toggle.addEventListener("change", (e) => {
-                    applyTheme(e.target.value);
-
-                    const table = document.querySelector("#tableWrapper table");
-                    if (table) colorCells(table);
-                });
-            }
-        }
 
         // Event: Page size change
         pageSizeSelector.addEventListener("change", () => {
@@ -1318,7 +1347,7 @@ $global:GLOBALJavaScript = @'
         const columnParam = urlParams.columns;
         if (columnParam) {
             const allowedCols = columnParam.split(',').map(c => c.trim().toLowerCase());
-            const allCols = Object.keys(data[0] || {});
+            const allCols = columns;
 
             allCols.forEach(col => {
                 if (!allowedCols.includes(col.toLowerCase())) {
@@ -1328,10 +1357,7 @@ $global:GLOBALJavaScript = @'
         }
 
         //Apply filters based on GET parameters
-        const lowerKeys = Object.keys(data[0] || {}).reduce((map, col) => {
-            map[col.toLowerCase()] = col;
-            return map;
-        }, {});
+        const lowerKeys = rowLowerKeyMap;
 
         Object.entries(urlParams).forEach(([key, value]) => {
             const match = key.match(/^(or|group\d+)_(.+)$/i);
@@ -1370,8 +1396,8 @@ $global:GLOBALJavaScript = @'
         // Init
         createColumnSelector();
         createToolbar();
-        createPresetFilterModal();
-        initTheme();
+        createPresetFilterModal(manifest);
+
         filterData();
         })();
 
@@ -1394,7 +1420,7 @@ $global:GLOBALJavaScript = @'
         if (objectContainer) {
             objectContainer.innerHTML = '';
 
-            const renderTable = (title, data) => {
+            const renderDetailsTable = (title, data) => {
                 const section = document.createElement('div');
                 const heading = document.createElement('h3');
                 heading.textContent = title;
@@ -1463,7 +1489,7 @@ $global:GLOBALJavaScript = @'
                         const objectsOnly = value.filter(v => typeof v === 'object');
 
                         if (objectsOnly.length) {
-                            details.appendChild(renderTable(key, objectsOnly));
+                            details.appendChild(renderDetailsTable(key, objectsOnly));
                         } else if (allStrings) {
                             details.appendChild(renderPreBlock(key, value));
                         }
@@ -1471,7 +1497,7 @@ $global:GLOBALJavaScript = @'
                         if (key === "General Information") {
                             details.appendChild(renderVerticalTable(key, value));
                         } else {
-                            details.appendChild(renderTable(key, [value]));
+                            details.appendChild(renderDetailsTable(key, [value]));
                         }
                     }
                 }
@@ -1479,8 +1505,7 @@ $global:GLOBALJavaScript = @'
                 objectContainer.appendChild(details);
             });
 
-            window.addEventListener('DOMContentLoaded', scrollToObjectByHash);
-            window.addEventListener('hashchange', scrollToObjectByHash);
+
         } else {
             console.warn("Element with id 'object-container' does not exist.");
         }
@@ -1543,167 +1568,7 @@ $global:GLOBALJavaScript = @'
             const toggleExpandBtn = document.getElementById('toggle-expand');
             if (toggleExpandBtn) {
                 toggleExpandBtn.addEventListener('click', toggleAll);
-            } else {
-                console.warn("Element with id 'toggle-expand' does not exist.");
             }
-
-            const nav = document.getElementById('topNav');
-            const headings = document.querySelectorAll('h2');
-
-            // Generate anchor links from <h2>
-            headings.forEach(h2 => {
-                const id = h2.id || h2.textContent.trim().toLowerCase().replace(/\s+/g, '-');
-                h2.id = id;
-
-                const link = document.createElement('a');
-                link.href = `#${id}`;
-                link.textContent = h2.textContent.trim();
-                nav.appendChild(link);
-            });
-
-            // === Add Theme Selector to navbar ===
-
-            // Flexible spacer to push selector right
-            const spacer = document.createElement('div');
-            spacer.style.flexGrow = '1';
-            nav.appendChild(spacer);
-
-            // Theme selector
-            const themeLabel = document.createElement('label');
-            themeLabel.style.display = 'flex';
-            themeLabel.style.alignItems = 'center';
-            themeLabel.style.gap = '4px';
-            themeLabel.style.marginLeft = 'auto';
-            themeLabel.innerHTML = `
-                <select id="navThemeToggle" style="padding: 4px 8px; font-size: 14px; border-radius: 4px;">
-                    <option value="dark">\uD83C\uDF13 Dark</option>
-                    <option value="light">\uD83C\uDF13 Light</option>
-                </select>
-            `;
-            nav.appendChild(themeLabel);
-
-            // Apply stored or default theme
-            const themeSelect = document.getElementById('navThemeToggle');
-            const savedTheme = localStorage.getItem('theme') || 'dark';
-            themeSelect.value = savedTheme;
-            document.body.classList.add(`${savedTheme}-mode`);
-
-            themeSelect.addEventListener('change', (e) => {
-                const newTheme = e.target.value;
-                document.body.classList.remove("light-mode", "dark-mode");
-                document.body.classList.add(`${newTheme}-mode`);
-                localStorage.setItem("theme", newTheme);
-
-                const table = document.querySelector("#tableWrapper table");
-                if (table) colorCells(table);
-            });
-
-            // *** HELP MODAL ****
-            if (!themeLabel) return;
-
-            // Create Help button
-            const helpBtn = document.createElement('button');
-            helpBtn.textContent = '\u2753 Help';
-            helpBtn.style.padding = '1px 10px';
-            helpBtn.style.fontSize = '14px';
-            helpBtn.style.borderRadius = '4px';
-            helpBtn.style.border = '1px solid #6e6e6e';
-            helpBtn.style.cursor = 'pointer';
-            helpBtn.style.marginLeft = '10px';
-            themeLabel.parentElement.appendChild(helpBtn);
-
-            // Create overlay background
-            const modalOverlay = document.createElement('div');
-            modalOverlay.style.position = 'fixed';
-            modalOverlay.style.top = '0';
-            modalOverlay.style.left = '0';
-            modalOverlay.style.width = '100vw';
-            modalOverlay.style.height = '100vh';
-            modalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-            modalOverlay.style.display = 'none';
-            modalOverlay.style.zIndex = '9999';
-            modalOverlay.style.justifyContent = 'center';
-            modalOverlay.style.alignItems = 'center';
-
-            // Create modal content box
-            const modalContent = document.createElement('div');
-            modalContent.style.background = 'var(--nav-link-bg)';
-            modalContent.style.color = 'var(--nav-link-text)';
-            modalContent.style.padding = '24px';
-            modalContent.style.borderRadius = '12px';
-            modalContent.style.maxWidth = '800px';
-            modalContent.style.width = '90%';
-            modalContent.style.boxShadow = '0 8px 16px rgba(0,0,0,0.4)';
-            modalContent.style.fontSize = '15px';
-            modalContent.style.lineHeight = '1.6';
-            modalContent.style.position = 'relative';
-
-            modalContent.innerHTML = `
-                <h2 style="margin-top: 0;">How to Use This Report</h2>
-				<strong>General</strong>
-				<ul style="margin-top: 6px;">
-                    <li>Click the \u2699\uFE0F <strong>Columns</strong> button to show or hide specific columns.
-                    <li>Click \u{1F4BE} <strong>Export CSV</strong> to download the currently visible data as a CSV file.</li>
-                    <li>Click \u{1F441} <strong>Share View</strong> to copy filters, sorting, and column selection as a shareable link.</li>
-                    <li>Click \uD83E\uDDF0 <strong>Preset Views</strong> to apply preconfigured filters and column selections.</li>
-                    <li>Click \uD83D\uDD01 <strong>Reset View</strong> to reset the view to the default.</li>
-                    <li>Click on object names to jump to detailed information, even across reports.<br>
-                    Links look like this: <a href="#" onclick="return false;" style="pointer-events: none;">Example Link</a></li>
-                    <li>When navigating within the report, use the browser's back button to return.</li>
-                    <li>Browser search can locate content even within collapsed <em>details</em> sections.</li>
-                    <li>Some table header fields display helper text on mouse hover.</li>
-                    <li>Sort data by clicking any table header.
-				</ul>
-				<strong>Filtering</strong>
-				<ul style="margin-top: 6px;">
-					<li>If no operator is specified, filtering defaults to <em>contains</em>.</li>
-					<li>Use <code>=</code> for an exact match.</li>
-					<li>Use <code>^</code> for <em>starts with</em> (e.g., <code>^Mallory</code>).</li>
-					<li>Use <code>$</code> for <em>ends with</em> (e.g., <code>$domain.ch</code>).</li>
-					<li>Comparison operators like <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code> are supported (for numeric values only).</li>
-                    <li>Filters can be negated by starting with <code>!</code> (except for numeric comparisons).<br>Examples: <code>!Mallory</code>, <code>!=Mallory</code>, <code>!^Mallory</code> or <code>!$domain.ch</code>.</li>
-                    <li>Use <code>=empty</code> to match empty cells, or <code>!=empty</code> to match non-empty cells.</li>
-                    <li>Use <code>||</code> to match any of multiple values in the same column (e.g., <code>Admin || Guest</code>).</li>
-                    <li>To apply <code>OR</code> logic across columns, use <code>or_</code> or <code>group1_</code>. Examples: Column1:<code>or_>1</code> Column2:<code>or_!Mallory</code>.</li>
-					<li>The <strong>DisplayName</strong> column includes the object's ID (hidden), allowing filtering by ID.</li>
-				</ul>
-				<strong>Rating</strong>
-				<ul style="margin-top: 6px;">
-					<li><strong>Impact</strong>: Represents the amount or severity of permission the object has.</li>
-					<li><strong>Likelihood</strong>: Represents how easily the object can be influenced or strongly it is protected.</li>
-					<li><strong>Risk</strong>: Calculated as: <em>Impact x Likelihood = Risk</em>.</li>
-                    <li><strong>Important</strong>:
-                        <ul>
-                            <li>This scoring is meant as a basic evaluation to help sort and prioritize entries in the table.</li>
-                            <li>Risk scores are not directly comparable between object types or reports.</li>
-                            <li>It is not intended to replace a full risk assessment.</li>
-                        </ul>
-                    </li> 
-				</ul>
-                \u{1F4D6} More information in the <a href="https://github.com/CompassSecurity/EntraFalcon">GitHub README</a><br>
-                <button id="closeHelpModal" style="margin-top: 16px; padding: 6px 12px; font-size: 14px; border-radius: 4px; border: 1px solid #aaa; cursor: pointer;">\u2716 Close</button>
-            `;
-
-            modalOverlay.appendChild(modalContent);
-            document.body.appendChild(modalOverlay);
-
-            // Show modal
-            helpBtn.addEventListener('click', () => {
-                modalOverlay.style.display = 'flex';
-            });
-
-            // Close modal on background click or button click
-            modalOverlay.addEventListener('click', (e) => {
-                if (e.target === modalOverlay || e.target.id === 'closeHelpModal') {
-                    modalOverlay.style.display = 'none';
-                }
-            });
-            document.addEventListener('keydown', (e) => {
-                const isVisible = modalOverlay.style.display === 'flex';
-                if (e.key === 'Escape' && isVisible) {
-                    modalOverlay.style.display = 'none';
-                }
-            });
         });
 
         //Toast displayed when copy the current view
@@ -1733,58 +1598,690 @@ $global:GLOBALJavaScript = @'
 
 
         // Coloring cells
-        function colorCells(table) {
-			const rows = table.rows;
-			if (!rows.length) return;
+        function colorCells(table, headers) {
+            const rows = table && table.rows;
+            if (!rows || rows.length < 3) return;
 
-			const isDark = document.body.classList.contains("dark-mode");
-			const headers = Array.from(rows[0].cells).map(th => th.getAttribute("data-col") || th.textContent.trim());
+            const isDark = document.body.classList.contains("dark-mode");
 
-			const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn','IsPrivileged']);
-			const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification','ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible','AlertAssignActive', 'AlertActivation']);
-			const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active']);
-			const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType']);
+            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged']);
+            const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
+            const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active']);
+            const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType']);
 
-			const redColor = isDark ? "#800000" : "#FFB6C1";
-			const greenColor = isDark ? "#005f00" : "#98FB98";
+            const redColor = isDark ? "#800000" : "#FFB6C1";
+            const greenColor = isDark ? "#005f00" : "#98FB98";
 
-			for (let i = 2; i < rows.length; i++) {
-				const cells = rows[i].cells;
+            // If headers weren't passed, build once (fallback)
+            if (!headers || !headers.length) {
+                const headerCells = table.querySelectorAll("thead tr:first-child th");
+                headers = Array.prototype.map.call(headerCells, th => th.getAttribute("data-col") || (th.textContent || "").trim());
+            }
 
-				for (let j = 0; j < cells.length; j++) {
-					const cell = cells[j];
-					const cellValue = cell.textContent.trim();
-					const lowerValue = cellValue.toLowerCase();
-					const columnHeader = headers[j];
 
-					let backgroundColor = "";
+            for (let i = 2; i < rows.length; i++) {
+                const cells = rows[i].cells;
 
-					if (!isNaN(cellValue) && cellValue !== "") {
-						backgroundColor = parseFloat(cellValue) === 0 ? greenColor : redColor;
-					} else if (lowerValue === "true" || lowerValue === "false") {
-						const boolVal = lowerValue === "true";
+                for (let j = 0; j < cells.length; j++) {
+                    const cell = cells[j];
+                    const columnHeader = headers[j] || "";
 
-						if (redIfTrueHeaders.has(columnHeader)) {
-							backgroundColor = boolVal ? redColor : greenColor;
-						} else if (redIfFalseHeaders.has(columnHeader)) {
-							backgroundColor = boolVal ? greenColor : redColor;
-						}
-					} else if (redIfContentHeaders.has(columnHeader)) {
-						if (redIfContent.has(lowerValue)) {
-							backgroundColor = redColor;
-						} else {
-							backgroundColor = greenColor; // Now only applies to those in redIfContentHeaders!
-						}
-					}
+                    let bg = "";
 
-					if (cell.style.backgroundColor !== backgroundColor && backgroundColor) {
-						cell.style.backgroundColor = backgroundColor;
-					}
-				}
-			}
-		}
+                    // Fast path: boolean columns or numeric columns
+                    if (redIfTrueHeaders.has(columnHeader) || redIfFalseHeaders.has(columnHeader)) {
+                        const text = (cell.textContent || "").trim().toLowerCase();
+                        if (text === "true" || text === "false") {
+                            const boolVal = text === "true";
+                            if (redIfTrueHeaders.has(columnHeader)) bg = boolVal ? redColor : greenColor;
+                            if (redIfFalseHeaders.has(columnHeader)) bg = boolVal ? greenColor : redColor;
+                        }
+                    } else if (redIfContentHeaders.has(columnHeader)) {
+                        const text = (cell.textContent || "").trim().toLowerCase();
+                        bg = redIfContent.has(text) ? redColor : greenColor;
+                    } else {
+                        // Numeric heuristic: only attempt parse when it looks like a number
+                        const raw = (cell.textContent || "").trim();
+                        if (raw && raw.length < 32) {
+                            const n = Number(raw);
+                            if (!Number.isNaN(n)) {
+                                bg = n === 0 ? greenColor : redColor;
+                            }
+                        }
+                    }
+
+                    // Fix stale colors: clear when no longer applicable
+                    const current = cell.style.backgroundColor || "";
+                    if (bg) {
+                        if (current !== bg) cell.style.backgroundColor = bg;
+                    } else {
+                        if (current) cell.style.backgroundColor = "";
+                    }
+                }
+            }
+        }
+        window.colorCells = colorCells;
 
     </script>
+'@
+
+$global:GLOBALJavaScript_Nav = @'
+    <script>
+        (function () {
+        function safeJsonParse(text) {
+            try { return JSON.parse(text); } catch (e) { return null; }
+        }
+
+        function getManifest() {
+            var el = document.getElementById("report-manifest");
+            if (!el || !el.textContent) return null;
+            return safeJsonParse(el.textContent);
+        }
+
+        function getReportTitle(manifest) {
+        if (manifest && manifest.currentReportName) {
+            var s = String(manifest.currentReportName).replace(/\s+/g, " ").trim();
+            if (s) return s;
+        }
+
+        if (manifest && manifest.currentReportKey) {
+            var k = String(manifest.currentReportKey).replace(/\s+/g, " ").trim();
+            if (k) return k;
+        }
+
+        var h1 = document.querySelector("h1");
+        if (h1) {
+            var t = (h1.textContent || "").replace(/\s+/g, " ").trim();
+            if (t) return t;
+        }
+
+        return "Report";
+        }
+
+
+        function getHeaderMeta(manifest) {
+        var tenant = "";
+        var executed = "";
+
+        if (manifest) {
+            if (manifest.tenantName) {
+            tenant = String(manifest.tenantName).trim();
+            }
+
+            if (manifest.tenantId) {
+            var tid = String(manifest.tenantId).trim();
+            if (tid) {
+                tenant = tenant ? (tenant + " / ID: " + tid) : ("ID: " + tid);
+            }
+            }
+
+            if (manifest.executedAt) {
+            executed = String(manifest.executedAt).trim();
+            }
+        }
+
+        return { tenant: tenant, executed: executed };
+        }
+
+
+        function ensureHeadingIds() {
+            var headings = document.querySelectorAll("h2");
+
+            headings = Array.prototype.filter.call(headings, function (h2) {
+                if (!h2) return false;
+                // Exclude help modal heading
+                if (h2.closest && h2.closest("#helpModalOverlay")) return false;
+
+                return true;
+            });
+            for (var i = 0; i < headings.length; i++) {
+            var h2 = headings[i];
+            if (h2.id) continue;
+
+            var id = (h2.textContent || "")
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, "-")
+                .replace(/[^a-z0-9\-]/g, "");
+
+            h2.id = id || ("section-" + i);
+            }
+        }
+
+        function buildNavStackShell(manifest) {
+            if (document.getElementById("nav-stack")) return;
+
+            var body = document.body;
+            var loading = document.getElementById("loadingOverlay");
+
+            var stack = document.createElement("div");
+            stack.id = "nav-stack";
+
+            var header = document.createElement("div");
+            header.id = "report-header";
+
+            var left = document.createElement("div");
+            left.className = "hdr-left";
+
+            var titleWrap = document.createElement("div");
+            titleWrap.className = "hdr-title";
+
+            var name = document.createElement("span");
+            name.className = "hdr-name";
+            name.textContent = getReportTitle(manifest);
+
+            titleWrap.appendChild(name);
+            left.appendChild(titleWrap);
+
+            var meta = getHeaderMeta(manifest);
+            var sub = document.createElement("div");
+            sub.className = "hdr-sub";
+            sub.id = "hdr-subline";
+
+            if (meta.tenant) {
+            var t = document.createElement("span");
+            t.className = "hdr-meta";
+            t.textContent = meta.tenant;
+            sub.appendChild(t);
+            }
+
+            if (meta.tenant && meta.executed) {
+            var dot = document.createElement("span");
+            dot.className = "hdr-dot";
+            dot.textContent = "\u2022";
+            sub.appendChild(dot);
+            }
+
+            if (meta.executed) {
+            var e = document.createElement("span");
+            e.className = "hdr-meta";
+            e.innerHTML = "Executed: " + meta.executed.replace(/</g, "&lt;");
+            sub.appendChild(e);
+            }
+
+            left.appendChild(sub);
+
+            var center = document.createElement("div");
+            center.className = "hdr-center";
+
+            var right = document.createElement("div");
+            right.className = "hdr-right";
+            right.id = "hdr-actions";
+
+            var warnBtn = document.createElement("button");
+            warnBtn.className = "hdr-btn hdr-warn-btn";
+            warnBtn.id = "hdrWarningsBtn";
+            warnBtn.type = "button";
+            warnBtn.hidden = true;
+
+            var warnLabel = document.createElement("span");
+            warnLabel.className = "hdr-warn-label";
+            warnLabel.textContent = "\u26A0\uFE0F Warnings";
+
+            var warnCount = document.createElement("span");
+            warnCount.className = "hdr-warn-count";
+            warnCount.id = "hdrWarningsCount";
+            warnCount.setAttribute("aria-hidden", "true");
+
+            warnBtn.appendChild(warnLabel);
+            warnBtn.appendChild(warnCount);
+
+            right.appendChild(warnBtn);
+
+            header.appendChild(left);
+            header.appendChild(center);
+            header.appendChild(right);
+
+            var tabstrip = document.createElement("div");
+            tabstrip.id = "report-tabstrip";
+
+            var sectionStrip = document.createElement("div");
+            sectionStrip.id = "section-strip";
+            sectionStrip.setAttribute("aria-label", "Sections");
+
+            var sectionInner = document.createElement("div");
+            sectionInner.className = "section-strip-inner";
+            sectionInner.id = "sectionStripInner";
+            sectionStrip.appendChild(sectionInner);
+
+            stack.appendChild(header);
+            stack.appendChild(tabstrip);
+            stack.appendChild(sectionStrip);
+
+            body.insertBefore(stack, body.firstChild);
+            if (loading) body.insertBefore(loading, stack);
+
+            // Warnings drawer shell
+            if (!document.getElementById("warnings-drawer")) {
+            var backdrop = document.createElement("div");
+            backdrop.className = "contents-backdrop";
+            backdrop.id = "warnings-backdrop";
+            backdrop.hidden = true;
+
+            var drawer = document.createElement("aside");
+            drawer.className = "contents-drawer";
+            drawer.id = "warnings-drawer";
+            drawer.setAttribute("data-drawer", "warnings");
+            drawer.setAttribute("aria-hidden", "true");
+
+            var inner = document.createElement("div");
+            inner.className = "contents-drawer-inner";
+
+            var hdr = document.createElement("div");
+            hdr.className = "contents-drawer-header";
+
+            var ttl = document.createElement("div");
+            ttl.className = "contents-drawer-title";
+            ttl.textContent = "Execution warnings";
+
+            var close = document.createElement("button");
+            close.className = "hdr-btn";
+            close.id = "warningsCloseBtn";
+            close.type = "button";
+            close.textContent = "Close";
+
+            hdr.appendChild(ttl);
+            hdr.appendChild(close);
+
+            var bodyWrap = document.createElement("div");
+            bodyWrap.className = "warnings-body";
+            bodyWrap.id = "warnings-body";
+
+            var list = document.createElement("ul");
+            list.className = "warnings-list";
+            list.id = "warnings-list";
+
+            var empty = document.createElement("div");
+            empty.className = "warnings-empty";
+            empty.id = "warnings-empty";
+            empty.hidden = true;
+            empty.textContent = "No warnings found.";
+
+            bodyWrap.appendChild(list);
+            bodyWrap.appendChild(empty);
+
+            inner.appendChild(hdr);
+            inner.appendChild(bodyWrap);
+
+            drawer.appendChild(inner);
+
+            body.appendChild(backdrop);
+            body.appendChild(drawer);
+            }
+        }
+
+        function buildReportTabs(manifest) {
+            var host = document.getElementById("report-tabstrip");
+            if (!host) return;
+
+            host.innerHTML = "";
+
+            if (!manifest || !manifest.reports || !manifest.reports.length) return;
+
+            var inner = document.createElement("div");
+            inner.className = "tabstrip-inner";
+
+            var curKey = String((manifest.currentReportKey || manifest.current || "")).trim();
+            var curPath = (window.location.pathname || "").split("/").pop();
+
+            for (var i = 0; i < manifest.reports.length; i++) {
+            var r = manifest.reports[i] || {};
+            if (!r.file) continue;
+
+            var a = document.createElement("a");
+            a.className = "report-tab";
+            a.href = r.file;
+            a.textContent = r.title || r.key || r.file;
+
+            var isActive = false;
+            if (curKey && (r.key === curKey || r.title === curKey)) isActive = true;
+            if (!isActive && curPath && r.file.split("/").pop() === curPath) isActive = true;
+
+            if (isActive) {
+                a.classList.add("active");
+                a.setAttribute("aria-current", "page");
+                a.href = "#";
+            }
+
+            inner.appendChild(a);
+            }
+
+            host.appendChild(inner);
+        }
+
+        function buildSectionStrip() {
+            var inner = document.getElementById("sectionStripInner");
+            if (!inner) return;
+
+            while (inner.firstChild) inner.removeChild(inner.firstChild);
+
+            var headings = document.querySelectorAll("h2");
+
+            var added = 0;
+
+            for (var i = 0; i < headings.length; i++) {
+                var h2 = headings[i];
+                if (!h2 || !h2.id) continue;
+
+                // Exclude help modal heading (if present in DOM)
+                if (h2.closest && h2.closest("#helpModalOverlay")) continue;
+
+                // Add separator only BETWEEN items
+                if (added > 0) {
+                    var sep = document.createElement("span");
+                    sep.className = "section-sep";
+                    sep.textContent = "\u2022";
+                    inner.appendChild(sep);
+                }
+
+                var a = document.createElement("a");
+                a.className = "section-link";
+                a.href = "#" + h2.id;
+                a.textContent = (h2.textContent || "").replace(/\s+/g, " ").trim();
+
+                inner.appendChild(a);
+                added++;
+            }
+        }
+
+        function ensureHeaderControls() {
+            var actions = document.getElementById("hdr-actions");
+            if (!actions) return;
+
+            // -------------------------
+            // Theme button
+            // -------------------------
+            if (!document.getElementById("hdrThemeBtn")) {
+                var themeBtn = document.createElement("button");
+                themeBtn.id = "hdrThemeBtn";
+                themeBtn.className = "hdr-btn";
+                themeBtn.type = "button";
+                actions.appendChild(themeBtn);
+
+                function setTheme(theme) {
+                    document.body.classList.remove("light-mode", "dark-mode");
+                    document.body.classList.add(theme + "-mode");
+                    localStorage.setItem("theme", theme);
+
+                    themeBtn.textContent = theme === "dark" ? "\uD83C\uDF13 Dark" : "\u2600\uFE0F Light";
+
+                    // Recolor table if the table script exists on this page
+                    if (typeof window.colorCells === "function") {
+                        var table = document.querySelector("#tableWrapper table");
+                        if (table) {
+                            var headerCells = table.querySelectorAll("thead tr:first-child th");
+                            var headers = Array.prototype.map.call(headerCells, function (th) {
+                                return th.getAttribute("data-col") || (th.textContent || "").trim();
+                            });
+                            window.requestAnimationFrame(function () {
+                                window.colorCells(table, headers);
+                            });
+                        }
+                    }
+                }
+
+                var savedTheme = localStorage.getItem("theme") || "dark";
+                setTheme(savedTheme);
+
+                themeBtn.addEventListener("click", function () {
+                    var isDark = document.body.classList.contains("dark-mode");
+                    setTheme(isDark ? "light" : "dark");
+                });
+            }
+
+            // -------------------------
+            // Help button + modal
+            // -------------------------
+            if (!document.getElementById("hdrHelpBtn")) {
+                var helpBtn = document.createElement("button");
+                helpBtn.id = "hdrHelpBtn";
+                helpBtn.className = "hdr-btn";
+                helpBtn.type = "button";
+                helpBtn.textContent = "\u2753 Help";
+                actions.appendChild(helpBtn);
+
+                if (!document.getElementById("helpModalOverlay")) {
+                    var modalOverlay = document.createElement("div");
+                    modalOverlay.id = "helpModalOverlay";
+                    modalOverlay.style.position = "fixed";
+                    modalOverlay.style.top = "0";
+                    modalOverlay.style.left = "0";
+                    modalOverlay.style.width = "100vw";
+                    modalOverlay.style.height = "100vh";
+                    modalOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.6)";
+                    modalOverlay.style.display = "none";
+                    modalOverlay.style.zIndex = "9999";
+                    modalOverlay.style.justifyContent = "center";
+                    modalOverlay.style.alignItems = "center";
+
+                    var modalContent = document.createElement("div");
+                    modalContent.id = "helpModalContent";
+                    modalContent.style.background = "var(--nav-link-bg)";
+                    modalContent.style.color = "var(--nav-link-text)";
+                    modalContent.style.padding = "24px";
+                    modalContent.style.borderRadius = "12px";
+                    modalContent.style.maxWidth = "800px";
+                    modalContent.style.width = "90%";
+                    modalContent.style.boxShadow = "0 8px 16px rgba(0,0,0,0.4)";
+                    modalContent.style.fontSize = "15px";
+                    modalContent.style.lineHeight = "1.6";
+                    modalContent.style.position = "relative";
+
+                    // Paste your existing help HTML here unchanged:
+                    modalContent.innerHTML = `
+                        <h2 style="margin-top: 0;">How to Use This Report</h2>
+                        ... keep the rest exactly as-is ...
+                        <button id="closeHelpModal" style="margin-top: 16px; padding: 6px 12px; font-size: 14px; border-radius: 4px; border: 1px solid #aaa; cursor: pointer;">\u2716 Close</button>
+                    `;
+
+                    modalOverlay.appendChild(modalContent);
+                    document.body.appendChild(modalOverlay);
+
+                    modalOverlay.addEventListener("click", function (e) {
+                        if (e.target === modalOverlay || e.target.id === "closeHelpModal") {
+                            modalOverlay.style.display = "none";
+                        }
+                    });
+
+                    document.addEventListener("keydown", function (e) {
+                        var isVisible = modalOverlay.style.display === "flex";
+                        if (e.key === "Escape" && isVisible) {
+                            modalOverlay.style.display = "none";
+                        }
+                    });
+                }
+
+                helpBtn.addEventListener("click", function () {
+                    var overlay = document.getElementById("helpModalOverlay");
+                    if (overlay) overlay.style.display = "flex";
+                });
+            }
+        }
+
+
+        function getNavOffset() {
+            var doc = document.documentElement;
+            var raw = "";
+            try {
+                raw = getComputedStyle(doc).getPropertyValue("--report-header-offset") || "";
+            } catch (e) {
+                raw = "";
+            }
+            var n = parseInt(String(raw).trim(), 10);
+            return isNaN(n) ? 120 : n;
+        }
+
+        function updateActiveSectionLink() {
+            var links = document.querySelectorAll("#sectionStripInner .section-link");
+            if (!links.length) return;
+
+            var activeId = "";
+            var headings = document.querySelectorAll("h2[id]");
+            for (var i = 0; i < headings.length; i++) {
+            var rect = headings[i].getBoundingClientRect();
+            if (rect.top <= getNavOffset()) activeId = headings[i].id;
+            }
+
+            for (var j = 0; j < links.length; j++) {
+            var href = links[j].getAttribute("href") || "";
+            var id = href.indexOf("#") === 0 ? href.slice(1) : "";
+            if (id && id === activeId) {
+                links[j].classList.add("active");
+            } else {
+                links[j].classList.remove("active");
+            }
+            }
+        }
+
+        function parseExecutionWarnings() {
+            function normalizeWarnings(input) {
+                if (!input) return [];
+
+                var arr = [];
+                if (Array.isArray(input)) {
+                    arr = input;
+                } else if (typeof input === "string") {
+                    arr = [input];
+                } else {
+                    return [];
+                }
+
+                var out = [];
+                for (var i = 0; i < arr.length; i++) {
+                    var s = String(arr[i] || "").replace(/\s+/g, " ").trim();
+                    if (s) out.push(s);
+                }
+                return out;
+            }
+
+            // Prefer the already-parsed manifest if present
+            if (window.__reportManifest && window.__reportManifest.warnings != null) {
+                return normalizeWarnings(window.__reportManifest.warnings);
+            }
+
+            // Otherwise parse from the embedded JSON script tag
+            var el = document.getElementById("report-manifest");
+            if (!el || !el.textContent) return [];
+
+            try {
+                var manifest = JSON.parse(el.textContent);
+                return normalizeWarnings(manifest && manifest.warnings);
+            } catch (e) {
+                return [];
+            }
+        }
+
+
+        function openWarnings() {
+            var drawer = document.getElementById("warnings-drawer");
+            var backdrop = document.getElementById("warnings-backdrop");
+            if (!drawer || !backdrop) return;
+
+            drawer.classList.add("open");
+            drawer.setAttribute("aria-hidden", "false");
+            backdrop.hidden = false;
+        }
+
+        function closeWarnings() {
+            var drawer = document.getElementById("warnings-drawer");
+            var backdrop = document.getElementById("warnings-backdrop");
+            if (!drawer || !backdrop) return;
+
+            drawer.classList.remove("open");
+            drawer.setAttribute("aria-hidden", "true");
+            backdrop.hidden = true;
+        }
+
+        function wireWarningsDrawer() {
+            var btn = document.getElementById("hdrWarningsBtn");
+            var closeBtn = document.getElementById("warningsCloseBtn");
+            var backdrop = document.getElementById("warnings-backdrop");
+
+            if (btn) btn.addEventListener("click", function () {
+            var drawer = document.getElementById("warnings-drawer");
+            if (drawer && drawer.classList.contains("open")) {
+                closeWarnings();
+            } else {
+                openWarnings();
+            }
+            });
+
+            if (closeBtn) closeBtn.addEventListener("click", closeWarnings);
+            if (backdrop) backdrop.addEventListener("click", closeWarnings);
+        }
+
+        function renderWarningsPanel() {
+            var warnings = parseExecutionWarnings();
+
+            var btn = document.getElementById("hdrWarningsBtn");
+            var countEl = document.getElementById("hdrWarningsCount");
+            var list = document.getElementById("warnings-list");
+            var empty = document.getElementById("warnings-empty");
+
+            if (!btn || !countEl || !list || !empty) return;
+
+            while (list.firstChild) list.removeChild(list.firstChild);
+
+            if (!warnings || warnings.length === 0) {
+                btn.hidden = true;
+                btn.style.display = "none";
+                countEl.textContent = "";
+                empty.hidden = false;
+                return;
+            }
+
+            btn.hidden = false;
+            btn.style.display = "";
+
+            for (var i = 0; i < warnings.length; i++) {
+                var li = document.createElement("li");
+                li.textContent = warnings[i];
+                list.appendChild(li);
+            }
+
+            countEl.textContent = String(warnings.length);
+            btn.hidden = false;
+            empty.hidden = true;
+        }
+
+        function updateNavStackPadding() {
+            var stack = document.getElementById("nav-stack");
+            if (!stack) return;
+
+            var h = stack.getBoundingClientRect().height || 0;
+            var offset = h + 12;
+            document.body.style.paddingTop = String(offset) + "px";
+            document.documentElement.style.setProperty("--report-header-offset", String(Math.max(0, h - 1)) + "px");
+        }
+
+        function init() {
+            var manifest = getManifest();
+
+            ensureHeadingIds();
+            buildNavStackShell(manifest);
+            ensureHeaderControls();
+
+            buildReportTabs(manifest);
+            buildSectionStrip();
+            renderWarningsPanel();
+            wireWarningsDrawer();
+
+            updateNavStackPadding();
+            updateActiveSectionLink();
+
+            window.addEventListener("scroll", function () {
+            updateActiveSectionLink();
+            }, { passive: true });
+
+            window.addEventListener("resize", function () {
+            updateNavStackPadding();
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", init);
+        })();
+    </script>
+
 '@
 
 # CSS for formating the table
@@ -1802,48 +2299,6 @@ $global:GLOBALCss = @"
         padding-left: 12px;
         padding-right: 12px;
     }
-
-	#topNav {
-		display: flex;
-		gap: 8px;
-		padding: 12px 16px;
-		background-color: var(--nav-bg);
-		border-bottom: 1px solid var(--nav-border);
-		position: sticky;
-		top: 0;
-		z-index: 1000;
-		flex-wrap: wrap;
-        margin-left: -12px;
-        margin-right: -12px;
-        padding-left: 12px;
-        padding-right: 12px;
-	}
-
-	#topNav a {
-		padding: 6px 14px;
-		font-size: 14px;
-		font-weight: 500;
-		border-radius: 999px;
-		text-decoration: none;
-		background-color: var(--nav-link-bg);
-		color: var(--nav-link-text);
-		transition: background 0.2s ease, color 0.2s ease;
-		border: 1px solid transparent;
-	}
-
-	#topNav a:hover {
-		background-color: var(--nav-link-hover-bg);
-	}
-
-	#topNav a.active {
-		background-color: var(--nav-link-active-bg);
-		color: var(--nav-link-active-text);
-		border-color: var(--nav-link-active-border);
-	}
-	
-	h2 {
-		scroll-margin-top: var(--sticky-offset, 60px); /* Matches nav height */
-	}
 
     table {
         width: auto;
@@ -1918,10 +2373,6 @@ $global:GLOBALCss = @"
         display: flex;
         align-items: center;
         gap: 12px;
-    }
-
-    .toolbar .spacer {
-        flex-grow: 1;
     }
 
     .info-box {
@@ -2352,8 +2803,346 @@ $global:GLOBALCss = @"
         color: #d6336c;
         border: 1px solid #ddd;
     }
+
+    /* ======== Report header + report tabs + section strip + warnings drawer ======== */
+    :root{ --report-header-offset: 120px; }
+
+    /* Fixed nav stack */
+    #nav-stack{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    }
+
+    /* Background behind the whole stack */
+    body.light-mode #nav-stack{ background: rgba(255,255,255,0.70); }
+    body.dark-mode  #nav-stack{ background: rgba(0,0,0,0.45); }
+
+    /* Header row */
+    #report-header{
+    position: relative !important;
+    top: auto !important;
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.2fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(0,0,0,0.18);
+    background: rgba(255,255,255,0.86);
+    backdrop-filter: blur(6px);
+    }
+    body.light-mode #report-header{
+    background: rgba(255,255,255,0.92);
+    border-bottom: 1px solid rgba(0,0,0,0.12);
+    }
+    body.dark-mode #report-header{
+    background: rgba(22,22,22,0.86);
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .hdr-left{ display:flex; flex-direction:column; gap:4px; min-width: 240px; }
+    .hdr-title{ display:flex; align-items:baseline; gap:10px; }
+    .hdr-name{ font-size: 16px; font-weight: 800; }
+
+    .hdr-sub{
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:8px;
+    font-size: 12px;
+    opacity: 0.9;
+    }
+    .hdr-meta{ white-space: nowrap; }
+    .hdr-dot{ opacity: 0.55; }
+    @media (max-width: 900px){
+    .hdr-sub{ flex-wrap: wrap; }
+    }
+
+    .hdr-center{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    }
+
+    .hdr-right{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    }
+
+    /* Buttons in header */
+    .hdr-btn{
+        height: 32px;
+        padding: 0 10px;
+        font-size: 13px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+        color: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        line-height: 32px;
+    }
+    .hdr-btn:hover{ background: rgba(255,255,255,0.10); }
+
+    /* Make header buttons consistent */
+    #hdr-actions button{
+        height: 32px;
+        line-height: 32px;
+        padding: 0 10px;
+        font-size: 13px;
+        border-radius: 8px;
+        box-sizing: border-box;
+    }
+
+
+    body.light-mode .hdr-btn{
+    border: 1px solid rgba(0,0,0,0.16);
+    background: rgba(0,0,0,0.03);
+    }
+    body.light-mode .hdr-btn:hover{ background: rgba(0,0,0,0.06); }
+
+    body.dark-mode .hdr-btn{
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.06);
+    }
+    body.dark-mode .hdr-btn:hover{ background: rgba(255,255,255,0.10); }
+
+    /* Report tab strip */
+    #report-tabstrip{
+    position: relative !important;
+    top: auto !important;
+    z-index: 999;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0,0,0,0.10);
+    }
+    body.dark-mode #report-tabstrip{
+    background: rgba(18, 18, 18, 0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .tabstrip-inner{
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    padding: 4px 14px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    }
+    .tabstrip-inner::-webkit-scrollbar{ height: 8px; }
+    .tabstrip-inner::-webkit-scrollbar-thumb{ border-radius: 8px; }
+    body.light-mode .tabstrip-inner::-webkit-scrollbar-thumb{ background: rgba(0,0,0,0.18); }
+    body.dark-mode  .tabstrip-inner::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.18); }
+
+    .report-tab{
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 13px;
+    letter-spacing: 0.2px;
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    }
+    body.light-mode .report-tab:hover{ background: rgba(0,0,0,0.05); }
+    body.dark-mode  .report-tab:hover{ background: rgba(255,255,255,0.06); }
+
+    body.light-mode .report-tab.active{
+    border-bottom-color: rgba(0,0,0,0.45);
+    background: rgba(0,0,0,0.03);
+    }
+    body.dark-mode .report-tab.active{
+    border-bottom-color: rgba(255,255,255,0.55);
+    background: rgba(255,255,255,0.04);
+    }
+
+    /* Warnings badge */
+    .hdr-warn-btn{ position: relative; }
+    .hdr-warn-count{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    margin-left: 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 700;
+    }
+    body.light-mode .hdr-warn-count{
+    background: rgba(160, 90, 0, 0.16);
+    border: 1px solid rgba(160, 90, 0, 0.35);
+    }
+    body.dark-mode .hdr-warn-count{
+    background: rgba(255, 180, 80, 0.14);
+    border: 1px solid rgba(255, 180, 80, 0.28);
+    }
+
+    /* Warnings drawer */
+    .contents-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 2000;
+    }
+    .contents-drawer{
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: min(360px, 92vw);
+    background: rgba(22,22,22,0.98);
+    color: inherit;
+    border-left: 1px solid rgba(255,255,255,0.10);
+    transform: translateX(100%);
+    transition: transform 180ms ease;
+    z-index: 2001;
+    }
+    .contents-drawer.open{ transform: translateX(0); }
+    .contents-drawer-inner{
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    }
+    .contents-drawer-header{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .contents-drawer-title{
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.2px;
+    }
+    .warnings-body{ padding: 12px 16px 16px; }
+    .warnings-list{ margin: 0; padding-left: 18px; }
+    .warnings-list li{ margin: 8px 0; line-height: 1.35; }
+    .warnings-empty{ opacity: 0.8; font-size: 13px; padding: 10px 0; }
+
+    /* Force-hide warnings button when hidden attribute is set */
+    #hdrWarningsBtn[hidden]{
+        display: none !important;
+    }
+
+
+    /* Warnings drawer: light mode */
+    body.light-mode .contents-drawer{
+        background: rgba(255,255,255,0.98);
+        color: rgba(0,0,0,0.92);
+        border-left: 1px solid rgba(0,0,0,0.14);
+    }
+
+    body.light-mode .contents-drawer-header{
+        border-bottom: 1px solid rgba(0,0,0,0.12);
+    }
+
+    body.light-mode .warnings-empty{
+        opacity: 0.85;
+    }
+
+    /* Optional: backdrop slightly lighter in light mode */
+    body.light-mode .contents-backdrop{
+        background: rgba(0,0,0,0.25);
+    }
+
+    /* Optional: ensure the Close button is readable in light mode */
+    body.light-mode .contents-drawer .hdr-btn{
+        border: 1px solid rgba(0,0,0,0.16);
+        background: rgba(0,0,0,0.03);
+        color: rgba(0,0,0,0.92);
+    }
+    body.light-mode .contents-drawer .hdr-btn:hover{
+        background: rgba(0,0,0,0.06);
+    }
+
+
+
+    /* Section strip (micro) */
+    #section-strip{
+    position: relative !important;
+    top: auto !important;
+    z-index: 998;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: none;
+    }
+    body.light-mode #section-strip{ background: rgba(255,255,255,0.88); }
+    body.dark-mode  #section-strip{ background: rgba(18,18,18,0.80); }
+
+    .section-strip-inner{
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 2px 14px;
+    scrollbar-width: thin;
+    }
+    .section-strip-inner::-webkit-scrollbar{ height: 6px; }
+    .section-strip-inner::-webkit-scrollbar-thumb{ border-radius: 999px; }
+    body.light-mode .section-strip-inner::-webkit-scrollbar-thumb{ background: rgba(0,0,0,0.18); }
+    body.dark-mode  .section-strip-inner::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.18); }
+
+    .section-link{
+    text-decoration: none;
+    font-size: 11.5px;
+    opacity: 0.72;
+    padding: 2px 0;
+    border-bottom: 1px solid transparent;
+    }
+    .section-link:hover{ opacity: 0.95; }
+    .section-link.active{
+    opacity: 1;
+    border-bottom-color: currentColor;
+    }
+    .section-sep{ opacity: 0.22; }
+
+
+    /* Make native form popups prefer the active color scheme */
+    body.dark-mode {
+        color-scheme: dark;
+    }
+
+    body.light-mode {
+        color-scheme: light;
+    }
+
+
+    body.light-mode .section-link{ color: rgba(0,0,0,0.88); }
+    body.dark-mode  .section-link{ color: rgba(255,255,255,0.88); }
+    body.light-mode .section-link.active{ color: rgba(0,0,0,0.95); }
+    body.dark-mode  .section-link.active{ color: rgba(255,255,255,0.95); }
+    body.light-mode .section-sep{ color: rgba(0,0,0,0.55); }
+    body.dark-mode  .section-sep{ color: rgba(255,255,255,0.55); }
+
+    /* Make anchors work with the new fixed stack */
+    h2{ scroll-margin-top: var(--report-header-offset, 120px); }
+    thead tr:first-child th{ top: var(--report-header-offset, 120px); }
+    details{ scroll-margin-top: var(--report-header-offset, 120px); }
+
 </style>
 "@
+
+$global:GLOBALJavaScript = $global:GLOBALJavaScript_Table + "`n" + $global:GLOBALJavaScript_Nav
+
+$global:GLOBALReportManifestScript = ''
 
 ############################## Internal function section ########################
 
@@ -3479,6 +4268,99 @@ function Get-EntraRoleAssignments {
 }
 
 
+
+$global:TenantReportTabs = @()
+
+function Initialize-TenantReportTabs {
+    param(
+        [Parameter(Mandatory)][string]$StartTimestamp,
+        [Parameter(Mandatory)][pscustomobject]$CurrentTenant,
+        [Parameter(Mandatory)][pscustomobject]$TenantReports
+    )
+
+    $tenantNameEscaped = [uri]::EscapeDataString($CurrentTenant.DisplayName)
+
+    $defs = @(
+        @{ Prop = 'Summary';                   Key = 'Summary';    Title = 'Summary';                   File = "_EntraFalconEnumerationSummary_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'Users';                     Key = 'Users';      Title = 'Users';                     File = "Users_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'Groups';                    Key = 'Groups';     Title = 'Groups';                    File = "Groups_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'ManagedIdenties';           Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'ConditionalAccessPolicies'; Key = 'CAP';        Title = 'Conditional Access';        File = "ConditionalAccessPolicies_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'Agents';                    Key = 'Agents';     Title = 'Agents';                    File = "Agents_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'EntraRoles';                Key = 'RoleEntra';  Title = 'Role Assignments (Entra)';  File = "Role_Assignments_Entra_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AzureRoles';                Key = 'RoleAz';     Title = 'Role Assignments (Azure)';  File = "Role_Assignments_Azure_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'PimForEntra';               Key = 'PIM';        Title = 'PIM (Entra)';                File = "PIM_${StartTimestamp}_${tenantNameEscaped}.html" }
+    )
+
+    $tabs = New-Object System.Collections.Generic.List[object]
+
+    foreach ($d in $defs) {
+        $prop = [string]$d.Prop
+        $enabled = $false
+
+        try {
+            $value = $TenantReports.$prop
+            if ($value -is [bool]) { $enabled = $value }
+        } catch {
+            $enabled = $false
+        }
+
+        if (-not $enabled) { continue }
+
+        $tabs.Add([pscustomobject]@{
+            key   = [string]$d.Key
+            title = [string]$d.Title
+            file  = [string]$d.File
+        })
+    }
+
+    $global:TenantReportTabs = $tabs
+}
+
+
+function Set-GlobalReportManifest {
+    param(
+        [Parameter(Mandatory)][string]$CurrentReportKey,
+        [Parameter(Mandatory)][string]$CurrentReportName,
+        [Parameter()][object]$Warnings
+    )
+
+    $warningsArray = @()
+
+    if ($null -ne $Warnings) {
+        if ($Warnings -is [string]) {
+            $warningsArray = @($Warnings)
+        } elseif ($Warnings -is [System.Collections.IEnumerable]) {
+            $warningsArray = @($Warnings) | ForEach-Object { [string]$_ }
+        } else {
+            $warningsArray = @([string]$Warnings)
+        }
+
+        $warningsArray = $warningsArray |
+            ForEach-Object { ($_ -replace '\s+', ' ').Trim() } |
+            Where-Object { $_ }
+    }
+
+    $manifest = [pscustomobject]@{
+        tenantName        = $global:ReportContext.TenantName
+        tenantId          = $global:ReportContext.TenantId
+        executedAt        = $global:ReportContext.StartTimestamp
+        currentReportKey  = $CurrentReportKey
+        currentReportName = $CurrentReportName
+        warnings          = $warningsArray
+        reports           = $global:TenantReportTabs
+    }
+
+    $json = $manifest | ConvertTo-Json -Depth 6 -Compress
+    $global:GLOBALReportManifestScript = "<script id=`"report-manifest`" type=`"application/json`">$json</script>"
+}
+
+
+
+
+
 #Get all active Entra role assignments
 function Get-PimforGroupsAssignments {
     [CmdletBinding()]
@@ -4360,6 +5242,8 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALAuditSummary -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALMainTableDetailsHEAD -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALJavaScript -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALJavaScript_Table -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALJavaScript_Nav -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALCss -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALDelegatedApiPermissionCategorizationList -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALMsTenantIds -ErrorAction SilentlyContinue
@@ -4450,4 +5334,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks

@@ -971,8 +971,17 @@ Appendix: Experimental App Authentication Settings
 ===============================================================================================================================================
 "
 
-    # Prepare HTML output
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'MI' -CurrentReportName 'ManagedIdentities Enumeration' -Warnings $ScriptWarningList
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -997,7 +1006,7 @@ Appendix: Experimental App Authentication Settings
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixSecretsHTML
 
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     write-host "[+] Details of $($AllAppRegistrations.count) App Registrations stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"

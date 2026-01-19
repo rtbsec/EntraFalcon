@@ -805,12 +805,6 @@ Executed at: $StartTimestamp
 Execution Warnings = This report includes only PIM settings for Entra ID roles.
 ************************************************************************************************************************
 "
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = "This report includes only PIM settings for Entra ID roles."
-    }
 
     # Build Detail section as JSON for the HTML Report
     $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
@@ -831,12 +825,22 @@ $ObjectsDetailsHEAD = @'
     $tableOutput | select-object Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append    
 
-    # Prepare HTML output
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration (Beta)</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'Pim' -CurrentReportName 'PIM Enumeration'
+
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixDynamicHTML
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     # Store in global var

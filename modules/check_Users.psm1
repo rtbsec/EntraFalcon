@@ -1495,14 +1495,6 @@ function Invoke-CheckUsers {
 
     $DetailOutputTxt  = $DetailTxtBuilder.ToString()
 
-
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp"
-        "Execution Warnings" = $WarningReport -join ' / '
-    }
-
 # Build Detail section as JSON for the HTML Report
 $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
 $ObjectsDetailsHEAD = @'
@@ -1534,8 +1526,17 @@ Execution Warnings = $($WarningReport  -join ' / ')
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
-    # Build header section
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'Users' -CurrentReportName 'Users Enumeration' -Warnings $WarningReport
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -1552,7 +1553,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
     }
 
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head $GLOBALcss -PostContent $GLOBALJavaScript -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     $PmWritingReports.Stop()

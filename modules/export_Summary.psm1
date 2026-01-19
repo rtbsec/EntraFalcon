@@ -734,15 +734,15 @@ Enumeration Results:
     - Pim Settings:                $($GlobalAuditSummary.PimSettings.Count)
 "@
 
-
-
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
 
     # Build header section
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title)</h1>" -As List -PostContent "<h2>Enumerated Objects</h2>"
+    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><h2>General</h2>" -As List -PostContent "<h2>Enumerated Objects</h2>"
   
     #Write HTML
     $PostContentCombined =  $Chartsection + "`n" + $GLOBALJavaScript
-    $CssCombined = $GLOBALcss + $CustomCss
+    $CssCombined = $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
     $Report | Out-File "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 

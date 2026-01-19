@@ -1200,14 +1200,6 @@ $MissingPolicies
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
 
-
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = $WarningReport -join ' / '
-    }
-
 # Build Detail section as JSON for the HTML Report
 if ($AllPoliciesCount -gt 0) {
     $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 10 -Compress
@@ -1244,8 +1236,18 @@ Appendix: Network Location
 ###############################################################################################################################################
     "
 
-    # Build header section
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'Cap' -CurrentReportName 'ConditionalAccessPolicies Enumeration' -Warnings $WarningReport
+
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
   
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
@@ -1268,7 +1270,7 @@ Appendix: Network Location
 
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixNetworkLocations
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Title "$Title enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     write-host "[+] Details of $AllPoliciesCount policies stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"

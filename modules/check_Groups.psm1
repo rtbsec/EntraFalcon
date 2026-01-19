@@ -194,7 +194,6 @@ function Invoke-CheckGroups {
     $PmScript = [System.Diagnostics.Stopwatch]::StartNew()
     $PmInitTasks = [System.Diagnostics.Stopwatch]::StartNew()
 
-
     Write-Log -Level Verbose -Message "Start group script"
 
     # Check token and trigger refresh if required
@@ -2330,13 +2329,6 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
     write-host "[*] Writing Reports"
     write-host ""
 
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = $GroupScriptWarningList -join ' / '
-    }
-
 # Build Detail section as JSON for the HTML Report
 $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
 $ObjectsDetailsHEAD = @'
@@ -2361,8 +2353,20 @@ Appendix: Dynamic Groups
     $PmGeneratingDetails.Stop()
     $PmWritingReports = [System.Diagnostics.Stopwatch]::StartNew()
 
-    # Prepare HTML output
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+        # -ScriptWarnings $GroupScriptWarningList
+
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'Groups' -CurrentReportName 'Groups Enumeration' -Warnings $GroupScriptWarningList
+
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
 
 
@@ -2381,7 +2385,7 @@ Appendix: Dynamic Groups
 
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixDynamicHTML
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     $PmWritingReports.Stop()

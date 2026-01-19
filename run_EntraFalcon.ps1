@@ -296,15 +296,20 @@ $TenantReports = [pscustomobject]@{
 }
 
 $ReportsBasedOnObjects = Get-TenantReportAvailability -IncludeMsApps:$IncludeMsApps
-$TenantReports.ConditionalAccessPolicies = (@($Caps).Count -gt 0)
-$TenantReports.PimForEntra               = (@($TenantPimRoleAssignments).Count -gt 0)
-$TenantReports.AzureRoles                = (@($AzureIAMAssignments).Count -gt 0)
+$TenantReports.ConditionalAccessPolicies = ($null -ne $Caps -and $Caps.Count -gt 0)
+$TenantReports.PimForEntra               = ($null -ne $TenantPimRoleAssignments -and $TenantPimRoleAssignments.Count -gt 0)
+$TenantReports.AzureRoles                = ($null -ne $AzureIAMAssignments -and $AzureIAMAssignments.Count -gt 0)
 $TenantReports.Groups           = $ReportsBasedOnObjects.Groups
 $TenantReports.AppRegistrations = $ReportsBasedOnObjects.AppRegistrations
 $TenantReports.ManagedIdenties  = $ReportsBasedOnObjects.ManagedIdenties
 #$TenantReports.EnterpriseApps   = $ReportsBasedOnObjects.EnterpriseApps
 #$TenantReports.Agents   = $ReportsBasedOnObjects.Agents
-
+$global:ReportContext = [pscustomobject]@{
+    TenantName     = $CurrentTenant.DisplayName
+    TenantId       = $CurrentTenant.Id
+    StartTimestamp = $StartTimestamp
+}
+Initialize-TenantReportTabs -StartTimestamp $global:ReportContext.StartTimestamp -CurrentTenant $CurrentTenant -TenantReports $TenantReports
 $TenantReportsText = ($TenantReports.PSObject.Properties | Sort-Object Name | ForEach-Object { "{0} = {1}" -f $_.Name, $_.Value }) -join " | "
 Write-Log -Level Debug -Message ("Reports:{0}" -f $TenantReportsText)
 
@@ -340,6 +345,7 @@ if ($GLOBALPIMForEntraRolesChecked) {
 
 write-host "`n********************************** [9/9] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
+Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
 Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder
 
 # Remove global variables

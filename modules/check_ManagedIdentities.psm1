@@ -918,14 +918,6 @@ function Invoke-CheckManagedIdentities {
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
-
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = $ManagedIdentitiesScriptWarningList -join ' / '
-    }
-
 # Build Detail section as JSON for the HTML Report
 $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
 $ObjectsDetailsHEAD = @'
@@ -976,8 +968,17 @@ Appendix: Used API permission reference
             Sort-Object ApiName, CategorySort, ApiPermission, ApiPermissionDescription -Unique |
             Select-Object ApiName, Category, ApiPermission, ApiPermissionDescription
 
-        # Prepare HTML output
-        $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+        # Set generic information which get injected into the HTML
+        Set-GlobalReportManifest -CurrentReportKey 'MI' -CurrentReportName 'ManagedIdentities Enumeration' -Warnings $ManagedIdentitiesScriptWarningList
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
         #Write TXT and CSV files
         $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -990,7 +991,7 @@ Appendix: Used API permission reference
         #Write HTML
         $ApiPermissionReferenceHTML += $ApiPermissionReference | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Used API Permission Reference</h2>"
         $PostContentCombined = $GLOBALJavaScript + "`n" + $ApiPermissionReferenceHTML
-        $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+        $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
         $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         write-host "[+] Details of $ManagedIdentitiesCount Managed Identity stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    
     } else {

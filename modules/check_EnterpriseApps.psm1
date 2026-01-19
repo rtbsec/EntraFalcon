@@ -118,7 +118,7 @@ function Invoke-CheckEnterpriseApps {
 
     # Check if Azure IAM role were checked
     if (-not ($GLOBALAzurePsChecks)) {
-        $EnterpriseAppsScriptWarningList += "Group Azure IAM assignments were not assessed"
+        $EnterpriseAppsScriptWarningList += "Azure IAM assignments were not assessed"
     }
 
     # Get all App API Permissions (needed to resolve the ID to a human readable name)
@@ -1679,15 +1679,6 @@ function Invoke-CheckEnterpriseApps {
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
-
-
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = $EnterpriseAppsScriptWarningList -join ' / '
-    }
-
 # Build Detail section as JSON for the HTML Report
 $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
 $ObjectsDetailsHEAD = @'
@@ -1736,8 +1727,17 @@ Appendix: Used API Permission Reference
         Select-Object ApiName, Category, ApiPermission, ApiPermissionDescription
 
 
-    # Prepare HTML output
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>$($Title) Enumeration</h1>" -As List -PostContent "<h2>$($Title) Overview</h2>"
+    # Set generic information which get injected into the HTML
+    Set-GlobalReportManifest -CurrentReportKey 'EA' -CurrentReportName 'EnterpriseApps Enumeration' -Warnings $EnterpriseAppsScriptWarningList
+
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -1750,7 +1750,7 @@ Appendix: Used API Permission Reference
     #Write HTML
     $ApiPermissionReferenceHTML += $ApiPermissionReference | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Used API Permission Reference</h2>"
     $PostContentCombined = $GLOBALJavaScript + "`n" + $ApiPermissionReferenceHTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head $GLOBALcss -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
    
      write-host "[+] Details of $EnterpriseAppsCount Enterprise Application stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"

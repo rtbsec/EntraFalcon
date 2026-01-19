@@ -482,12 +482,6 @@ function Invoke-CheckRoles {
 
 
 
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Executed in Tenant" = "$($CurrentTenant.DisplayName) / ID: $($CurrentTenant.id)"
-        "Executed at" = "$StartTimestamp "
-        "Execution Warnings" = $WarningReport -join ' / '
-    }
 #Define header
 $headerTXT = "************************************************************************************************************************
 $Title Enumeration
@@ -505,12 +499,18 @@ $headerTXTAzureRoles = "
 Azure Roles
 ****************************
 "
-    # Prepare HTML output
-    $headerHTMLEntra = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>Role Assignments Entra ID</h1>" -As List  -PostContent "<h2>$($Title) Overview</h2>"
-    $headerHTMLAzure = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><nav id=`"topNav`"></nav><h1>Role Assignments Azure IAM</h1>" -As List  -PostContent "<h2>$($Title) Overview</h2>"
+    # HTML header below the navbar
+$headerHtml = @"
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading data...</div>
+</div>
+<h2>$Title Overview</h2>
+"@
 
     #Generate and write HTML Entra role report
-    $Report = ConvertTo-HTML -Body "$headerHTMLEntra $mainEntraTableHTML" -Title "$Title Enumeration" -Head $GLOBALcss -PostContent $GLOBALJavaScript
+    Set-GlobalReportManifest -CurrentReportKey 'Entra Roles' -CurrentReportName 'Role Assignments Entra ID' -Warnings $WarningReport
+    $Report = ConvertTo-HTML -Body "$headerHtml $mainEntraTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
     $Report | Out-File "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     #Write TXT and CSV files
@@ -577,7 +577,8 @@ Azure Roles
 
 
     if ($SortedAzureRoles.count -ge 1) {
-        $Report = ConvertTo-HTML -Body "$headerHTMLAzure $mainAzureTableHTML" -Title "$Title Enumeration" -Head $GLOBALcss -PostContent $GLOBALJavaScript
+        Set-GlobalReportManifest -CurrentReportKey 'Azure Roles' -CurrentReportName 'Role Assignments Azure IAM'
+        $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $SortedAzureRoles | format-table Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
