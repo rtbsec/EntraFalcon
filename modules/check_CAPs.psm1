@@ -216,6 +216,7 @@ function ConvertTo-Yaml {
     ########################################## SECTION: DATACOLLECTION ##########################################
 
     write-host "[*] Get Conditional Access Policies"
+
     #Omit oData to avoid having odata in the sub-properties
     $headers = @{ 'Accept' = 'application/json; odata.metadata=none' }
     $AllPolicies = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -AdditionalHeaders $headers -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -601,7 +602,14 @@ function ConvertTo-Yaml {
 
         $ExcludedObjects = $policy.Conditions.Users.ExcludeUsers.count + $policy.Conditions.Users.ExcludeGroups.count + $policy.Conditions.Users.ExcludeRoles.count + $ExcludedExternalUsersCount
         #Count the conditions. For certain policies like blocking the device code the value should be <= 1 otherwise the policy is weakened
-        $ConditionsCount = $policy.Conditions.Devices.DeviceFilter.rule.count + $IncPlatformsCount + $ExcPlatforms + $policy.Conditions.SignInRiskLevels.count + $policy.Conditions.UserRiskLevels.count + $IncludedNwLocationsCount + $ExcludedNwLocationsCount + $ClientAppTypesCount + $policy.Conditions.AuthenticationFlows.TransferMethods.count
+        $DeviceFilterCount = $policy.Conditions.Devices.DeviceFilter.rule.count
+        $SignInRiskCount = $policy.Conditions.SignInRiskLevels.count
+        $UserRiskCount = $policy.Conditions.UserRiskLevels.count
+        $AuthFlowCount = $policy.Conditions.AuthenticationFlows.TransferMethods.count
+        $ConditionsCount = $DeviceFilterCount + $IncPlatformsCount + $ExcPlatforms + $SignInRiskCount + $UserRiskCount + $IncludedNwLocationsCount + $ExcludedNwLocationsCount + $ClientAppTypesCount + $AuthFlowCount
+        if ($ConditionsCount -gt 1) {
+            Write-Log -Level Debug -Message "ConditionsCount for '$($policy.DisplayName)': total=$ConditionsCount (DeviceFilter=$DeviceFilterCount, IncPlatforms=$IncPlatformsCount, ExcPlatforms=$ExcPlatforms, SignInRisk=$SignInRiskCount, UserRisk=$UserRiskCount, IncNw=$IncludedNwLocationsCount, ExcNw=$ExcludedNwLocationsCount, ClientApps=$ClientAppTypesCount, AuthFlows=$AuthFlowCount)"
+        }
 
         #Check policy for DeviceCodeFlow
         if ($policy.Conditions.AuthenticationFlows.TransferMethods -match "deviceCodeFlow") {
@@ -638,7 +646,12 @@ function ConvertTo-Yaml {
                 $DeviceCodeFlowWarnings++
             }
             if ($DeviceCodeFlowWarnings -ge 1) {
-                $WarningPolicy += "Targeting DeviceCodeFlow but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting DeviceCodeFlow but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -678,7 +691,12 @@ function ConvertTo-Yaml {
             }
         
             if ($LegacyAuthWarnings -ge 1) {
-                $WarningPolicy += "Targeting Legacy Auth but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting Legacy Auth but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -714,7 +732,12 @@ function ConvertTo-Yaml {
             }
         
             if ($SignInRiskWarnings -ge 1) {
-                $WarningPolicy += "Targeting risky sign-in but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting risky sign-in but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -750,7 +773,12 @@ function ConvertTo-Yaml {
             }
         
             if ($UserRiskWarnings -ge 1) {
-                $WarningPolicy += "Targeting user risk but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting user risk but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -788,7 +816,12 @@ function ConvertTo-Yaml {
             }
 
             if ($CombinedRiskWarnings -ge 1) {
-                $WarningPolicy += "Targeting risks but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting risks but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -820,7 +853,12 @@ function ConvertTo-Yaml {
             }
         
             if ($RegisterSecInfosWarnings -ge 1) {
-                $WarningPolicy += "Targeting registration of security infos but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting registration of security infos but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
   
@@ -852,7 +890,12 @@ function ConvertTo-Yaml {
             }
         
             if ($RegisterDevicesInfosWarnings -ge 1) {
-                $WarningPolicy += "Targeting joining or registering devices but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting joining or registering devices but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -888,7 +931,12 @@ function ConvertTo-Yaml {
             }
         
             if ($UserMfaWarnings -ge 1) {
-                $WarningPolicy += "Requires MFA but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Requires MFA but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -920,7 +968,12 @@ function ConvertTo-Yaml {
             }
         
             if ($AuthStrengthWarnings -ge 1) {
-                $WarningPolicy += "Requires AuthStrength (no AuthContext) but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Requires AuthStrength (no AuthContext) but " + ($ErrorMessages -join ", ")
+                if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
+                    $WarningPolicy = $warningMessage
+                } else {
+                    $WarningPolicy += " / $warningMessage"
+                }
             }
         }
 
@@ -985,10 +1038,14 @@ function ConvertTo-Yaml {
             Warnings = $WarningPolicy
         })
 
+        if (-not [string]::IsNullOrWhiteSpace($WarningPolicy)) {
+            Write-Log -Level Trace -Message "Policy '$($policy.DisplayName)' warnings: $WarningPolicy"
+        }
     }
 
 
     write-host "[*] Processing results"
+    Write-Log -Level Debug -Message "Processed $($ConditionalAccessPolicies.Count) conditional access policies"
 
 # Initialize an empty array to store warning messages
 $Warnings = @()
@@ -1032,6 +1089,8 @@ $MissingPolicies
 </ul>
 "@
 
+    Write-Log -Level Debug -Message "Missing policy warnings: $($Warnings.Count)"
+    Write-Log -Level Trace -Message ("Missing policies: " + ($Warnings -join " | "))
 }
 
     #Define stringbuilder to avoid performance impact
