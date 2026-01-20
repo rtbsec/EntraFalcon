@@ -1317,7 +1317,7 @@ Appendix: Network Location
     "
 
     # Set generic information which get injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'Cap' -CurrentReportName 'ConditionalAccessPolicies Enumeration' -Warnings $WarningReport
+    Set-GlobalReportManifest -CurrentReportKey 'CAP' -CurrentReportName 'ConditionalAccessPolicies Enumeration' -Warnings $WarningReport
 
 
     # HTML header below the navbar
