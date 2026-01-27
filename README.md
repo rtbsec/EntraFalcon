@@ -68,23 +68,36 @@ Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process
 ```
 
 ### Run EntraFalcon
-The tool includes built-in support for Entra ID authentication using a custom forked PowerShell module.
-You can choose from multiple authentication flows depending on your environment and preference.
+EntraFalcon includes built-in support for Entra ID authentication.  
+Multiple authentication flows are available to support different environments and restrictions.  
+Depending on the selected flow, this require multiple interactive authentications.  
 
-> ⚠️ **Note:** By default, two separate authentications may be required.  
-> This is due to the need for a special first-party client with elevated scopes to access **PIM for Groups** data.  
-> With `-BroCi` (and especially `-BroCiToken`), the additional interactive authentication for PIM for Groups can often be avoided.  
-> You can skip the enumeration of PIM for Groups (and thus the first authentication) by using the `-SkipPimForGroups` switch.
+| Auth Flow                    | Windows | Linux | Interactive Logins | Convenience | Parameter(s)                         | Notes |
+|-----------------------------|---------|-------|--------------------|-------------|--------------------------------------|-------|
+| BroCi                       | Yes     | No    | 1                  | High        | `-BroCi`                             | Avoids reliance on legacy clients such as *Azure Active Directory PowerShell*.|
+| Auth Code Flow              | Yes     | No    | 3                  | Normal      | *(default)*                          | Default authentication flow. |
+| Device Code Flow            | Yes     | Yes   | 3                  | Normal      | `-AuthMethod DeviceCode`             | Authentication can be done on a different device. |
+| Manual Code Flow            | Yes     | Yes   | 3                  | Low-Normal  | `-AuthMethod ManualCode`             | Authentication can be done on a different device or browser session. |
+| BroCi + Manual Code Flow    | Yes     | Yes   | 1                  | Low         | `-BroCi -AuthMethod ManualCode`      | Authorization code must be manually extracted from browser developer tools. |
+| BroCi with Token            | Yes     | Yes   | 0                  | Low         | `-BroCiToken "<refresh_token>"`      | Refresh token must be obtained manually (e.g., from browser dev tools or another auth tool). |
 
 
-#### Auth Code Flow (default) (Windows only)
+#### Use BroCi flow (Beta / Windows only)
+BroCi uses alternate first-party applications and requires fewer interactive sign-ins.  
+It is further useful, when the *Azure Active Directory PowerShell* client requires assignment and must be avoided.
+
+```powershell
+.\run_EntraFalcon.ps1 -BroCi
+```
+
+#### Auth Code Flow (default, Windows only)
 
 ```powershell
 .\run_EntraFalcon.ps1
 ```
 
-#### Use Device Code Authentication
-
+#### Device Code Flow
+This flow is restricted in many environments.
 ```powershell
 .\run_EntraFalcon.ps1 -AuthMethod "DeviceCode"
 ```
@@ -94,26 +107,38 @@ You can choose from multiple authentication flows depending on your environment 
 ```powershell
 .\run_EntraFalcon.ps1 -AuthMethod "ManualCode"
 ```
-1. The script copies the authentication URL to your clipboard.
-2. Paste the URL into a browser (can be done on a different device for SSO support).
-3. Complete the authentication.
-4. Copy the final redirect URL (containing the authorization code) to your clipboard.
-5. Continue the script, which will automatically read the code from your clipboard and proceed with token acquisition.
+1. The script copies the authentication URL to the clipboard.
+2. Paste the URL into a browser (optionally on another device for SSO support).
+3. Complete authentication.
+4. Copy the final redirect URL from the browser address bar (containing the authorization code) to the clipboard.
+5. Press Enter to continue; the script reads the code from the clipboard and completes token acquisition.
 
-#### Use BroCi flow (Beta)
-BroCi uses alternate first-party apps and requires less interactive authentication.
-It is useful, for example, when the first-party app *Azure Active Directory PowerShell* requires an assignment and you need to avoid it.
+
+#### BroCi + Manual Code Flow 
+```powershell
+.\run_EntraFalcon.ps1 -BroCi -AuthMethod ManualCode
+```
+1. The script copies the authentication URL to the clipboard.
+2. Paste the URL into a browser (optionally on another device for SSO support).
+3. Open the browser developer tools and, in the Network tab, enable `Preserve log`.
+4. Complete authentication.
+5. Search the network log for `code=1.` and copy the request URL containing the code to the clipboard.
+6. Press Enter to continue; the script reads the code from the clipboard and completes token acquisition.
+
+
+#### BroCi with Token
+If a valid Azure Portal refresh token is already available (client c44b4083-3bb0-49c1-b47d-974e53cbdf3c), it can be used directly.
+Example: Obtaining the refresh token from the browser
+1. Open the browser developer tools and, in the Network tab, enable Preserve log.
+2. Authenticate at https://entra.microsoft.com.
+3. Search the network log for brk_client_id=c44b4083-3bb0-49c1-b47d-974e53cbdf3c and extract the refresh token from the response.
 
 ```powershell
-.\run_EntraFalcon.ps1 -BroCi
-```
-If you already have a valid Azure Portal refresh token (client `c44b4083-3bb0-49c1-b47d-974e53cbdf3c`), you can use it directly:
-```powershell
-.\run_EntraFalcon.ps1 -BroCiToken $BroCiRefreshToken
+.\run_EntraFalcon.ps1 -BroCiToken "1.XXXXXXXXXXX"
 ```
 
 
-### Other Options
+### Other Parameter
 
 #### Include Microsoft-Owned Enterprise Apps
 By default, official Microsoft enterprise applications are excluded from the assessment to reduce noise. To include them in the enumeration and analysis, use the `-IncludeMsApps` switch:
@@ -545,12 +570,12 @@ The following table roughly summarizes the checks performed, along with their im
 EntraFalcon is not stealthy and can be detected in environments where Microsoft Graph API and Azure sign-in activity are logged and monitored.
 
 ### Default Authentication Used
-When a full enumeration is performed, the tool actively initiates two interactive logins and two non-interactive logins (refresh to another API and another FOCI client):
+When a full enumeration is performed, the tool actively initiates three interactive logins and one non-interactive logins (refresh to another API and another FOCI client):
 |Application ID|Type|Resource ID|Purpose|
 |-|-|-|-|
 |1b730954-1685-4b74-9bfd-dac224a7b894|Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Groups data|
 |04b07795-8ddb-461a-bbee-02f9e1bf7b46|Interactive|00000003-0000-0000-c000-000000000000|	Retrieve general tenant object data|
-|eb20f3e3-3dce-4d2c-b721-ebb8d4414067|Non-Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Entra / Azure roles|
+|51f81489-12ee-4a9e-aaae-a2591f45987d|Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Entra / Azure roles|
 |04b07795-8ddb-461a-bbee-02f9e1bf7b46|Non-Interactive|797f4846-ba00-4fd7-ba43-dac1f8f63013|Retrieve Azure IAM role assignment data|
 
 ### BroCi Authentication Used
