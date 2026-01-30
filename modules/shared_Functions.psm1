@@ -3678,6 +3678,7 @@ $global:GLOBALApiPermissionCategorizationList= @{
     "4869299f-18c3-40c8-98f2-222657e67db1" = "High" #UserAuthMethod-QR.ReadWrite.All
     "627169a8-8c15-451c-861a-5b80e383de5c" = "High" #UserAuthMethod-TAP.ReadWrite.All
     "741f803b-c850-494e-b5df-cde7c675a1ca" = "Medium" #User.ReadWrite.All
+    "18a4783c-866b-4cc7-a460-3d5e5662c884" = "Medium" #Application.ReadWrite.OwnedBy
     "6b7d71aa-70aa-4810-a8d9-5d9fb2830017" = "Medium" #Chat.Read.All
     "294ce7c9-31ba-490a-ad7d-97a7d075e4ed" = "Medium" #Chat.ReadWrite.All
     "ef54d2bf-783f-4e0f-bca1-3210c0444d99" = "Medium" #Calendars.ReadWrite
