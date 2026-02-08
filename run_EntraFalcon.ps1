@@ -129,7 +129,7 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20260127"
+$EntraFalconVersion = "V20260208"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -348,7 +348,6 @@ if ($GLOBALPIMForEntraRolesChecked) {
 } else {
     write-host "[!] Tenant is not licensed to use PIM. Skipping role settings checks..."
 }
-
 
 write-host "`n********************************** [9/9] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
