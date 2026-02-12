@@ -179,7 +179,7 @@ $global:GLOBALJavaScript_Table = @'
                         AzureRoles: "or_>0",
                         Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Foreign Apps: Extensive API Privs (Application)",
@@ -208,7 +208,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Internal Apps: Privileged",
@@ -220,11 +220,11 @@ $global:GLOBALJavaScript_Table = @'
                         ApiDelegatedHigh: "or_>0",
                         AppOwn: "or_>0",
                         SpOwn: "or_>0",
-                        EntraRoles: "or_>0",
-                        AzureRoles: "or_>0",
+                        EntraMaxTier: "or_Tier-0||Tier-1",
+                        AzureMaxTier: "or_Tier-0||Tier-1",
                         Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Apps with Credentials (Excludes SAML)",
@@ -247,7 +247,7 @@ $global:GLOBALJavaScript_Table = @'
                         Inactive: "=true",
                         Enabled: "=true"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "LastSignInDays", direction: "desc" }
                 },
                 {
@@ -267,10 +267,12 @@ $global:GLOBALJavaScript_Table = @'
                         ApiMedium: "or_>0",
                         AppOwn: "or_>0",
                         SpOwn: "or_>0",
-                        EntraRoles: "or_>0",
-                        AzureRoles: "or_>0",
+                        EntraMaxTier: "or_Tier-0||Tier-1",
+                        AzureMaxTier: "or_Tier-0||Tier-1",
                         Warnings: "or_through group"
-                    }
+                    },
+                    columns: ["DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership", "AppOwnership", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "Risk", direction: "desc" }
                 },
                 {
                     label: "Managed Identities: Extensive API Privs",
@@ -278,14 +280,18 @@ $global:GLOBALJavaScript_Table = @'
                         ApiDangerous: "or_>0",
                         ApiHigh: "or_>0",
                         ApiMedium: "or_>0"
-                    }
+                    },
+                    columns: ["DisplayName", "IsExplicit", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "Risk", direction: "desc" }
                 },
                 {
                     label: "Managed Identities: With Roles",
                     filters: {
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
-                    }
+                    },
+                    columns: ["DisplayName", "IsExplicit", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "Risk", direction: "desc" }
                 }
             ],
             "App Registrations": [
@@ -534,7 +540,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AzureMaxTier", "EntraMaxTier", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -570,6 +576,8 @@ $global:GLOBALJavaScript_Table = @'
             "SpOwn": "Owned Service Principals",
             "AppOwn": "Owned App Registrations",
             "AppRegOwn": "Owner of App Registrations",
+            "EntraMaxTier": "Highest assigned Entra role tier",
+            "AzureMaxTier": "Highest assigned Azure role tier",
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
@@ -1693,8 +1701,8 @@ $global:GLOBALJavaScript_Table = @'
 
             const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
-            const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active']);
-            const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType']);
+            const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2', '?']);
+            const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier']);
 
             const redColor = isDark ? "#800000" : "#FFB6C1";
             const greenColor = isDark ? "#005f00" : "#98FB98";
@@ -3302,6 +3310,58 @@ $global:GLOBALJavaScript = $global:GLOBALJavaScript_Table + "`n" + $global:GLOBA
 $global:GLOBALReportManifestScript = ''
 
 ############################## Internal function section ########################
+
+# Fucntion to get the highest tier level of the assigned roles
+function Get-HighestTierLabel {
+    param (
+        [Parameter(Mandatory = $false)]
+        [Object[]]$Assignments
+    )
+
+    if (-not $Assignments -or $Assignments.Count -lt 1) {
+        return "-"
+    }
+
+    $tierNumbers = @()
+    $hasUnknown = $false
+
+    foreach ($assignment in $Assignments) {
+        write-host "$($assignment.RoleTier)"
+        $tier = $assignment.RoleTier
+        if ($null -eq $tier) {
+            continue
+        }
+        if ($tier -is [string] -and [string]::IsNullOrWhiteSpace($tier)) {
+            continue
+        }
+
+        if ($tier -is [int]) {
+            $tierNumbers += $tier
+            continue
+        }
+
+        if ($tier -is [string]) {
+            if ($tier -match '^Tier-(\d+)$') {
+                $tierNumbers += [int]$Matches[1]
+            } elseif ($tier -match '^\d+$') {
+                $tierNumbers += [int]$tier
+            } elseif ($tier -eq "?") {
+                $hasUnknown = $true
+            }
+        }
+    }
+
+    if ($tierNumbers.Count -gt 0) {
+        $minTier = ($tierNumbers | Measure-Object -Minimum).Minimum
+        return "Tier-$minTier"
+    }
+
+    if ($hasUnknown) {
+        return "?"
+    }
+
+    return "-"
+}
 
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
 function EnsureAuthMsGraph {
@@ -5529,4 +5589,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel
