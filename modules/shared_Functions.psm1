@@ -540,7 +540,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AzureMaxTier", "EntraMaxTier", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AzureMaxTier", "EntraMaxTier", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersTroughGroups", "ExcUsersTroughGroups"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -1389,12 +1389,11 @@ $global:GLOBALJavaScript_Table = @'
             if (match) {
                 const [, groupName, column] = match;
                 const colKey = lowerKeys[column.toLowerCase()] || column;
-
-                // Add prefix into value so input shows or_>0, etc.
-                const operatorMatch = value.match(/^(=|!=|<=|>=|<|>|\^|\$|!)/);
-                const operator = operatorMatch ? '' : '=';
-
-                columnFilters[colKey] = `${groupName}_${operator}${value}`;
+                // Preserve grouped filter value as-is:
+                // - `or_State=enabled` -> `or_enabled` (contains)
+                // - `or_State==enabled` -> `or_=enabled` (explicit equals)
+                // This avoids changing semantics when round-tripping Share View URLs.
+                columnFilters[colKey] = `${groupName}_${value}`;
             } else {
                 const colKey = lowerKeys[key.toLowerCase()];
                 if (colKey) {
@@ -3326,7 +3325,6 @@ function Get-HighestTierLabel {
     $hasUnknown = $false
 
     foreach ($assignment in $Assignments) {
-        write-host "$($assignment.RoleTier)"
         $tier = $assignment.RoleTier
         if ($null -eq $tier) {
             continue
