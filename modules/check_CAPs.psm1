@@ -61,6 +61,48 @@ function Invoke-CheckCaps {
         return $false
     }
 
+    function Get-UsersThroughGroupsCount {
+        param (
+            [Parameter(Mandatory=$false)][Object[]]$GroupIds
+        )
+
+        $uniqueUserIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $fallbackUsersCount = 0
+        $usedFallback = $false
+
+        foreach ($groupId in @($GroupIds)) {
+            if ($null -eq $groupId) { continue }
+            $groupIdString = [string]$groupId
+            if ([string]::IsNullOrWhiteSpace($groupIdString)) { continue }
+
+            if ($AllGroupsDetails.ContainsKey($groupIdString)) {
+                $groupDetails = $AllGroupsDetails[$groupIdString]
+                $groupUserIds = @($groupDetails.Userdetails | ForEach-Object { $_.Id })
+
+                if (@($groupUserIds).Count -gt 0) {
+                    foreach ($userId in $groupUserIds) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$userId)) {
+                            [void]$uniqueUserIds.Add([string]$userId)
+                        }
+                    }
+                } else {
+                    $groupUsersRaw = $groupDetails.Users
+                    $groupUsers = 0
+                    if ($null -ne $groupUsersRaw -and [int]::TryParse([string]$groupUsersRaw, [ref]$groupUsers)) {
+                        $fallbackUsersCount += $groupUsers
+                        $usedFallback = $true
+                    }
+                }
+            }
+        }
+
+        if ($usedFallback) {
+            return ($uniqueUserIds.Count + $fallbackUsersCount)
+        }
+
+        return $uniqueUserIds.Count
+    }
+
     # Function to look up GUIDs in hashtables
     function Resolve-Name {
         param (
@@ -396,6 +438,7 @@ function Invoke-CheckCaps {
     # Create an list to store formatted policies
     $ConditionalAccessPolicies = [System.Collections.Generic.List[pscustomobject]]::new()
 
+
     #region Processing Loop
     #Main processing of the results
     foreach ($policy in $AllPolicies) {
@@ -420,6 +463,9 @@ function Invoke-CheckCaps {
         if ($policy.Conditions.Users.IncludeUsers -contains "None") {
             $IncludedUserCount = 0
         }
+
+        $IncUsersTroughGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.IncludeGroups
+        $ExcUsersTroughGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.ExcludeGroups
 
         if ($policy.Conditions.Applications.IncludeApplications -contains "All") {
             $IncludedResourcesCount = "All"
@@ -549,20 +595,21 @@ function Invoke-CheckCaps {
         }
 
         #Check if there are roles targetd which have a scoped assignment
-        $ScopedRolesInPolicy = @()
+        $ScopedRoles = @()
         $seenScopedRoleIds = @()        
         foreach ($roleId in $includedRoleIds) {
             if ($ScopedAssignments.ContainsKey($roleId) -and $seenScopedRoleIds -notcontains $roleId) {
                 $seenScopedRoleIds += $roleId
         
                 $info = $ScopedAssignments[$roleId]
-                $ScopedRolesInPolicy += [PSCustomObject]@{
+                $ScopedRoles += [PSCustomObject]@{
                     RoleName              = $info.RoleName
                     RoleTier              = $info.RoleTier
                     Assignments           = $info.Count
                 }
             }
         }
+        $ScopedRolesCount = $ScopedRoles.count
 
         #Store missing roles in a var
         $MissingRolesTable = @()
@@ -587,11 +634,12 @@ function Invoke-CheckCaps {
                 $MissingRolesWarning = "missing used roles (" + ($parts -join " / ") + ")"
             }
         }
+        $MissingRolesCount = $MissingRolesTable.count
 
         #Generate error meassge
-        if ($ScopedRolesInPolicy.Count -gt 0) {
+        if ($ScopedRolesCount -gt 0) {
             $targetedCount = @($includedRoleIds).Count
-            $scopedCount   = @($ScopedRolesInPolicy).Count
+            $scopedCount   = @($ScopedRoles).Count
 
             $roleWord = if ($targetedCount -eq 1) { "targeted role" } else { "targeted roles" }
             $assignmentWord = if ($scopedCount -eq 1) { "has scoped assignments" } else { "have scoped assignments" }
@@ -1008,7 +1056,7 @@ function Invoke-CheckCaps {
         #General Policy checks
         
         #Check if the role includes roles but scope assignment exist for the role
-        if ($ScopedRolesInPolicy.Count -gt 0) {
+        if ($ScopedRolesCount -gt 0) {
             if (-not [string]::IsNullOrWhiteSpace($WarningPolicy)) {
                 $WarningPolicy += ", $ScopedRolesWarning"
             } else {
@@ -1017,11 +1065,16 @@ function Invoke-CheckCaps {
         }
 
 
-        #Avoid $AuthStrength to be null
-        if ($null -eq $policy.GrantControls.AuthenticationStrength.DisplayName) {
-            $AuthStrength = ""
-        } else {
-            $AuthStrength = $policy.GrantControls.AuthenticationStrength.DisplayName
+        #Avoid AuthStrength values to be null
+        $AuthStrength = ""
+        $AuthStrengthId = ""
+        if ($null -ne $policy.GrantControls.AuthenticationStrength) {
+            if ($null -ne $policy.GrantControls.AuthenticationStrength.DisplayName) {
+                $AuthStrength = [string]$policy.GrantControls.AuthenticationStrength.DisplayName
+            }
+            if ($null -ne $policy.GrantControls.AuthenticationStrength.Id) {
+                $AuthStrengthId = [string]$policy.GrantControls.AuthenticationStrength.Id
+            }
         }
         
 
@@ -1034,10 +1087,12 @@ function Invoke-CheckCaps {
             ModifiedDateTime = $policy.ModifiedDateTime
             State = $policy.State
             IncUsers = $IncludedUserCount
+            IncUsersTroughGroups = $IncUsersTroughGroups
             IncGroups = $policy.Conditions.Users.IncludeGroups.count
             IncRoles = $policy.Conditions.Users.IncludeRoles.count
             IncExternals = $IncludedExternalUsersCount
             ExcUsers = $policy.Conditions.Users.ExcludeUsers.count
+            ExcUsersTroughGroups = $ExcUsersTroughGroups
             ExcGroups = $policy.Conditions.Users.ExcludeGroups.count
             ExcRoles = $policy.Conditions.Users.ExcludeRoles.count
             ExcExternals = $ExcludedExternalUsersCount
@@ -1045,6 +1100,7 @@ function Invoke-CheckCaps {
             SignInRisk = $policy.Conditions.SignInRiskLevels.count
             UserRisk = $policy.Conditions.UserRiskLevels.count
             AuthStrength = $AuthStrength
+            AuthStrengthId = $AuthStrengthId
             AuthContext = $policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count
             IncResources = $IncludedResourcesCount
             ExcResources = $policy.Conditions.Applications.ExcludeApplications.count
@@ -1053,7 +1109,9 @@ function Invoke-CheckCaps {
             IncPlatforms = $IncPlatforms
             ExcPlatforms = $ExcPlatforms
             MissingRoles = $MissingRolesTable
-            ScopedRolesInPolicy = $ScopedRolesInPolicy
+            MissingRolesCount = $MissingRolesCount
+            ScopedRoles = $ScopedRoles
+            ScopedRolesCount = $ScopedRolesCount
             GrantControls = $policy.GrantControls.BuiltInControls -join " $($policy.GrantControls.Operator) "
             AuthFlow = (($policy.Conditions.AuthenticationFlows.TransferMethods -join ',') -replace '\s*,\s*', ', ')
             SessionControlsDetails = $policy.SessionControls
@@ -1126,7 +1184,7 @@ $MissingPolicies
     $DetailTxtBuilder = [System.Text.StringBuilder]::new()
     $AppendixNetworkLocations = ""
     #Define output of the main table
-    $tableOutput = $ConditionalAccessPolicies | select-object DisplayName,DisplayNameLink,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
+    $tableOutput = $ConditionalAccessPolicies | select-object DisplayName,DisplayNameLink,State,IncResources,ExcResources,AuthContext,IncUsers,IncUsersTroughGroups,ExcUsers,ExcUsersTroughGroups,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
 
     #Build the detail section of the report
     foreach ($item in $AllPolicies) {
@@ -1135,7 +1193,7 @@ $MissingPolicies
         $HtmlSessionControls = @()
         $HtmlGrantControls = @()
         $MissingRoles = @()
-        $ScopedRolesInPolicy = @()
+        $ScopedRoles = @()
  
         [void]$DetailTxtBuilder.AppendLine("############################################################################################################################################")
 
@@ -1193,9 +1251,9 @@ $MissingPolicies
         } 
         
         ############### Missing Roles
-        if ($policy.ScopedRolesInPolicy.count -ge 1) {
+        if ($policy.ScopedRoles.count -ge 1) {
 
-            $ScopedRolesInPolicy = foreach ($object in $($policy.ScopedRolesInPolicy)) {
+            $ScopedRoles = foreach ($object in $($policy.ScopedRoles)) {
                 [pscustomobject]@{ 
                   "RoleName" = $($object.RoleName)
                   "RoleTier" = $($object.RoleTier)
@@ -1205,10 +1263,10 @@ $MissingPolicies
             }
             [void]$DetailTxtBuilder.AppendLine("Targeted Roles With Scoped Assignments")
             [void]$DetailTxtBuilder.AppendLine("------------------------------------------")
-            [void]$DetailTxtBuilder.AppendLine(($policy.ScopedRolesInPolicy  | format-table -Property RoleName,RoleTier,AssignmentsScoped | Out-String))
+            [void]$DetailTxtBuilder.AppendLine(($policy.ScopedRoles  | format-table -Property RoleName,RoleTier,AssignmentsScoped | Out-String))
 
             #Rebuild for HTML report
-            $ScopedRolesInPolicy = foreach ($object in $ScopedRolesInPolicy) {
+            $ScopedRoles = foreach ($object in $ScopedRoles) {
                 [pscustomobject]@{
                     "RoleName" = $($object.RoleName)
                     "RoleTier" = $($object.RoleTier)
@@ -1265,7 +1323,7 @@ $MissingPolicies
             "Object ID"                                 = $item.Id
             "General Information"                       = $ReportingCapInfo
             "Missing Roles With Assignments"            = $MissingRoles
-            "Targeted Roles With Scoped Assignments"    = $ScopedRolesInPolicy
+            "Targeted Roles With Scoped Assignments"    = $ScopedRoles
             "Conditions"                                = $HtmlConditions
             "Session Controls"                          = $HtmlSessionControls
             "Grant Controls"                            = $HtmlGrantControls 
@@ -1279,7 +1337,7 @@ $MissingPolicies
     write-host ""
 
     if ($AllPoliciesCount -gt 0) {
-        $mainTable = $tableOutput | select-object -Property @{Label="DisplayName"; Expression={$_.DisplayNameLink}},State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
+        $mainTable = $tableOutput | select-object -Property @{Label="DisplayName"; Expression={$_.DisplayNameLink}},State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersTroughGroups,ExcGroups,ExcUsersTroughGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
         $mainTableJson  = $mainTable | ConvertTo-Json -Depth 10 -Compress       
     } else {
         #Define an empty JSON object to make the HTML report loading
