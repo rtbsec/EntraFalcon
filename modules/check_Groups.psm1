@@ -2449,6 +2449,7 @@ $headerHtml = @"
             AzureRoles = $group.AzureRoles
             AppRoles = $group.AppRoles
             Users = $group.Users
+            Userdetails = $group.Userdetails
             Guests = $group.Guests
             Protected = $group.Protected
             Impact = $group.Impact
