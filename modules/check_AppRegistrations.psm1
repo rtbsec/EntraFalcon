@@ -229,6 +229,7 @@ function Invoke-CheckAppRegistrations {
         Write-Host "[*] Status: Processing app 1 of $AppsTotalCount (updates every $StatusUpdateInterval apps)..."
     }
     
+    #region Processing Loop
     #Loop through each app and get additional info and store it in a custom object
     foreach ($item in $AppRegistrations) {
         $ImpactScore = 0
@@ -613,7 +614,8 @@ function Invoke-CheckAppRegistrations {
         [void]$AllAppRegistrations.Add($AppRegDetails)
         
     }
-
+    #endregion
+    
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
     write-host "[*] Generating reports"
 

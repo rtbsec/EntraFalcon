@@ -327,6 +327,7 @@ function Invoke-CheckUsers {
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($UsersTotalCount / 10), 1)
     Write-Host "[*] Status: Processing user 1 of $UsersTotalCount (updates every $StatusUpdateInterval users)..."
 
+    #region Processing Loop
     #Loop through all users and get additional info and store it in a custom object
     foreach ($item in $AllUsers) {
 
@@ -986,6 +987,7 @@ function Invoke-CheckUsers {
 
 
     }
+    #endregion
 
     $PmDataProcessing.Stop()
     $PmDataPostProcessing = [System.Diagnostics.Stopwatch]::StartNew()

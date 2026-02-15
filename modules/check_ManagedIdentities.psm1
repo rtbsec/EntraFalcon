@@ -204,6 +204,7 @@ function Invoke-CheckManagedIdentities {
         Write-Host "[*] Status: Processing managed identity 1 of $ManagedIdentitiesCount (updates every $StatusUpdateInterval managed identities)..."
     }
     
+    #region Processing Loop
     #Loop through each Managed Identity and get additional info and store it in a custom object
     foreach ($item in $ManagedIdentities) {
         $ProgressCounter++
@@ -628,10 +629,8 @@ function Invoke-CheckManagedIdentities {
             Id = $item.Id
             DisplayName = $item.DisplayName
             DisplayNameLink = "<a href=#$($item.Id)>$($item.DisplayName)</a>"
-            PublisherName = $item.PublisherName
             AppId = $item.AppId
             ServicePrincipalType = $item.servicePrincipalType
-            SignInAudience = $item.signInAudience
             GroupMembership = ($GroupMember | Measure-Object).count
             EntraRoles = ($AppEntraRoles | Measure-Object).count
             EntraMaxTier = $EntraMaxTier
@@ -641,7 +640,6 @@ function Invoke-CheckManagedIdentities {
             OwnedApplicationsDetails = $OwnedApplications
             SpOwn = $OwnedSPCount
             GroupMember = $GroupMember
-            AppOwnerOrganizationId = $item.AppOwnerOrganizationId
             EntraRoleDetails = $AppEntraRoles
             GroupOwner = $OwnedGroups
             AppPermission = $AppAssignments
@@ -670,6 +668,7 @@ function Invoke-CheckManagedIdentities {
         }
         [void]$AllServicePrincipal.Add($SPInfo)
     }
+    #endregion
 
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
     write-host "[*] Generating reports"

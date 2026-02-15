@@ -602,7 +602,7 @@ function Invoke-CheckGroups {
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($GroupsTotalCount / 10), 1)
     Write-Host "[*] Status: Processing group 1 of $GroupsTotalCount (updates every $StatusUpdateInterval groups)..."
 
-
+    #region Processing Loop
     # Loop through each group and get additional info
     foreach ($group in $AllGroups) {     
 
@@ -1285,6 +1285,7 @@ function Invoke-CheckGroups {
 
 
     }
+    #endregion
 
     $PmDataProcessing.Stop()
     ########################################## SECTION: POST-PROCESSING ##########################################

@@ -398,6 +398,7 @@ function Invoke-CheckEnterpriseApps {
         Write-Host "[*] Status: Processing app 1 of $EnterpriseAppsCount (updates every $StatusUpdateInterval apps)..."
     }
 
+    #region Processing Loop
     #Loop through each enterprise app, retrieve additional info, and store it in a custom object
     foreach ($item in $EnterpriseApps) {
         $ProgressCounter++
@@ -1165,6 +1166,8 @@ function Invoke-CheckEnterpriseApps {
         }
         [void]$AllServicePrincipal.Add($SPInfo)
     }
+    #endregion
+
     ########################################## SECTION: POST-PROCESSING ##########################################
     write-host "[*] Post-processing SP ownership relation with other apps"
     

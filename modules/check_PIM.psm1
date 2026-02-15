@@ -184,7 +184,7 @@ function Invoke-CheckPIM {
 
     ########################################## SECTION: Start Processing ##########################################
 
-
+    #region Processing Loop
     # Loop through each role setting and get additional info
     foreach ($item in $FinalRoleData) {
         $warningMessages = @()
@@ -582,7 +582,7 @@ function Invoke-CheckPIM {
 
         [void]$AllPIMDetails.Add($PIMRuleDetails)
     }
-
+    #endregion
 
     ########################################## SECTION: Generating Details ##########################################
 
