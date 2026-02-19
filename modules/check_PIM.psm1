@@ -847,4 +847,12 @@ $headerHtml = @"
     # Store in global var
     $GlobalAuditSummary.PimSettings.Count = $PimPoliciesCount
 
+    #Convert to Hashtable for faster searches
+    $PimHT = @{}
+    foreach ($PimRole in $AllPIMDetails) {
+        $PimHT[$PimRole.Id] = $PimRole
+    }
+
+    Return $PimHT
+
 }
