@@ -27,13 +27,19 @@ $global:GLOBALJavaScript_Table = @'
         const predefinedViews = {
             "User": [
                 {
-                    label: "Inactive Users",
+                    label: "Tier-0 Users",
                     filters: {
-                        Inactive: "=true",
-                        Enabled: "=true"
+                        EntraMaxTier: "or_Tier-0",
+                        AzureMaxTier: "or_Tier-0",
                     },
-                    columns: ["UPN", "Enabled", "UserType", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
-                    sort: { column: "LastSignInDays", direction: "desc" }
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    label: "Tier-0 Users (Entra Only)",
+                    filters: {
+                        EntraMaxTier: "or_Tier-0"
+                    },
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Users with Roles (Entra ID / Azure)",
@@ -42,7 +48,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles||AzureRoles"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "AzureRoles", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Users with Roles (Entra ID only)",
@@ -50,7 +56,16 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    label: "Inactive Users",
+                    filters: {
+                        Inactive: "=true",
+                        Enabled: "=true"
+                    },
+                    columns: ["UPN", "Enabled", "UserType", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "LastSignInDays", direction: "desc" }
                 },
                 {
                     label: "Users Without MFA Methods",
@@ -67,10 +82,11 @@ $global:GLOBALJavaScript_Table = @'
                         AppRegOwn: "or_>0",
                         SPOwn: "or_>0"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "AzureRoles", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "New Users",
+                    filters: { CreatedDays: "<91"},
                     columns: ["UPN", "Enabled", "UserType", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "CreatedDays", direction: "asc" }
                 },
@@ -79,7 +95,7 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         UserType: "=Guest"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                   {
                     label: "User Owning Applications",
@@ -100,8 +116,13 @@ $global:GLOBALJavaScript_Table = @'
             "Groups": [
                 {
                     label: "Groups Tier-0",
-                    filters: { Warnings: "tier0" },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    filters: { EntraMaxTier: "or_Tier-0", AzureMaxTier: "or_Tier-0", },
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    label: "Groups Tier-0 (Entra Only)",
+                    filters: { EntraMaxTier: "Tier-0"},
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Public M365 Groups",
@@ -111,7 +132,7 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     label: "Dynamic Groups",
                     filters: { Dynamic: "=true"},
-                    columns: ["DisplayName", "Type", "Dynamic", "SecurityEnabled", "Visibility", "Users", "Devices", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Dynamic", "SecurityEnabled", "Visibility", "Users", "Devices",  "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Privileged Unprotected Groups",
@@ -122,7 +143,7 @@ $global:GLOBALJavaScript_Table = @'
                         CAPs: "or_>0",
                         Warnings: "or_Eligible"
                     },
-                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Impact", direction: "desc" }
                 },
                 {
@@ -138,12 +159,12 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         Warnings: "Guest as owner"
                     },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "Users", "AzureRoles", "EntraRoles", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "Users", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Groups Onboarded to PIM",
                     filters: { PIM: "=true" },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "PIM for Groups PrivEsc",
@@ -152,14 +173,14 @@ $global:GLOBALJavaScript_Table = @'
                         Protected: "=true",
                         Warnings: "contains unprotected groups"
                     },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Interesting Groups by Keywords",
                     filters: {
                         DisplayName: "admin||subscription||owner||contributor||secret||geheim||keyvault||passwor"
                     },
-                    columns: ["DisplayName", "Type", "Dynamic", "DirectOwners", "PIM", "NestedOwners", "Protected", "SecurityEnabled", "Visibility", "Users", "Guests", "SPCount", "Devices", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Dynamic", "DirectOwners", "PIM", "NestedOwners", "Protected", "SecurityEnabled", "Visibility", "Users", "Guests", "SPCount", "Devices", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 }
 
             ],
