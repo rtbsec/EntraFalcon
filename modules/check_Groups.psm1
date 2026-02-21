@@ -186,9 +186,6 @@ function Invoke-CheckGroups {
         $NestedGroupCache[$StartGroup.Id] = $allNestedGroups
         return $allNestedGroups
     }
-  
-
-          
 
     ############################## Script section ########################
     $PmScript = [System.Diagnostics.Stopwatch]::StartNew()
@@ -929,6 +926,10 @@ function Invoke-CheckGroups {
             $group.IsAssignableToRole = $false
         }
 
+        # Determine highest assigned role tier labels for Entra and Azure
+        $EntraMaxTier = Get-HighestTierLabel -Assignments $roleDetails
+        $AzureMaxTier = if ($GLOBALAzurePsChecks) { Get-HighestTierLabel -Assignments $AzureRoleDetails } else { "?" }
+
         #Check AU assignment
         $GroupAdminUnits = [System.Collections.Generic.List[object]]::new()
         if ($GroupToAUMap.ContainsKey($group.Id)) {
@@ -1236,11 +1237,13 @@ function Invoke-CheckGroups {
             Dynamic = $group.dynamic
             MembershipRule = $group.MembershipRule
             EntraRoles  = $RoleCount
+            EntraMaxTier = $EntraMaxTier
             EntraRolePrivilegedCount = $RolePrivilegedCount
             EntraRoleDetails = $roleDetails
             GroupCAPsDetails = $groupCAPs
             CAPs = $CAPCount
             AzureRoles = $AzureRoleCount
+            AzureMaxTier = $AzureMaxTier
             AzureRoleDetails = $azureRoleDetails
             AppRoles = $AppRoleAssignments.count
             AppRolesDetails = $AppRoleAssignments
@@ -1345,6 +1348,12 @@ function Invoke-CheckGroups {
     
             $group = $GroupLookup[$targetId]
             if (-not $group) { continue }
+
+            $sourceGroup = $GroupLookup[$highValueGroup.GroupID]
+            if ($sourceGroup) {
+                $group.EntraMaxTier = Merge-HigherTierLabel -CurrentTier $group.EntraMaxTier -CandidateTier $sourceGroup.EntraMaxTier
+                $group.AzureMaxTier = Merge-HigherTierLabel -CurrentTier $group.AzureMaxTier -CandidateTier $sourceGroup.AzureMaxTier
+            }
     
             # Adjust impact + risk
             $group.Impact += [math]::Round($highValueGroup.Score, 1)
@@ -1466,7 +1475,7 @@ function Invoke-CheckGroups {
     write-host "[*] Generating Details Section"
 
     #Define output of the main table
-    $tableOutput = $AllGroupsDetails | Sort-Object Risk -Descending | select-object DisplayName,DisplayNameLink,Type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,AzureRoles,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllGroupsDetails | Sort-Object Risk -Descending | select-object DisplayName,DisplayNameLink,Type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -1483,8 +1492,10 @@ function Invoke-CheckGroups {
                 type            = $group.type
                 SecurityEnabled = $group.SecurityEnabled
                 AzureRoles      = $group.AzureRoles
+                AzureMaxTier    = $group.AzureMaxTier
                 CAPs            = $group.CAPs
                 AppRoles        = $group.AppRoles
+                EntraMaxTier    = $group.EntraMaxTier
                 MembershipRule  = $group.MembershipRule
                 Warnings        = $group.Warnings
             })
@@ -1492,7 +1503,7 @@ function Invoke-CheckGroups {
     }
     $DynamicGroupsCount = $AppendixDynamic.count
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,AzureRoles,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -1529,7 +1540,7 @@ Execution Warnings = $($GroupScriptWarningList  -join ' / ')
 ************************************************************************************************************************
 "
 
-$tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,AzureRoles,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+$tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
 
 
     foreach ($item in $details) {
@@ -1567,6 +1578,8 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             "SecurityEnabled" = $item.SecurityEnabled
             "Protected" = $item.Protected
             "Synced from on-prem" = $item.OnPrem
+            "Entra Max Tier" = $item.EntraMaxTier
+            "Azure Max Tier" = $item.AzureMaxTier
             "RiskScore" = $item.Risk
         }
         if ($item.Dynamic) {
@@ -1783,20 +1796,26 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             $GroupNameLength = 0
 
             foreach ($object in $item.OwnerGroupDetails) {
-                $groupDetails = $AllGroupsHT[$object.id]
+                $groupDetails = $GroupLookup[$object.id]
+                if (-not $groupDetails) { $groupDetails = $AllGroupsHT[$object.id] }
 
                 # Calc Max Length
-                $GroupName = $groupDetails.displayName
+                $GroupName = if ($null -ne $groupDetails.DisplayName) { $groupDetails.DisplayName } else { $groupDetails.displayName }
                 if ($null -ne $GroupName -and $GroupName.Length -gt $GroupNameLength) {
                     $GroupNameLength = $GroupName.Length
                 }
+                $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
+                $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
+                $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
 
                 $groupObj = [pscustomobject]@{ 
                     "AssignmentType" = $object.AssignmentType
                     "Displayname" = $GroupName
                     "DisplayNameLink" = "<a href=#$($object.id)>$($GroupName)</a>"
                     "SecurityEnabled" = $groupDetails.SecurityEnabled
-                    "IsAssignableToRole" = $groupDetails.IsAssignableToRole
+                    "IsAssignableToRole" = $roleAssignable
+                    "EntraMaxTier" = $entraMaxTier
+                    "AzureMaxTier" = $azureMaxTier
                 }
                 [void]$OwnerGroupsRaw.Add($groupObj)
             }
@@ -1804,8 +1823,8 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             # Build TXT
             $formattedText = Format-ReportSection -Title "Eligible Owners (Groups)" `
             -Objects $OwnerGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraMaxTier", "AzureMaxTier") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraMaxTier = 11; AzureMaxTier = 11 }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
 
             #Rebuild for HTML report
@@ -1815,6 +1834,8 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                     DisplayName         = $obj.DisplayNameLink
                     SecurityEnabled     = $obj.SecurityEnabled
                     IsAssignableToRole  = $obj.IsAssignableToRole
+                    EntraMaxTier        = $obj.EntraMaxTier
+                    AzureMaxTier        = $obj.AzureMaxTier
                 })
             }
         }
@@ -1937,14 +1958,17 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             $NestedGroupsRaw = [System.Collections.Generic.List[object]]::new()
         
             foreach ($object in $item.NestedGroupsDetails) {
-                $groupDetails = $AllGroupsHT[$object.id]
+                $groupDetails = $GroupLookup[$object.id]
+                if (-not $groupDetails) { $groupDetails = $AllGroupsHT[$object.id] }
+                $groupName = if ($null -ne $groupDetails.DisplayName) { $groupDetails.DisplayName } else { $groupDetails.displayName }
+                $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
         
                 $rawObj = [pscustomobject]@{
                     AssignmentType     = $object.AssignmentType
-                    DisplayName        = $groupDetails.displayName
-                    DisplayNameLink    = "<a href=#$($object.id)>$($groupDetails.displayName)</a>"
+                    DisplayName        = $groupName
+                    DisplayNameLink    = "<a href=#$($object.id)>$($groupName)</a>"
                     SecurityEnabled    = $groupDetails.SecurityEnabled
-                    IsAssignableToRole = $groupDetails.IsAssignableToRole
+                    IsAssignableToRole = $roleAssignable
                 }
         
                 [void]$NestedGroupsRaw.Add($rawObj)
@@ -2176,22 +2200,28 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             $GroupNameLength = 0
 
             foreach ($object in $item.NestedInGroupsDetails) {
-                $groupDetails = $AllGroupsHT[$object.id]
+                $groupDetails = $GroupLookup[$object.id]
+                if (-not $groupDetails) { $groupDetails = $AllGroupsHT[$object.id] }
 
                 # Calc Max Length
-                $GroupName = $groupDetails.displayName
+                $GroupName = if ($null -ne $groupDetails.DisplayName) { $groupDetails.DisplayName } else { $groupDetails.displayName }
                 if ($null -ne $GroupName -and $GroupName.Length -gt $GroupNameLength) {
                     $GroupNameLength = $GroupName.Length
                 }
+                $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
+                $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
+                $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
         
                 $rawObj = [pscustomobject]@{
                     AssignmentType     = $object.AssignmentType
                     Displayname        = $GroupName
                     DisplayNameLink    = "<a href=#$($object.id)>$($GroupName)</a>"
                     SecurityEnabled    = $groupDetails.SecurityEnabled
-                    IsAssignableToRole = $groupDetails.IsAssignableToRole
+                    IsAssignableToRole = $roleAssignable
                     EntraRoles         = $object.EntraRoles
+                    EntraMaxTier       = $entraMaxTier
                     AzureRoles         = $object.AzureRoles
+                    AzureMaxTier       = $azureMaxTier
                     CAPs               = $object.CAPs
                 }
         
@@ -2201,8 +2231,8 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             # Build TXT
             $formattedText = Format-ReportSection -Title "Member Of: Nested in Groups (Transitive)" `
             -Objects $NestedInGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "AzureRoles", "CAPs") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; AzureRoles = 11; CAPs = 4 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "CAPs") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; CAPs = 4 }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
         
             # Sort only for HTML
@@ -2225,7 +2255,9 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                     SecurityEnabled    = $obj.SecurityEnabled
                     IsAssignableToRole = $obj.IsAssignableToRole
                     EntraRoles         = $obj.EntraRoles
+                    EntraMaxTier       = $obj.EntraMaxTier
                     AzureRoles         = $obj.AzureRoles
+                    AzureMaxTier       = $obj.AzureMaxTier
                     CAPs               = $obj.CAPs
                 })
             }
@@ -2237,7 +2269,9 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                     SecurityEnabled    = "-"
                     IsAssignableToRole = "-"
                     EntraRoles         = "-"
+                    EntraMaxTier       = "-"
                     AzureRoles         = "-"
+                    AzureMaxTier       = $(if ($GLOBALAzurePsChecks) { "-" } else { "?" })
                     CAPs               = "-"
                 })
             }
@@ -2251,6 +2285,9 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             $GroupNameLength = 0
 
             foreach ($object in $item.PfGOwnedGroupsDetails) {
+                $groupDetails = $GroupLookup[$object.id]
+                $entraMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
+                $azureMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
 
                 $GroupName = $object.displayName
                 if ($null -ne $GroupName -and $GroupName.Length -gt $GroupNameLength) {
@@ -2264,15 +2301,17 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                     SecurityEnabled     = $object.SecurityEnabled
                     IsAssignableToRole  = $object.IsAssignableToRole
                     EntraRoles          = $object.EntraRoles
+                    EntraMaxTier        = $entraMaxTier
                     AzureRoles          = $object.AzureRoles
+                    AzureMaxTier        = $azureMaxTier
                     CAPs                = $object.CAPs
                 })
             }
         
             $formattedText = Format-ReportSection -Title "Owned Groups (PIM for Groups)" `
             -Objects $OwnedGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "AzureRoles", "CAPs") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; AzureRoles = 11; CAPs = 4 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "CAPs") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; CAPs = 4 }
         
             [void]$DetailTxtBuilder.AppendLine($formattedText)
             
@@ -2285,7 +2324,9 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                     SecurityEnabled     = $obj.SecurityEnabled
                     IsAssignableToRole  = $obj.IsAssignableToRole
                     EntraRoles          = $obj.EntraRoles
+                    EntraMaxTier        = $obj.EntraMaxTier
                     AzureRoles          = $obj.AzureRoles
+                    AzureMaxTier        = $obj.AzureMaxTier
                     CAPs                = $obj.CAPs
                 })
             }
@@ -2382,7 +2423,7 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,AzureRoles,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | select-object DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
 
     write-host "[+] Details of $($tableOutput.count) groups stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
     If ($DynamicGroupsCount -gt 0) {
@@ -2445,10 +2486,13 @@ $headerHtml = @"
             OnPrem = $group.OnPrem
             Dynamic = $group.dynamic
             EntraRoles  = $group.EntraRoles
+            EntraMaxTier = $group.EntraMaxTier
             CAPs = $group.CAPs
             AzureRoles = $group.AzureRoles
+            AzureMaxTier = $group.AzureMaxTier
             AppRoles = $group.AppRoles
             Users = $group.Users
+            MembershipRule = $group.MembershipRule
             Userdetails = $group.Userdetails
             Guests = $group.Guests
             Protected = $group.Protected

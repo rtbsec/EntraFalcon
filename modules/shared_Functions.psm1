@@ -122,7 +122,8 @@ $global:GLOBALJavaScript_Table = @'
                         CAPs: "or_>0",
                         Warnings: "or_Eligible"
                     },
-                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "Impact", direction: "desc" }
                 },
                 {
                     label: "Groups Used in CAPs",
@@ -540,7 +541,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AzureMaxTier", "EntraMaxTier", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersTroughGroups", "ExcUsersTroughGroups"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersTroughGroups", "ExcUsersTroughGroups"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -576,8 +577,8 @@ $global:GLOBALJavaScript_Table = @'
             "SpOwn": "Owned Service Principals",
             "AppOwn": "Owned App Registrations",
             "AppRegOwn": "Owner of App Registrations",
-            "EntraMaxTier": "Highest assigned Entra role tier",
-            "AzureMaxTier": "Highest assigned Azure role tier",
+            "EntraMaxTier": "Highest assigned Entra role tier (direct or trough groups)",
+            "AzureMaxTier": "Highest assigned Azure role tier (direct or trough groups)",
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
@@ -1115,6 +1116,7 @@ $global:GLOBALJavaScript_Table = @'
         function sortData() {
             const { column, asc } = currentSort;
             if (!column) return;
+            const isTierColumn = ["entramaxtier", "azuremaxtier"].includes(String(column).toLowerCase());
 
             function extractText(val) {
                 if (typeof val === "string") {
@@ -1123,6 +1125,16 @@ $global:GLOBALJavaScript_Table = @'
                     return match ? match[1] : val;
                 }
                 return val ?? '';
+            }
+
+            function getTierRank(val) {
+                const text = String(val ?? "").trim().toLowerCase();
+                const tierMatch = text.match(/^tier-(\d+)$/);
+                if (tierMatch) return parseInt(tierMatch[1], 10);
+                if (/^\d+$/.test(text)) return parseInt(text, 10);
+                if (text === "?" || text === "tier?" || text === "uncategorized") return 98;
+                if (text === "-" || text === "") return 99;
+                return 97;
             }
 
             filteredData.sort((a, b) => {
@@ -1135,10 +1147,22 @@ $global:GLOBALJavaScript_Table = @'
                 const isNumB = !isNaN(numB);
 
                 let result;
-                if (isNumA && isNumB) {
+                if (isTierColumn) {
+                    const tierA = getTierRank(valA);
+                    const tierB = getTierRank(valB);
+                    result = tierA - tierB;
+                    if (result === 0) {
+                        result = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+                    }
+                } else if (isNumA && isNumB) {
                     result = numA - numB;
                 } else {
                     result = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+                }
+
+                // Tier columns are security-priority ordered: descending should show Tier-0 first.
+                if (isTierColumn) {
+                    return asc ? -result : result;
                 }
 
                 return asc ? result : -result;
@@ -2212,7 +2236,7 @@ $global:GLOBALJavaScript_Nav = @'
                     <strong>Rating</strong>
                     <ul style="margin-top: 6px;">
                         <li><strong>Impact</strong>: Represents the amount or severity of permission the object has.</li>
-                        <li><strong>Likelihood</strong>: Represents how easily the object can be influenced or strongly it is protected.</li>
+                        <li><strong>Likelihood</strong>: Represents how easily the object can be influenced or how strongly it is protected.</li>
                         <li><strong>Risk</strong>: Calculated as: <em>Impact x Likelihood = Risk</em>.</li>
                         <li><strong>Important</strong>:
                             <ul>
@@ -3359,6 +3383,58 @@ function Get-HighestTierLabel {
     }
 
     return "-"
+}
+
+function Resolve-TierLabel {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object]$TierLabel
+    )
+
+    if ($null -eq $TierLabel) { return "-" }
+    if ($TierLabel -is [int]) { return "Tier-$TierLabel" }
+
+    $value = "$TierLabel".Trim()
+    if ([string]::IsNullOrWhiteSpace($value)) { return "-" }
+
+    if ($value -match '^Tier-(\d+)$') { return "Tier-$($Matches[1])" }
+    if ($value -match '^\d+$') { return "Tier-$value" }
+    if ($value -eq "?") { return "?" }
+    if ($value -eq "-") { return "-" }
+
+    return "-"
+}
+
+function Get-TierPriority {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object]$TierLabel
+    )
+
+    $resolved = Resolve-TierLabel -TierLabel $TierLabel
+    if ($resolved -match '^Tier-(\d+)$') { return [int]$Matches[1] }
+    if ($resolved -eq "?") { return 98 }
+    return 99
+}
+
+function Merge-HigherTierLabel {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object]$CurrentTier,
+        [Parameter(Mandatory = $false)]
+        [object]$CandidateTier
+    )
+
+    $currentResolved = Resolve-TierLabel -TierLabel $CurrentTier
+    $candidateResolved = Resolve-TierLabel -TierLabel $CandidateTier
+
+    if ($candidateResolved -eq "-") { return $currentResolved }
+
+    if ((Get-TierPriority -TierLabel $candidateResolved) -lt (Get-TierPriority -TierLabel $currentResolved)) {
+        return $candidateResolved
+    }
+
+    return $currentResolved
 }
 
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
@@ -4520,6 +4596,7 @@ function Initialize-TenantReportTabs {
 
     $defs = @(
         @{ Prop = 'Summary';                   Key = 'Summary';    Title = 'Summary';                   File = "_EntraFalconEnumerationSummary_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'SecurityFindings';          Key = 'SecurityFindings'; Title = 'Security Findings';    File = "TenantSecurityFindings_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Users';                     Key = 'Users';      Title = 'Users';                     File = "Users_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Groups';                    Key = 'Groups';     Title = 'Groups';                    File = "Groups_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
@@ -5587,4 +5664,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel
