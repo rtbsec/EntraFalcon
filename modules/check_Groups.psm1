@@ -997,6 +997,7 @@ function Invoke-CheckGroups {
 	                "GroupID" = $group.Id
 	                "Message" = "Eligible member or nested in group with AzureRole"
 	                "AzureRoles" = $AzureRoleCount
+                    "Score" = $AzureRoleScore
 	                "TargetGroups" = $memberGroup.Id
 	            })
             }
