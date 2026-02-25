@@ -17,43 +17,6 @@ function Invoke-CheckManagedIdentities {
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp
     )
 
-    ############################## Function section ########################
-
-    #Function to retrieve information about groups
-    function Get-GroupDetails {
-        param (
-            [Parameter(Mandatory = $true)]
-            [Object]$Group,
-            [Parameter(Mandatory = $true)]
-            [hashtable]$AllGroupsDetails
-        )
-
-        $GroupDetails = @()
-
-        # Filtering assignments based on ObjectType and the associated IDs
-        $MatchingGroup = $AllGroupsDetails[$($Group.id)]
-        
-        if (($MatchingGroup | Measure-Object).count -ge 1) {
-            $GroupDetails = [PSCustomObject]@{ 
-                Type = "Group"
-                Id = $Group.Id
-                DisplayName = $group.DisplayName
-                Visibility= $MatchingGroup.Visibility
-                GroupType = $MatchingGroup.Type
-                SecurityEnabled = $MatchingGroup.SecurityEnabled
-                RoleAssignable = $MatchingGroup.RoleAssignable
-                AssignedRoleCount = $MatchingGroup.EntraRoles
-                AssignedPrivilegedRoles = $MatchingGroup.EntraRolePrivilegedCount
-                InheritedHighValue  = $MatchingGroup.InheritedHighValue
-                AzureRoles  = $MatchingGroup.AzureRoles
-                CAPs  = $MatchingGroup.CAPs
-                ImpactOrg  = $MatchingGroup.ImpactOrg
-
-            }
-        }
-        Return $GroupDetails
-    }
-
     ############################## Script section ########################
 
     #Check token validity to ensure it will not expire in the next 30 minutes
@@ -337,15 +300,16 @@ function Invoke-CheckManagedIdentities {
             }
         }
 
-        $AzureMaxTier = if ($GLOBALAzurePsChecks) { Get-HighestTierLabel -Assignments $AzureRoleDetails } else { "?" }
-        $EntraMaxTier = Get-HighestTierLabel -Assignments $AppEntraRoles
+        $DirectAzureMaxTier = if ($GLOBALAzurePsChecks) { Get-HighestTierLabel -Assignments $AzureRoleDetails } else { "?" }
+        $DirectEntraMaxTier = Get-HighestTierLabel -Assignments $AppEntraRoles
 
-        if ($AzureRoleCount -is [int] -and $AzureRoleCount -gt 0 -and $AzureMaxTier -eq "-") {
-            Write-Log -Level Debug -Message "AzureMaxTier '-' with AzureRoleCount $AzureRoleCount for managed identity '$($item.DisplayName)' ($($item.Id))"
-        }
-        if ($AppEntraRoles -and $AppEntraRoles.Count -gt 0 -and $EntraMaxTier -eq "-") {
-            Write-Log -Level Debug -Message "EntraMaxTier '-' with EntraRoleCount $($AppEntraRoles.Count) for managed identity '$($item.DisplayName)' ($($item.Id))"
-        }
+        $EntraMaxTierThroughGroupMembership = "-"
+        $EntraMaxTierThroughGroupOwnership = "-"
+        $AzureMaxTierThroughGroupMembership = "-"
+        $AzureMaxTierThroughGroupOwnership = "-"
+
+        $AzureMaxTier = $DirectAzureMaxTier
+        $EntraMaxTier = $DirectEntraMaxTier
 
         #Get all groups where the SP is member of
         $GroupMember = [System.Collections.ArrayList]::new()
@@ -412,6 +376,44 @@ function Invoke-CheckManagedIdentities {
             Get-GroupDetails -Group $Group -AllGroupsDetails $AllGroupsDetails
         }
 
+        # Group membership tier inheritance: active-only paths.
+        foreach ($group in $GroupMember) {
+            $entraMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Entra
+            $EntraMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierThroughGroupMembership -CandidateTier $entraMetrics.MaxTier
+
+            if ($GLOBALAzurePsChecks) {
+                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure
+                $AzureMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupMembership -CandidateTier $azureMetrics.MaxTier
+            }
+        }
+
+        # Group ownership tier inheritance: active + eligible paths.
+        foreach ($group in $OwnedGroups) {
+            $entraMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Entra -IncludeEligible
+            $EntraMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierThroughGroupOwnership -CandidateTier $entraMetrics.MaxTier
+
+            if ($GLOBALAzurePsChecks) {
+                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -IncludeEligible
+                $AzureMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupOwnership -CandidateTier $azureMetrics.MaxTier
+            }
+        }
+
+        $EntraMaxTier = Merge-HigherTierLabel -CurrentTier $DirectEntraMaxTier -CandidateTier $EntraMaxTierThroughGroupMembership
+        $EntraMaxTier = Merge-HigherTierLabel -CurrentTier $EntraMaxTier -CandidateTier $EntraMaxTierThroughGroupOwnership
+        if ($GLOBALAzurePsChecks) {
+            $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $DirectAzureMaxTier -CandidateTier $AzureMaxTierThroughGroupMembership
+            $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierThroughGroupOwnership
+        } else {
+            $AzureMaxTier = "?"
+        }
+
+        if ($AzureRoleCount -is [int] -and $AzureRoleCount -gt 0 -and $AzureMaxTier -eq "-") {
+            Write-Log -Level Debug -Message "AzureMaxTier '-' with AzureRoleCount $AzureRoleCount for managed identity '$($item.DisplayName)' ($($item.Id))"
+        }
+        if ($AppEntraRoles -and $AppEntraRoles.Count -gt 0 -and $EntraMaxTier -eq "-") {
+            Write-Log -Level Debug -Message "EntraMaxTier '-' with EntraRoleCount $($AppEntraRoles.Count) for managed identity '$($item.DisplayName)' ($($item.Id))"
+        }
+
         $OwnedApplicationsCount = $OwnedApplications.count
         $OwnedSPCount = $OwnedSP.count
     
@@ -462,7 +464,6 @@ function Invoke-CheckManagedIdentities {
             $TotalAssignedRoleCount = 0
             $TotalAssignedPrivilegedRoles = 0
             $TotalInheritedHighValue = 0
-            $AzureRoleValue = 0
             $TotalAzureRoles = 0
 
             #Basic score for being member of a group
@@ -470,17 +471,26 @@ function Invoke-CheckManagedIdentities {
 
                 #Check each group
                 foreach ($Groups in $GroupMember) {
-                    $ImpactScore += $Groups.ImpactOrg
-                    $TotalAssignedRoleCount += $Groups.AssignedRoleCount
-                    $TotalAssignedPrivilegedRoles += $Groups.AssignedPrivilegedRoles
-                    $TotalInheritedHighValue += $Groups.InheritedHighValue
-                    
-                    #Special treatment if azure roles is not an int
-                    $AzureRoleValue = 0
-                    if ([int]::TryParse($Groups.AzureRoles, [ref]$AzureRoleValue)) {
-                        $TotalAzureRoles += $AzureRoleValue
-                    } else {
-                        $TotalAzureRoles += 0
+                    # High-level: inherit group impact excluding eligible/PIM role contribution.
+                    $groupInheritedImpact = 0
+                    [void][int]::TryParse([string]$Groups.ImpactOrgActiveOnly, [ref]$groupInheritedImpact)
+                    $ImpactScore += $groupInheritedImpact
+
+                    $entraMetrics = Get-GroupActiveRoleMetrics -Group $Groups -RoleSystem Entra
+                    $TotalAssignedRoleCount += $entraMetrics.RoleCount
+                    $TotalAssignedPrivilegedRoles += $entraMetrics.PrivilegedCount
+
+                    $groupAzureRoleCount = 0
+                    if ($GLOBALAzurePsChecks) {
+                        $azureMetrics = Get-GroupActiveRoleMetrics -Group $Groups -RoleSystem Azure
+                        $groupAzureRoleCount = $azureMetrics.RoleCount
+                        $TotalAzureRoles += $groupAzureRoleCount
+                    }
+
+                    $groupCapCount = 0
+                    [void][int]::TryParse([string]$Groups.CAPs, [ref]$groupCapCount)
+                    if ($Groups.InheritedHighValue -ge 1 -and ($entraMetrics.RoleCount -ge 1 -or $groupAzureRoleCount -ge 1 -or $groupCapCount -ge 1)) {
+                        $TotalInheritedHighValue += $Groups.InheritedHighValue
                     }
                 }
 
@@ -501,7 +511,7 @@ function Invoke-CheckManagedIdentities {
 
                 #Check membership of groups with inherited high value
                 if ($TotalInheritedHighValue -ge 1) {
-                    $Warnings += "Member of $TotalInheritedHighValue groups with high value"
+                    $Warnings += "Member of $TotalInheritedHighValue groups with high value (active paths)"
                 }
         }
 
@@ -521,7 +531,6 @@ function Invoke-CheckManagedIdentities {
             $TotalAssignedRoleCount = 0
             $TotalAssignedPrivilegedRoles = 0
             $TotalInheritedHighValue = 0
-            $AzureRoleValue = 0
             $TotalAzureRoles = 0
             $TotalCAPs = 0
             #Basic score for owning a group
@@ -529,17 +538,28 @@ function Invoke-CheckManagedIdentities {
 
                 #Check each owned group
                 foreach ($OwnedGroup in $OwnedGroups) {
-                    $ImpactScore += $OwnedGroup.ImpactOrg
-                    $TotalAssignedRoleCount += $OwnedGroup.AssignedRoleCount
-                    $TotalAssignedPrivilegedRoles += $OwnedGroup.AssignedPrivilegedRoles
-                    $TotalInheritedHighValue += $OwnedGroup.InheritedHighValue
-                    
-                    #Special treatment if azure roles is not an int
-                    $AzureRoleValue = 0
-                    if ([int]::TryParse($OwnedGroup.AzureRoles, [ref]$AzureRoleValue)) {
-                        $TotalAzureRoles += $AzureRoleValue
-                    } else {
-                        $TotalAzureRoles += 0
+                    # High-level: ownership inherits the group's full impact (active + eligible role paths).
+                    $groupInheritedImpact = 0
+                    if (-not [int]::TryParse([string]$OwnedGroup.Impact, [ref]$groupInheritedImpact)) {
+                        [void][int]::TryParse([string]$OwnedGroup.ImpactOrg, [ref]$groupInheritedImpact)
+                    }
+                    $ImpactScore += $groupInheritedImpact
+
+                    $entraMetrics = Get-GroupActiveRoleMetrics -Group $OwnedGroup -RoleSystem Entra -IncludeEligible
+                    $TotalAssignedRoleCount += $entraMetrics.RoleCount
+                    $TotalAssignedPrivilegedRoles += $entraMetrics.PrivilegedCount
+
+                    $groupAzureRoleCount = 0
+                    if ($GLOBALAzurePsChecks) {
+                        $azureMetrics = Get-GroupActiveRoleMetrics -Group $OwnedGroup -RoleSystem Azure -IncludeEligible
+                        $groupAzureRoleCount = $azureMetrics.RoleCount
+                        $TotalAzureRoles += $groupAzureRoleCount
+                    }
+
+                    $groupCapCount = 0
+                    [void][int]::TryParse([string]$OwnedGroup.CAPs, [ref]$groupCapCount)
+                    if ($OwnedGroup.InheritedHighValue -ge 1 -and ($entraMetrics.RoleCount -ge 1 -or $groupAzureRoleCount -ge 1 -or $groupCapCount -ge 1)) {
+                        $TotalInheritedHighValue += $OwnedGroup.InheritedHighValue
                     }
 
                     $TotalCAPs += $OwnedGroup.CAPs
@@ -763,8 +783,7 @@ function Invoke-CheckManagedIdentities {
                     "DisplayNameLink" = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>"
                     "SecurityEnabled" = $($object.SecurityEnabled)
                     "RoleAssignable" = $($object.RoleAssignable)
-                    "ActiveRoles" = $($object.AssignedRoleCount)
-                    "ActivePrivilegedRoles" = $($object.AssignedPrivilegedRoles)
+                    "EntraRoles" = $($object.AssignedRoleCount)
                     "AzureRoles" = $($object.AzureRoles)
                     "CAPs" = $($object.CAPs)
                     "ImpactOrg" = $($object.ImpactOrg)
@@ -775,15 +794,14 @@ function Invoke-CheckManagedIdentities {
             [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
             [void]$DetailTxtBuilder.AppendLine("Owner of Groups`n")
             [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
-            [void]$DetailTxtBuilder.AppendLine(($ReportingGroupOwner | Format-Table DisplayName,SecurityEnabled,RoleAssignable,ActiveRoles,ActivePrivilegedRoles,AzureRoles,CAPs,ImpactOrg,Warnings | Out-String))
+            [void]$DetailTxtBuilder.AppendLine(($ReportingGroupOwner | Format-Table DisplayName,SecurityEnabled,RoleAssignable,EntraRoles,AzureRoles,CAPs,ImpactOrg,Warnings | Out-String))
             
             $ReportingGroupOwner = foreach ($obj in $ReportingGroupOwner) {
                 [pscustomobject]@{
                     DisplayName             = $obj.DisplayNameLink
                     SecurityEnabled         = $obj.SecurityEnabled
                     RoleAssignable          = $obj.RoleAssignable
-                    ActiveRoles             = $obj.ActiveRoles
-                    ActivePrivilegedRoles   = $obj.ActivePrivilegedRoles
+                    EntraRoles              = $obj.EntraRoles
                     AzureRoles              = $obj.AzureRoles
                     CAPs                    = $obj.CAPs
                     ImpactOrg               = $obj.ImpactOrg
@@ -807,7 +825,7 @@ function Invoke-CheckManagedIdentities {
             [void]$DetailTxtBuilder.AppendLine(($ReportingAppOwner | Format-Table DisplayName | Out-String))
             $ReportingAppOwner = foreach ($obj in $ReportingAppOwner) {
                 [pscustomobject]@{
-                    UserName        = $obj.DisplayNameLink
+                    DisplayName        = $obj.DisplayNameLink
                 }
             }
 
@@ -822,11 +840,10 @@ function Invoke-CheckManagedIdentities {
                     "DisplayNameLink" = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>"
                     "SecurityEnabled" = $($object.SecurityEnabled)
                     "RoleAssignable" = $($object.RoleAssignable)
-                    "ActiveRoles" = $($object.AssignedRoleCount)
-                    "ActivePrivilegedRoles" = $($object.AssignedPrivilegedRoles)
+                    "EntraRoles" = $($object.AssignedRoleCount)
                     "AzureRoles" = $($object.AzureRoles)
                     "CAPs" = $($object.CAPs)
-                    "ImpactOrg" = $($object.ImpactOrg)
+                    "ImpactOrgActiveOnly" = $($object.ImpactOrgActiveOnly)
                     "Warnings" = $($object.Warnings)
                 }
             }
@@ -834,17 +851,16 @@ function Invoke-CheckManagedIdentities {
             [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
             [void]$DetailTxtBuilder.AppendLine("Member in Groups (transitive)`n")
             [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
-            [void]$DetailTxtBuilder.AppendLine(($ReportingGroupMember | Format-Table DisplayName,SecurityEnabled,RoleAssignable,ActiveRoles,ActivePrivilegedRoles,AzureRoles,CAPs,ImpactOrg,Warnings | Out-String))
+            [void]$DetailTxtBuilder.AppendLine(($ReportingGroupMember | Format-Table DisplayName,SecurityEnabled,RoleAssignable,EntraRoles,AzureRoles,CAPs,ImpactOrgActiveOnly,Warnings | Out-String))
             $ReportingGroupMember  = foreach ($obj in $ReportingGroupMember) {
                 [pscustomobject]@{
                     DisplayName             = $obj.DisplayNameLink
                     SecurityEnabled         = $obj.SecurityEnabled
                     RoleAssignable          = $obj.RoleAssignable
-                    ActiveRoles             = $obj.ActiveRoles
-                    ActivePrivilegedRoles   = $obj.ActivePrivilegedRoles
+                    EntraRoles              = $obj.EntraRoles
                     AzureRoles              = $obj.AzureRoles
                     CAPs                    = $obj.CAPs
-                    ImpactOrg               = $obj.ImpactOrg
+                    "Impact (No Eligible)"  = $obj.ImpactOrgActiveOnly
                     Warnings                = $obj.Warnings
                 }
             }

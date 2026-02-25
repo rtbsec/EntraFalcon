@@ -606,6 +606,7 @@ function Invoke-CheckGroups {
         #Loop init section
         $ProgressCounter++
         $ImpactScore = 0
+        $EligibleRoleImpactContribution = 0 # High-level: downstream objects should inherit group impact without eligible/PIM role impact.
         $LikelihoodScore = 0
         $Warnings = [System.Collections.Generic.HashSet[string]]::new()
         $ownerGroup = @()
@@ -990,6 +991,9 @@ function Invoke-CheckGroups {
             $ImpactScore += $AzureRolesProcessedDetails.ImpactScore
             $AzureRoleScore = $AzureRolesProcessedDetails.ImpactScore
 
+            # High-level: remove eligible Azure role contribution from inherited group impact only.
+            $EligibleRoleImpactContribution += $AzureRolesProcessedDetails.EligibleImpactScore
+
             #Add group to list for re-processing
             if ($memberGroup.count -ge 1) {
 	            $NestedGroupsHighvalue.Add([pscustomobject]@{
@@ -1038,6 +1042,9 @@ function Invoke-CheckGroups {
             [void]$Warnings.Add($EntraRolesProcessedDetails.Warning)
             $ImpactScore += $EntraRolesProcessedDetails.ImpactScore
             $RoleScore = $EntraRolesProcessedDetails.ImpactScore
+
+            # High-level: remove eligible Entra role contribution from inherited group impact only.
+            $EligibleRoleImpactContribution += $EntraRolesProcessedDetails.EligibleImpactScore
         }
 
         if ($RoleCount -ge 1) {
@@ -1224,6 +1231,9 @@ function Invoke-CheckGroups {
         }
 
 
+        # High-level: keep full Impact/ImpactOrg for group reporting, and expose active-only inheritance score.
+        $ImpactOrgActiveOnly = [math]::Round([math]::Max(0, $ImpactScore - $EligibleRoleImpactContribution))
+
         # Create custom object
         $groupDetails = [PSCustomObject]@{ 
             Id = $group.Id 
@@ -1281,6 +1291,7 @@ function Invoke-CheckGroups {
             Risk = [math]::Ceiling($ImpactScore * $LikelihoodScore)
             Impact = [math]::Round($ImpactScore,1)
             ImpactOrg = [math]::Round($ImpactScore) #Will be required in the user script
+            ImpactOrgActiveOnly = $ImpactOrgActiveOnly
             Likelihood = [math]::Round($LikelihoodScore,1)
             BaseLikelihood = [math]::Round($LikelihoodScore,1) #Used for nesting calculations
             Warnings = $Warnings
@@ -2488,17 +2499,21 @@ $headerHtml = @"
             Dynamic = $group.dynamic
             EntraRoles  = $group.EntraRoles
             EntraMaxTier = $group.EntraMaxTier
+            EntraRoleDetails = $group.EntraRoleDetails
             CAPs = $group.CAPs
             AzureRoles = $group.AzureRoles
             AzureMaxTier = $group.AzureMaxTier
+            AzureRoleDetails = $group.AzureRoleDetails
             AppRoles = $group.AppRoles
             Users = $group.Users
             MembershipRule = $group.MembershipRule
             Userdetails = $group.Userdetails
             Guests = $group.Guests
             Protected = $group.Protected
+            PIM = $group.PIM
             Impact = $group.Impact
             ImpactOrg = $group.ImpactOrg
+            ImpactOrgActiveOnly = $group.ImpactOrgActiveOnly
             Likelihood = $group.Likelihood
             Warnings = $group.Warnings
             EntraRolePrivilegedCount = $group.EntraRolePrivilegedCount
