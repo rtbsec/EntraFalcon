@@ -4209,13 +4209,101 @@ function Get-AllAzureIAMAssignmentsNative {
         }
     }
 
+    # Build lookup tables to resolve scope IDs to readable names.
+    $subscriptionScopeMap = @{}
     foreach ($sub in $subscriptions) {
+        if (-not [string]::IsNullOrWhiteSpace($sub.Id) -and -not [string]::IsNullOrWhiteSpace($sub.DisplayName)) {
+            $subscriptionScopeMap[$sub.Id.ToLowerInvariant()] = $sub.DisplayName
+        }
+
         $managedTenantCount = if ($null -ne $sub.ManagedByTenants) {
             @($sub.ManagedByTenants).Count
         } else {
             0
         }
         Write-Log -Level Debug -Message "Subscription $($sub.DisplayName) $($sub.Id) | ManagedByTenants: $managedTenantCount"
+    }
+
+    $managementGroupScopeMap = @{}
+    try {
+        # Query Resource Graph for management group IDs and display names.
+        $url = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
+        $body = @{
+            query = "ResourceContainers| where type =~ 'microsoft.resources/subscriptions'| mv-expand mg = properties.managementGroupAncestorsChain| project ResourceId = tostring(mg.name),DisplayName = tostring(mg.displayName),tenantId | summarize DisplayName = any(DisplayName) by ResourceId"
+            options = @{
+                resultFormat = "objectArray"
+            }
+        }
+        $resourceGraphResponse = Send-ApiRequest -Method POST -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Body $body -Silent -ErrorAction Stop
+
+        # Normalize the query response to a flat row collection.
+        $managementGroups = @()
+        if ($resourceGraphResponse -is [System.Collections.IEnumerable] -and -not ($resourceGraphResponse -is [string])) {
+            foreach ($entry in $resourceGraphResponse) {
+                if ($entry -and $entry.PSObject.Properties.Name -contains 'data' -and $entry.data) {
+                    $managementGroups += @($entry.data)
+                } else {
+                    $managementGroups += @($entry)
+                }
+            }
+        } elseif ($resourceGraphResponse -and $resourceGraphResponse.PSObject.Properties.Name -contains 'data' -and $resourceGraphResponse.data) {
+            $managementGroups = @($resourceGraphResponse.data)
+        } elseif ($null -ne $resourceGraphResponse) {
+            $managementGroups = @($resourceGraphResponse)
+        }
+
+        foreach ($managementGroup in $managementGroups) {
+            $managementGroupId = [string]$managementGroup.ResourceId
+            $managementGroupName = [string]$managementGroup.DisplayName
+            if ([string]::IsNullOrWhiteSpace($managementGroupName)) {
+                $managementGroupName = $managementGroupId
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($managementGroupId)) {
+                $managementGroupScopeMap[$managementGroupId.ToLowerInvariant()] = $managementGroupName
+            }
+        }
+        Write-Log -Level Debug -Message "Got $($managementGroupScopeMap.Count) management groups for Azure scope resolution"
+    } catch {
+        Write-Log -Level Debug -Message "Management group scope resolution via Resource Graph unavailable. Using scope IDs. Error: $($_.Exception.Message)"
+    }
+
+    # Resolve known scope IDs in ARM paths and keep the original path when no mapping exists.
+    function Resolve-AzureIamScopePath {
+        param(
+            [Parameter(Mandatory = $false)]
+            [string]$Scope
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Scope)) {
+            return $Scope
+        }
+
+        if ($Scope -imatch '^/subscriptions/([^/]+)(/.*)?$') {
+            $scopeId = $Matches[1]
+            $scopeSuffix = $Matches[2]
+            $scopeName = $subscriptionScopeMap[$scopeId.ToLowerInvariant()]
+
+            if (-not [string]::IsNullOrWhiteSpace($scopeName)) {
+                if (-not $scopeSuffix) { $scopeSuffix = "" }
+                return "/subscriptions/$scopeName$scopeSuffix"
+            }
+            return $Scope
+        }
+
+        if ($Scope -imatch '^/providers/Microsoft\.Management/managementGroups/([^/]+)(/.*)?$') {
+            $scopeId = $Matches[1]
+            $scopeSuffix = $Matches[2]
+            $scopeName = $managementGroupScopeMap[$scopeId.ToLowerInvariant()]
+
+            if (-not [string]::IsNullOrWhiteSpace($scopeName)) {
+                if (-not $scopeSuffix) { $scopeSuffix = "" }
+                return "/providers/Microsoft.Management/managementGroups/$scopeName$scopeSuffix"
+            }
+            return $Scope
+        }
+
+        return $Scope
     }
 
     #Get all Azure roles for lookup
@@ -4262,6 +4350,7 @@ function Get-AllAzureIAMAssignmentsNative {
         $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
         $AssignmentsActive = $response | ForEach-Object {
             $roleId = ($_.properties.roleDefinitionId -split '/')[-1]
+            $resolvedScope = Resolve-AzureIamScopePath -Scope $_.properties.scope
 
             # Null safe check
             if (-not $roleHashTable.ContainsKey($roleId)) {
@@ -4284,7 +4373,7 @@ function Get-AllAzureIAMAssignmentsNative {
                 RoleDefinitionName = $RoleDetails.RoleName
                 RoleType           = $RoleDetails.RoleType
                 RoleTier           = $RoleTier
-                Scope              = $_.properties.scope
+                Scope              = $resolvedScope
                 Conditions         = $hasCondition 
                 PrincipalType      = $_.properties.principalType
                 AssignmentType     = "Active"
@@ -4309,6 +4398,7 @@ function Get-AllAzureIAMAssignmentsNative {
         if ($AzurePIM) {
             $AssignmentsEligible = $response | ForEach-Object {
                 $RoleDetails = $roleHashTable[(($_.properties.roleDefinitionId -split '/')[-1])]
+                $resolvedScope = Resolve-AzureIamScopePath -Scope $_.properties.scope
                 $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
                 if ($GLOBALAzureRoleRating.ContainsKey($RoleDetails.RoleId)) {
                     # If the RoleDefinition ID is found, return it's Tier-Level
@@ -4322,7 +4412,7 @@ function Get-AllAzureIAMAssignmentsNative {
                     RoleDefinitionName = $RoleDetails.RoleName
                     RoleType           = $RoleDetails.RoleType
                     RoleTier           = $RoleTier
-                    Scope              = $_.properties.scope
+                    Scope              = $resolvedScope
                     Conditions         = $hasCondition 
                     PrincipalType      = $_.properties.principalType
                     AssignmentType     = "Eligible"
