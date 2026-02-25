@@ -4226,7 +4226,7 @@ function Get-AllAzureIAMAssignmentsNative {
 
     $managementGroupScopeMap = @{}
     try {
-        # Query Resource Graph for management group IDs and display names.
+        # Query Resource Graph for management group IDs and display names via the subscription.
         $url = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
         $body = @{
             query = "ResourceContainers| where type =~ 'microsoft.resources/subscriptions'| mv-expand mg = properties.managementGroupAncestorsChain| project ResourceId = tostring(mg.name),DisplayName = tostring(mg.displayName),tenantId | summarize DisplayName = any(DisplayName) by ResourceId"

@@ -103,7 +103,7 @@ function Invoke-CheckPIM {
     }
     $AllPimEntraPoliciesAssignments = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/policies/roleManagementPolicyAssignments' -QueryParameters $QueryParameters -BetaAPI
 
-    Write-Log -Level Verbose -Message "Got $($AllPimEntraPoliciesAssignments.count) PIM settings releations"
+    Write-Log -Level Verbose -Message "Got $($AllPimEntraPoliciesAssignments.count) PIM settings relations"
 
     # Get all role names
     $QueryParameters = @{ 
@@ -111,7 +111,7 @@ function Invoke-CheckPIM {
     }
     $EntraRolesDefinition = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/roleManagement/directory/roleDefinitions' -QueryParameters $QueryParameters -BetaAPI 
     
-    Write-Log -Level Verbose -Message "Got $($EntraRolesDefinition.count) Entra role defintions"   
+    Write-Log -Level Verbose -Message "Got $($EntraRolesDefinition.count) Entra role definitions"   
 
     # Create a lookup for role display names
     $RoleIdToNameMap = @{}

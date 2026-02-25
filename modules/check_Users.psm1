@@ -151,7 +151,7 @@ function Invoke-CheckUsers {
 
 
     # Checking if users SignInActivity property can be retrieved. Requires Premium otherwise HTTP 403:Tenant is not a B2C tenant and doesn't have premium license
-    write-host "[*] Check if SignInActivity can be retrived"
+    write-host "[*] Check if SignInActivity can be retrieved"
     $QueryParameters = @{
         '$select' = "id,SignInActivity"
         '$top' = "1"
