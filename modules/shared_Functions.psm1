@@ -598,8 +598,8 @@ $global:GLOBALJavaScript_Table = @'
             "SpOwn": "Owned Service Principals",
             "AppOwn": "Owned App Registrations",
             "AppRegOwn": "Owner of App Registrations",
-            "EntraMaxTier": "Highest assigned Entra role tier (direct or trough groups)",
-            "AzureMaxTier": "Highest assigned Azure role tier (direct or trough groups)",
+            "EntraMaxTier": "Highest assigned Entra role tier (directly or through groups)",
+            "AzureMaxTier": "Highest assigned Azure role tier (directly or through groups)",
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
@@ -3559,6 +3559,74 @@ function Get-GroupActiveRoleMetrics {
     }
 }
 
+# Validates whether the selected auth flow is supported on Linux.
+function Test-LinuxAuthFlowCompatibility {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("BroCi", "AuthCode", "DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")]
+        [string]$AuthFlow = "BroCi",
+
+        [Parameter(Mandatory = $false)]
+        [string]$ReadmePath = "README.md"
+    )
+
+    $isLinuxPlatform = $false
+    if (Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) {
+        $isLinuxPlatform = [bool]$IsLinux
+    } elseif ($PSVersionTable.PSEdition -eq 'Core') {
+        try {
+            $isLinuxPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+                [System.Runtime.InteropServices.OSPlatform]::Linux
+            )
+        } catch {
+            $isLinuxPlatform = $false
+        }
+    }
+
+    if (-not $isLinuxPlatform) {
+        return $true
+    }
+
+    $linuxSupportedFlows = @("DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")
+    if ($linuxSupportedFlows -contains $AuthFlow) {
+        return $true
+    }
+
+    $flowDisplay = @{
+        "BroCi" = "BroCi"
+        "AuthCode" = "Auth Code Flow"
+        "DeviceCode" = "Device Code Flow"
+        "ManualCode" = "Auth Code + Manual Code Flow"
+        "BroCiManualCode" = "BroCi + Manual Code Flow"
+        "BroCiToken" = "BroCi with Token"
+    }
+
+    $flowHint = @{
+        "BroCi" = "-AuthFlow BroCi"
+        "AuthCode" = "-AuthFlow AuthCode"
+        "DeviceCode" = "-AuthFlow DeviceCode"
+        "ManualCode" = "-AuthFlow ManualCode"
+        "BroCiManualCode" = "-AuthFlow BroCiManualCode"
+        "BroCiToken" = '-AuthFlow BroCiToken -BroCiToken "<refresh_token>"'
+    }
+
+    $selectedDisplay = if ($flowDisplay.ContainsKey($AuthFlow)) { $flowDisplay[$AuthFlow] } else { $AuthFlow }
+    $selectedHint = if ($flowHint.ContainsKey($AuthFlow)) { $flowHint[$AuthFlow] } else { "(custom)" }
+
+    Write-Host ""
+    Write-Host "[!] The current auth flow is not supported on Linux." -ForegroundColor Red
+    Write-Host "[!] Selected flow: $selectedDisplay ($selectedHint)" -ForegroundColor Red
+    Write-Host "[i] Supported Linux alternatives are:" -ForegroundColor Yellow
+    Write-Host "    - Device Code Flow: -AuthFlow DeviceCode"
+    Write-Host "    - Auth Code + Manual Code Flow: -AuthFlow ManualCode"
+    Write-Host "    - BroCi + Manual Code Flow: -AuthFlow BroCiManualCode"
+    Write-Host "    - BroCi with Token: -AuthFlow BroCiToken -BroCiToken `"<refresh_token>`""
+    Write-Host "[i] See '$ReadmePath' for more details."
+
+    return $false
+}
+
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
 function EnsureAuthMsGraph {
     $result = $false
@@ -3781,6 +3849,42 @@ function RefreshAuthenticationMsGraph {
     return $result
 }
 
+# Authenticate Microsoft Graph token for Security Findings specific endpoints.
+function EnsureAuthSecurityFindingsMsGraph {
+    $result = $false
+    if (-not (invoke-EntraFalconAuth -Action Auth -Purpose SecurityFindings @GLOBALAuthMethods)) {
+        Write-Log -Level Verbose -Message "[SecurityFindings] Authentication failed for special Graph endpoints."
+        return $false
+    }
+
+    if ($null -ne $GLOBALSecurityFindingsGraphAccessTokenSpecial) {
+        $result = $true
+    } else {
+        Write-Log -Level Verbose -Message "[SecurityFindings] No special Graph token was returned."
+    }
+
+    return $result
+}
+
+# Refresh Microsoft Graph token for Security Findings specific endpoints.
+function RefreshAuthenticationSecurityFindingsMsGraph {
+    if ($null -eq $GLOBALSecurityFindingsGraphAccessTokenSpecial) {
+        Write-Log -Level Verbose -Message "[SecurityFindings] Cannot refresh special Graph token because it is not initialized."
+        return $false
+    }
+
+    if (Invoke-CheckTokenExpiration $GLOBALSecurityFindingsGraphAccessTokenSpecial) {
+        return $true
+    }
+
+    if (-not (invoke-EntraFalconAuth -Action Refresh -Purpose SecurityFindings @GLOBALAuthMethods)) {
+        Write-Log -Level Verbose -Message "[SecurityFindings] Refresh failed for special Graph token."
+        return $false
+    }
+
+    return ($null -ne $GLOBALSecurityFindingsGraphAccessTokenSpecial)
+}
+
 function Invoke-CheckTokenExpiration ($Object) {
     #write-host "[*] Checking access token expiration... $($Object.Target)"
     $validForMinutes = [Math]::Ceiling((NEW-TIMESPAN -Start (Get-Date) -End $Object.Expiration_time).TotalMinutes)
@@ -3873,13 +3977,13 @@ $global:GLOBALAzureRoleRating = @{
 }
 
 $global:GLOBALImpactScore = @{
-    "EntraRoleTier0"            = 800
+    "EntraRoleTier0"            = 1600
     "EntraRoleTier1"            = 400
     "EntraRoleTier2"            = 80
     "EntraRoleTier?Privileged"  = 100
     "EntraRoleTier?"            = 80
     "AzureRoleTier0"            = 200
-    "AzureRoleTier1"            = 100
+    "AzureRoleTier1"            = 70
     "AzureRoleTier2"            = 50
     "AzureRoleTier3"            = 10
     "AzureRoleTier?"            = 50
@@ -4892,9 +4996,7 @@ function Set-GlobalReportManifest {
 #Get all active Entra role assignments
 function Get-PimforGroupsAssignments {
     [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)][String]$AuthMethod
-    )
+    Param ()
     $ResultAuthCheck = $true
     
     Write-Host "[*] Trigger interactive authentication for PIM for Groups assessment (skip with -SkipPimForGroups)"
@@ -4917,7 +5019,12 @@ function Get-PimforGroupsAssignments {
         #Retrieve Pim Enabled groups. If HTTP 400 assuing error message is "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.",
         try {
             #Use alternative Endpoint for BroCI since no SP with pre-consented privieleges PrivilegedAccess.Read(Write).AzureADGroup exists
-            if ($GLOBALAuthMethods.ContainsKey("BroCi")) {
+            $isBroCiFlow = $false
+            if ($GLOBALAuthMethods.ContainsKey("AuthFlow")) {
+                $isBroCiFlow = @("BroCi", "BroCiManualCode", "BroCiToken") -contains [string]$GLOBALAuthMethods.AuthFlow
+            }
+
+            if ($isBroCiFlow) {
                 Write-Host "[*] Retrieve PIM enabled groups (BroCi / using api.azrbac.mspim.azure.com)"
                 $uri = "https://api.azrbac.mspim.azure.com/api/v2/privilegedAccess/aadGroups/resources?`$select=id,displayName&`$top=999"
                 $PimEnabledGroupsRaw = @(Send-ApiRequest -Method GET -Uri $uri -AccessToken $GLOBALPimForGroupAzrbacAccessToken.access_token -Silent -UserAgent $GlobalAuditSummary.UserAgent.Name -ErrorAction Stop)
@@ -5201,6 +5308,7 @@ function start-InitTasks {
         ManagedIdentities      = @{ Count = 0; IsExplicit = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0} }
         AdministrativeUnits    = @{ Count = 0 }
         ConditionalAccess      = @{ Count = 0; Enabled = 0 }
+        SecurityFindings       = @{ Vulnerable = 0; NotVulnerable = 0; Skipped = 0; Total = 0 }
         EntraRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'App' = 0; 'MI' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Uncategorized' = 0} }
         AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'Unknown' = 0}; }
         PimSettings            = @{ Count = 0}
@@ -5327,31 +5435,24 @@ function invoke-EntraFalconAuth {
 
     .DESCRIPTION
     invoke-EntraFalconAuth is an internal orchestration helper that selects and executes the correct authentication
-    or token refresh routine based on Action, Purpose, AuthMethod, and whether the BroCi flow is enabled.
+    or token refresh routine based on Action, Purpose, and AuthFlow.
 
-    The function supports standard OAuth authentication (AuthCode, DeviceCode, ManualCode), token refresh and
-    token exchange scenarios, as well as the BroCi flow with optional Bring-Your-Own BroCi refresh token support.
-    When a BroCi token is supplied, the initial BroCi bootstrap authentication step is skipped and the provided
+    The function supports flow-native selection (BroCi, AuthCode, DeviceCode, ManualCode, BroCiManualCode, BroCiToken),
+    token refresh and token exchange scenarios, as well as the BroCi flow with optional Bring-Your-Own BroCi refresh token support.
+    When a BroCi token is supplied with AuthFlow BroCiToken, the initial BroCi bootstrap authentication step is skipped and the provided
     token is used directly for subsequent token exchanges.
 
     The function prints a short status message, invokes the required underlying helper functions
     (Invoke-Auth, Invoke-DeviceCodeFlow, Invoke-Refresh), stores resulting tokens in predefined global variables,
     and returns $true on success or $false on failure.
 
-    DeviceCode authentication is not supported with BroCi and will throw.
-
-    .PARAMETER AuthMethod
-    Specifies the authentication method to use when Action is Auth.
-    Valid values: AuthCode, DeviceCode, ManualCode, Refresh.
-    Note: When a BroCi token is supplied, AuthMethod is ignored for the BroCi bootstrap step.
-
-    .PARAMETER BroCi
-    Enables the BroCi authentication flow, which uses alternate client and redirect parameters and may perform
-    additional token exchange steps.
+    .PARAMETER AuthFlow
+    Specifies which authentication flow to use.
+    Valid values: BroCi, AuthCode, DeviceCode, ManualCode, BroCiManualCode, BroCiToken.
 
     .PARAMETER BroCiToken
     Optional BroCi refresh token provided by the caller.
-    When specified, the BroCi bootstrap authentication step is skipped and the provided token is used directly.
+    Required when AuthFlow is BroCiToken.
 
     .PARAMETER Action
     Specifies whether to authenticate or refresh tokens.
@@ -5359,7 +5460,7 @@ function invoke-EntraFalconAuth {
 
     .PARAMETER Purpose
     Specifies which token to obtain or refresh.
-    Valid values: MainAuth, PimforEntra, PimforGroup, Azure.
+    Valid values: MainAuth, PimforEntra, PimforGroup, Azure, SecurityFindings.
 
     .OUTPUTS
     System.Boolean.
@@ -5367,26 +5468,23 @@ function invoke-EntraFalconAuth {
     Throws for invalid parameter combinations.
 
     .EXAMPLE
-    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthMethod DeviceCode
+    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthFlow DeviceCode
 
     .EXAMPLE
-    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthMethod AuthCode -BroCi -BroCiToken $BroCiRefreshToken
+    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthFlow BroCiToken -BroCiToken $BroCiRefreshToken
 
     .EXAMPLE
-    invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra -AuthMethod Refresh
+    invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra -AuthFlow BroCi
 
     .EXAMPLE
-    invoke-EntraFalconAuth -Action Refresh -Purpose MainAuth -BroCi
+    invoke-EntraFalconAuth -Action Refresh -Purpose MainAuth -AuthFlow BroCiManualCode
     #>
 
     [CmdletBinding()]
     param(
-        # Authentication method
-        [ValidateSet("AuthCode", "DeviceCode", "ManualCode", "Refresh")]
-        [string]$AuthMethod = "AuthCode",
-
         [Parameter(Mandatory = $false)]
-        [switch]$BroCi = $false,
+        [ValidateSet("BroCi", "AuthCode", "DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")]
+        [string]$AuthFlow = "BroCi",
 
         # Action
         [Parameter(Mandatory = $true)]
@@ -5395,7 +5493,7 @@ function invoke-EntraFalconAuth {
 
         # Purpose
         [Parameter(Mandatory = $true)]
-        [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure")]
+        [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure", "SecurityFindings")]
         [string]$Purpose,
 
         #BrociToken
@@ -5404,10 +5502,21 @@ function invoke-EntraFalconAuth {
 
     )
 
-    Write-Log -Level Debug -Message "Starting authentication: Action=$Action Purpose=$Purpose AuthMethod=$AuthMethod BroCi=$BroCi"
+    Write-Log -Level Debug -Message "Starting authentication: Action=$Action Purpose=$Purpose AuthFlow=$AuthFlow"
 
-    if ($BroCi -and $AuthMethod -eq "DeviceCode") {
-        throw "Invalid parameter combination: -AuthMethod DeviceCode cannot be used with -BroCi"
+    if ($AuthFlow -eq "BroCiToken" -and [string]::IsNullOrWhiteSpace($BroCiToken)) {
+        throw "Invalid parameter combination: -AuthFlow BroCiToken requires -BroCiToken."
+    }
+    if ($AuthFlow -ne "BroCiToken" -and -not [string]::IsNullOrWhiteSpace($BroCiToken)) {
+        throw "Invalid parameter combination: -BroCiToken can only be used with -AuthFlow BroCiToken."
+    }
+
+    $isBroCiFlow = @("BroCi", "BroCiManualCode", "BroCiToken") -contains $AuthFlow
+    $authMethodKey = switch ($AuthFlow) {
+        "DeviceCode" { "DeviceCode" }
+        "ManualCode" { "ManualCode" }
+        "BroCiManualCode" { "ManualCode" }
+        default { "AuthCode" }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
@@ -5436,26 +5545,19 @@ function invoke-EntraFalconAuth {
             [ValidateSet("Auth", "Refresh")]
             [string]$Action,
 
-            [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure")]
+            [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure", "SecurityFindings")]
             [string]$Purpose,
 
-            [bool]$BroCi,
-
-            [ValidateSet("AuthCode", "DeviceCode", "ManualCode", "Refresh")]
-            [string]$AuthMethod
+            [ValidateSet("BroCi", "AuthCode", "DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")]
+            [string]$AuthFlow
         )
-
-        $modeText = if ($BroCi) { " (BroCi)" } else { "" }
 
         switch ($Action) {
             'Auth' {
-                if ($AuthMethod -eq 'Refresh') {
-                    return "[*] Exchanging token for $Purpose$modeText"
-                }
-                return "[*] Authenticating for $Purpose using $AuthMethod$modeText"
+                return "[*] Authenticating for $Purpose using $AuthFlow"
             }
             'Refresh' {
-                return "[*] Refreshing $Purpose access token$modeText"
+                return "[*] Refreshing $Purpose access token ($AuthFlow)"
             }
         }
     }
@@ -5538,6 +5640,30 @@ function invoke-EntraFalconAuth {
                                              -RedirectUrl 'http://localhost:13824/' `
                                              -DisableJwtParsing @GLOBALAuthParameters
                         $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+                
+                SecurityFindings = @{
+                    AuthCode = {
+                        $tokens = Invoke-Auth -ClientID '80ccca67-54bd-44ab-8625-4b79c4dc7775' `
+                                             -RedirectUrl 'https://transition.security.microsoft.com/Blank' `
+                                             -Origin 'https://doesnotmatter' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALSecurityFindingsGraphAccessTokenSpecial = $tokens
+                        $true
+                    }
+                    DeviceCode = {
+                        # There is no client which can be used for this :-(
+                        $true
+                    }
+                    ManualCode = {
+                        $tokens = Invoke-Auth -ManualCode `
+                                             -ClientID '80ccca67-54bd-44ab-8625-4b79c4dc7775' `
+                                             -RedirectUrl 'https://transition.security.microsoft.com/Blank' `
+                                             -Origin 'https://doesnotmatter' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALSecurityFindingsGraphAccessTokenSpecial = $tokens
                         $true
                     }
                 }
@@ -5663,6 +5789,16 @@ function invoke-EntraFalconAuth {
                         $true
                     }
                 }
+                SecurityFindings = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALSecurityFindingsGraphAccessTokenSpecial.refresh_token `
+                                                -ClientId "80ccca67-54bd-44ab-8625-4b79c4dc7775" `
+                                                -Origin 'https://doesnotmatter' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALSecurityFindingsGraphAccessTokenSpecial = $tokens
+                        $true
+                    }
+                }
             }
 
             BroCi = @{
@@ -5697,10 +5833,10 @@ function invoke-EntraFalconAuth {
     # --------------------------
     # EXECUTION
     # --------------------------
-    $broKey = if ($BroCi) { 'BroCi' } else { 'NoBroCi' }
+    $broKey = if ($isBroCiFlow) { 'BroCi' } else { 'NoBroCi' }
 
     try {
-        $plan = Get-Plan -Table $Routes -Keys @($Action, $broKey, $Purpose, $AuthMethod)
+        $plan = Get-Plan -Table $Routes -Keys @($Action, $broKey, $Purpose, $authMethodKey)
 
         #Fallback to any if no explicit is found
         if (-not $plan -and $Action -eq "Auth") {
@@ -5719,8 +5855,7 @@ function invoke-EntraFalconAuth {
         $status = Get-EntraFalconStatusMessage `
             -Action $Action `
             -Purpose $Purpose `
-            -BroCi ([bool]$BroCi) `
-            -AuthMethod $AuthMethod
+            -AuthFlow $AuthFlow
 
         Write-Host $status
 
@@ -5765,6 +5900,10 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALAuthMethods -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupAzrbacAccessToken -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALEntraFalconLogLevel -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALSecurityFindingsAccessContext -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALSecurityFindingsGraphAccessTokenSpecial -ErrorAction SilentlyContinue
+
+
 }
 
 enum LogLevel {
@@ -5838,4 +5977,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Test-LinuxAuthFlowCompatibility
