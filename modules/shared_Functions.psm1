@@ -211,7 +211,7 @@ $global:GLOBALJavaScript_Table = @'
                         ApiHigh: "or_>0",
                         ApiMedium: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Foreign Apps: Extensive API Privs (Delegated)",
@@ -221,7 +221,7 @@ $global:GLOBALJavaScript_Table = @'
                         ApiDelegatedHigh: "or_>0",
                         ApiDelegatedMedium: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium","ApiDelegatedLow", "ApiDelegatedMisc", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium","ApiDelegatedLow", "ApiDelegatedMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Foreign Apps: With Roles",
@@ -3559,8 +3559,33 @@ function Get-GroupActiveRoleMetrics {
     }
 }
 
-# Validates whether the selected auth flow is supported on Linux.
-function Test-LinuxAuthFlowCompatibility {
+# Returns the host operating system name in a normalized format.
+function Get-EntraFalconHostOs {
+    [CmdletBinding()]
+    param()
+
+    if ((Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and [bool]$IsWindows) { return "Windows" }
+    if ((Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) -and [bool]$IsLinux) { return "Linux" }
+    if ((Get-Variable -Name IsMacOS -ErrorAction SilentlyContinue) -and [bool]$IsMacOS) { return "macOS" }
+
+    try {
+        if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { return "Windows" }
+        if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)) { return "Linux" }
+        if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)) { return "macOS" }
+    } catch {
+        # Continue with string-based fallback.
+    }
+
+    $osString = [string]$PSVersionTable.OS
+    if ($osString -match "Windows") { return "Windows" }
+    if ($osString -match "Darwin|macOS|Mac OS") { return "macOS" }
+    if ($osString -match "Linux") { return "Linux" }
+
+    return "Unknown"
+}
+
+# Validates whether the selected auth flow is supported on non-Windows systems.
+function Test-NonWindowsAuthFlowCompatibility {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false)]
@@ -3571,25 +3596,13 @@ function Test-LinuxAuthFlowCompatibility {
         [string]$ReadmePath = "README.md"
     )
 
-    $isLinuxPlatform = $false
-    if (Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) {
-        $isLinuxPlatform = [bool]$IsLinux
-    } elseif ($PSVersionTable.PSEdition -eq 'Core') {
-        try {
-            $isLinuxPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-                [System.Runtime.InteropServices.OSPlatform]::Linux
-            )
-        } catch {
-            $isLinuxPlatform = $false
-        }
-    }
-
-    if (-not $isLinuxPlatform) {
+    $hostOs = Get-EntraFalconHostOs
+    if ($hostOs -eq "Windows") {
         return $true
     }
 
-    $linuxSupportedFlows = @("DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")
-    if ($linuxSupportedFlows -contains $AuthFlow) {
+    $nonWindowsSupportedFlows = @("DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")
+    if ($nonWindowsSupportedFlows -contains $AuthFlow) {
         return $true
     }
 
@@ -3615,9 +3628,9 @@ function Test-LinuxAuthFlowCompatibility {
     $selectedHint = if ($flowHint.ContainsKey($AuthFlow)) { $flowHint[$AuthFlow] } else { "(custom)" }
 
     Write-Host ""
-    Write-Host "[!] The current auth flow is not supported on Linux." -ForegroundColor Red
+    Write-Host "[!] The current auth flow is not supported on $hostOs." -ForegroundColor Red
     Write-Host "[!] Selected flow: $selectedDisplay ($selectedHint)" -ForegroundColor Red
-    Write-Host "[i] Supported Linux alternatives are:" -ForegroundColor Yellow
+    Write-Host "[i] Supported non-Windows alternatives (Linux/macOS) are:" -ForegroundColor Yellow
     Write-Host "    - Device Code Flow: -AuthFlow DeviceCode"
     Write-Host "    - Auth Code + Manual Code Flow: -AuthFlow ManualCode"
     Write-Host "    - BroCi + Manual Code Flow: -AuthFlow BroCiManualCode"
@@ -5977,4 +5990,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Test-LinuxAuthFlowCompatibility
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
