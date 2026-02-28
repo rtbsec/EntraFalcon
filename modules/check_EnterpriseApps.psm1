@@ -47,8 +47,8 @@ function Invoke-CheckEnterpriseApps {
         "APIMedium"                 = 100
         "APILow"                    = 50
         "ApiMisc"                   = 20
-        "APIDelegatedDangerous"     = 100
-        "APIDelegatedHigh"          = 80
+        "APIDelegatedDangerous"     = 200
+        "APIDelegatedHigh"          = 100
         "APIDelegatedMedium"        = 60
         "APIDelegatedLow"           = 20
         "ApiDelegatedMisc"          = 20
