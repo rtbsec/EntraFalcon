@@ -2158,7 +2158,7 @@ $global:GLOBALJavaScript_Nav = @'
                 function setTheme(theme) {
                     document.body.classList.remove("light-mode", "dark-mode");
                     document.body.classList.add(theme + "-mode");
-                    localStorage.setItem("theme", theme);
+                    localStorage.setItem("EntraFalcon_theme", theme);
 
                     themeBtn.textContent = theme === "dark" ? "\uD83C\uDF13 Dark" : "\u2600\uFE0F Light";
 
@@ -2177,7 +2177,7 @@ $global:GLOBALJavaScript_Nav = @'
                     }
                 }
 
-                var savedTheme = localStorage.getItem("theme") || "dark";
+                var savedTheme = localStorage.getItem("EntraFalcon_theme") || "dark";
                 setTheme(savedTheme);
 
                 themeBtn.addEventListener("click", function () {
@@ -4471,7 +4471,7 @@ function Get-AllAzureIAMAssignmentsNative {
 
             # Null safe check
             if (-not $roleHashTable.ContainsKey($roleId)) {
-                Write-Host-Message "[!] Skipping unknown RoleId: $roleId"
+                Write-Log -Level Debug -Message "Skipping unknown RoleId: $roleId"
                 return
             }
             $RoleDetails = $roleHashTable[$roleId]
