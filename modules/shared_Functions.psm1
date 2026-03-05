@@ -1745,7 +1745,7 @@ $global:GLOBALJavaScript_Table = @'
 
             const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
-            const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2', '?']);
+            const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2']);
             const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier']);
 
             const redColor = isDark ? "#800000" : "#FFB6C1";
@@ -2154,11 +2154,44 @@ $global:GLOBALJavaScript_Nav = @'
                 themeBtn.className = "hdr-btn";
                 themeBtn.type = "button";
                 actions.appendChild(themeBtn);
+                var themeStorageKey = "EntraFalcon_theme";
+
+                function isFirefoxBrowser() {
+                    var ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent : "";
+                    return /firefox/i.test(ua);
+                }
+
+                function canUseStorage(storage) {
+                    if (!storage) return false;
+                    try {
+                        var probeKey = "__ef_theme_probe__";
+                        storage.setItem(probeKey, "1");
+                        storage.removeItem(probeKey);
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                }
+
+                function getThemeStorage() {
+                    var preferred = isFirefoxBrowser() ? window.sessionStorage : window.localStorage;
+                    if (canUseStorage(preferred)) return preferred;
+
+                    var fallback = preferred === window.localStorage ? window.sessionStorage : window.localStorage;
+                    if (canUseStorage(fallback)) return fallback;
+
+                    return {
+                        getItem: function () { return null; },
+                        setItem: function () {}
+                    };
+                }
+
+                var themeStorage = getThemeStorage();
 
                 function setTheme(theme) {
                     document.body.classList.remove("light-mode", "dark-mode");
                     document.body.classList.add(theme + "-mode");
-                    localStorage.setItem("EntraFalcon_theme", theme);
+                    try { themeStorage.setItem(themeStorageKey, theme); } catch (e) {}
 
                     themeBtn.textContent = theme === "dark" ? "\uD83C\uDF13 Dark" : "\u2600\uFE0F Light";
 
@@ -2177,7 +2210,9 @@ $global:GLOBALJavaScript_Nav = @'
                     }
                 }
 
-                var savedTheme = localStorage.getItem("EntraFalcon_theme") || "dark";
+                var savedTheme = null;
+                try { savedTheme = themeStorage.getItem(themeStorageKey); } catch (e) {}
+                savedTheme = savedTheme || "dark";
                 setTheme(savedTheme);
 
                 themeBtn.addEventListener("click", function () {
@@ -4927,12 +4962,12 @@ function Initialize-TenantReportTabs {
     $defs = @(
         @{ Prop = 'Summary';                   Key = 'Summary';    Title = 'Summary';                   File = "_EntraFalconEnumerationSummary_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'SecurityFindings';          Key = 'SecurityFindings'; Title = 'Security Findings';    File = "TenantSecurityFindings_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'ConditionalAccessPolicies'; Key = 'CAP';        Title = 'Conditional Access';        File = "ConditionalAccessPolicies_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Users';                     Key = 'Users';      Title = 'Users';                     File = "Users_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Groups';                    Key = 'Groups';     Title = 'Groups';                    File = "Groups_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'ManagedIdenties';           Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'ConditionalAccessPolicies'; Key = 'CAP';        Title = 'Conditional Access';        File = "ConditionalAccessPolicies_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Agents';                    Key = 'Agents';     Title = 'Agents';                    File = "Agents_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EntraRoles';                Key = 'RoleEntra';  Title = 'Role Assignments (Entra)';  File = "Role_Assignments_Entra_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AzureRoles';                Key = 'RoleAz';     Title = 'Role Assignments (Azure)';  File = "Role_Assignments_Azure_${StartTimestamp}_${tenantNameEscaped}.html" }
@@ -5314,9 +5349,9 @@ function start-InitTasks {
         TenantLicense          = @{ Name = ""; Level = 0}
         Subscriptions          = @{ Count = 0 }
         UserAgent              = @{ Name = $UserAgent}
-        Users                  = @{ Count = 0; Guests = 0; Inactive = 0; Enabled=0; OnPrem=0; MfaCapable=0; SignInActivity = @{ '0-1 month' = 0; '1-2 months' = 0; '2-3 months' = 0; '4-5 months' = 0; '5-6 months' = 0; '6+ months' = 0; 'Never' = 0 }}
+        Users                  = @{ Count = 0; Guests = 0; Inactive = 0; Enabled=0; OnPrem=0; MfaCapable=0; SignInActivity = @{ '0-1 month' = 0; '1-2 months' = 0; '2-3 months' = 0; '3-4 months' = 0; '4-5 months' = 0; '5-6 months' = 0; '6+ months' = 0; 'Never' = 0 }}
         Groups                 = @{ Count = 0; M365 = 0; PublicM365 = 0; PimOnboarded = 0; OnPrem = 0}
-        AppRegistrations       = @{ Count = 0; AppLock = 0; Credentials = @{ 'AppsSecrets' = 0; 'AppsCerts' = 0; 'AppsNoCreds' = 0}; Audience = @{ 'SingleTenant' = 0; 'MultiTenant' = 0; 'MultiTenantPersonal' = 0} }
+        AppRegistrations       = @{ Count = 0; AppLock = 0; Credentials = @{ 'AppsSecrets' = 0; 'AppsCerts' = 0; 'AppsFederatedCreds' = 0; 'AppsNoCreds' = 0}; Audience = @{ 'SingleTenant' = 0; 'MultiTenant' = 0; 'MultiTenantPersonal' = 0} }
         EnterpriseApps         = @{ Count = 0; Foreign = 0; IncludeMsApps = $false; Credentials = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0}}
         ManagedIdentities      = @{ Count = 0; IsExplicit = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0} }
         AdministrativeUnits    = @{ Count = 0 }
