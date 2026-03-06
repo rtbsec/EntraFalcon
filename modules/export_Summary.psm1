@@ -49,7 +49,7 @@ return @"
             "Conditional Access Policies" = $($GlobalAuditSummary.ConditionalAccess.Count)
             "Entra Role Assignments"      = $($GlobalAuditSummary.EntraRoleAssignments.Count)
             "Azure Role Assignments"      = $($GlobalAuditSummary.AzureRoleAssignments.Count)
-            "Pim Settings"                = $($GlobalAuditSummary.PimSettings.Count)
+            "PIM Settings"                = $($GlobalAuditSummary.PimSettings.Count)
         }
 
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 10 -Compress
@@ -61,8 +61,10 @@ return @"
 
     $GlobalAuditSummary.Time.End = Get-Date -Format "yyyyMMdd HH:mm"
 
-    if (-not $($GlobalAuditSummary.EnterpriseApps.IncludeMsApps)) {
-        $MsAppsEnumerated = "False (default)"
+    $MsAppsEnumerated = if ([bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps) {
+        "True"
+    } else {
+        "False (default)"
     }
 
     #Check whether there are subscriptions
@@ -169,6 +171,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '0-1 month': $($GlobalAuditSummary.Users.SignInActivity."0-1 month"),
             '1-2 months': $($GlobalAuditSummary.Users.SignInActivity."1-2 months"),
             '2-3 months': $($GlobalAuditSummary.Users.SignInActivity."2-3 months"),
+            '3-4 months': $($GlobalAuditSummary.Users.SignInActivity."3-4 months"),
             '4-5 months': $($GlobalAuditSummary.Users.SignInActivity."4-5 months"),
             '5-6 months': $($GlobalAuditSummary.Users.SignInActivity."5-6 months"),
             '6+ months': $($GlobalAuditSummary.Users.SignInActivity."6+ months"),
@@ -226,6 +229,7 @@ document.addEventListener('DOMContentLoaded', function () {
         appregistrations_credentials: {
             'Secrets': $($GlobalAuditSummary.AppRegistrations.Credentials.AppsSecrets),
             'Certificates': $($GlobalAuditSummary.AppRegistrations.Credentials.AppsCerts),
+            'Federated Credentials': $($GlobalAuditSummary.AppRegistrations.Credentials.AppsFederatedCreds),
             'None': $($GlobalAuditSummary.AppRegistrations.Credentials.AppsNoCreds)
         },
 
@@ -727,11 +731,11 @@ Enumeration Results:
     - Conditional Access Policies: $($GlobalAuditSummary.ConditionalAccess.Count) ($($GlobalAuditSummary.ConditionalAccess.Enabled) Enabled)
     - Entra Role Assignments:      $($GlobalAuditSummary.EntraRoleAssignments.Count) ($($GlobalAuditSummary.EntraRoleAssignments.Eligible) Eligible)
     - Azure Role Assignments:      $($GlobalAuditSummary.AzureRoleAssignments.Count) ($($GlobalAuditSummary.AzureRoleAssignments.Eligible) Eligible)
-    - Pim Settings:                $($GlobalAuditSummary.PimSettings.Count)
+    - PIM Settings:                $($GlobalAuditSummary.PimSettings.Count)
     - Findings:                    $findingsStatusLine
 "@
 
-    # Set generic information which get injected into the HTML
+    # Set generic information hich gets injected into the HTML
     Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
 
     # Build header section
