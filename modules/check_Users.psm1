@@ -1029,14 +1029,6 @@ function Invoke-CheckUsers {
         $tableOutput = $tableOutput | Select-Object -First $LimitResults
     }
 
-    $AppendixInactive = [System.Collections.Generic.List[object]]::new()
-    foreach ($user in $AllUsersDetails) {
-        if ($user.Inactive -eq $true -and $user.Enabled -eq $true) {
-            $AppendixInactive.Add($user)
-        }
-    }
-    $InactiveUsersCount = $AppendixInactive.count
-
 
     #Define the apps to be displayed in detail and sort them by risk score
     $details = $AllUsersDetails | Sort-Object Risk -Descending
@@ -1592,12 +1584,6 @@ $headerHtml = @"
 
     write-host "[+] Details of $($tableOutput.count) users stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
     
-
-    If ($InactiveUsersCount -gt 0) {
-        $AppendixInactive | select-object Upn,OnPrem,UserType,Licenses,Protected,GrpMem,GrpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,LastSignInDays,lastSuccessfulSignInDateTime | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)_Inactive.csv" -NoTypeInformation
-        write-host "[+] Details of $InactiveUsersCount inactive users written to output file: $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt and CSV file: $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)_Inactive.csv "
-    }
-
     #Write HTML
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
