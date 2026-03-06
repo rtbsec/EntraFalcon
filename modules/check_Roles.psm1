@@ -18,7 +18,8 @@ function Invoke-CheckRoles {
         [Parameter(Mandatory=$true)][hashtable]$EnterpriseApps,
         [Parameter(Mandatory=$true)][hashtable]$ManagedIdentities,
         [Parameter(Mandatory=$true)][hashtable]$AppRegistrations,
-        [Parameter(Mandatory=$true)][hashtable]$Users
+        [Parameter(Mandatory=$true)][hashtable]$Users,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
     ############################## Function section ########################
@@ -517,8 +518,11 @@ $headerHtml = @"
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $headerTXTEntraRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $SortedEntraRoles | format-table Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType, PrincipalDisplayName, PrincipalType,ScopeResolved | Out-File -Width 512 "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType, PrincipalDisplayName, PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
-    write-host "[+] Details of $($SortedEntraRoles.count) Entra ID role assignments stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    
+    if ($Csv) {
+        $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType, PrincipalDisplayName, PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    }
+    $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
+    write-host "[+] Details of $($SortedEntraRoles.count) Entra ID role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    
 
     #Add information to the enumeration summary
     $EntraEligibleCount = 0
@@ -582,8 +586,10 @@ $headerHtml = @"
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $SortedAzureRoles | format-table Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $SortedAzureRoles | select-object Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
-        write-host "[+] Details of $($SortedAzureRoles.count) Azure role assignments stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+        if ($Csv) {
+            $SortedAzureRoles | select-object Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        }
+        write-host "[+] Details of $($SortedAzureRoles.count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
         
         #Add information to the enumeration summary
         $AzureEligibleCount = 0

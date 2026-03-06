@@ -23,7 +23,8 @@ function Invoke-CheckUsers {
         [Parameter(Mandatory=$false)][hashtable]$UserAuthMethodsTable,
         [Parameter(Mandatory=$true)][hashtable]$AppRegistrations,
         [Parameter(Mandatory = $true)][int]$ApiTop,
-        [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments
+        [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
     ############################## Function section ########################
@@ -630,8 +631,8 @@ function Invoke-CheckUsers {
 
     ########################################## SECTION: RISK RATING AND WARNINGS ##########################################   
 
-        #Increase the risk score if user is not MFA capable and is not the sync account
-        if ($IsMfaCapable -ne "?" -and $IsMfaCapable -ne $true -and $item.DisplayName -ne "On-Premises Directory Synchronization Service Account" ) {
+        #Increase the risk score if user is not MFA capable and is not the sync account and not an AgentUser
+        if ($IsMfaCapable -ne "?" -and $IsMfaCapable -ne $true -and $item.DisplayName -ne "On-Premises Directory Synchronization Service Account" -and -not $item.Agent) {
             $Likelihood += $UserLikelihood["NoMFA"]
         }
         
@@ -1586,11 +1587,14 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    if ($Csv) {
+        $tableOutput | select-object UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    }
     $tableOutput | format-table -Property UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $DetailOutputTxt | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
 
-    write-host "[+] Details of $($tableOutput.count) users stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
+    write-host "[+] Details of $($tableOutput.count) users stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
     
     #Write HTML
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript -PreContent $AllObjectDetailsHTML

@@ -12,7 +12,8 @@ function Invoke-CheckCaps {
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments,
-        [Parameter(Mandatory=$true)][hashtable]$Users
+        [Parameter(Mandatory=$true)][hashtable]$Users,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
 
@@ -1398,7 +1399,7 @@ $headerHtml = @"
   
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
-    if ($AllPoliciesCount -gt 0) { 
+    if ($AllPoliciesCount -gt 0 -and $Csv) { 
         $tableOutput | select-object DisplayName,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     }
     $tableOutput | format-table -Property DisplayName,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -1420,7 +1421,8 @@ $headerHtml = @"
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
-    write-host "[+] Details of $AllPoliciesCount policies stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
+    write-host "[+] Details of $AllPoliciesCount policies stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
     
     #Add information to the enumeration summary
     $GlobalAuditSummary.ConditionalAccess.Count = $AllPoliciesCount

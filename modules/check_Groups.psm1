@@ -23,7 +23,8 @@ function Invoke-CheckGroups {
         [Parameter(Mandatory=$true)][hashtable]$AllUsersBasicHT,
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
         [Parameter(Mandatory = $true)][int]$ApiTop,
-        [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments
+        [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
     ############################## Function section ########################
@@ -541,7 +542,7 @@ function Invoke-CheckGroups {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
     
-    Write-Host "[*] Calculate all groups parent groups relation"
+    Write-Host "[*] Calculate all group-to-parent-group relationships"
     
     # Build reverse group membership map: child -> parent
     $ReverseGroupMembershipMap = @{}
@@ -2435,9 +2436,12 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    if ($Csv) {
+        $tableOutput | select-object DisplayName,type,SecurityEnabled,RoleAssignable,OnPrem,Dynamic,Visibility,Protected,PIM,AuUnits,DirectOwners,NestedOwners,OwnersSynced,Users,Guests,SPCount,Devices,NestedGroups,NestedInGroups,AppRoles,CAPs,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    }
 
-    write-host "[+] Details of $($tableOutput.count) groups stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
+    write-host "[+] Details of $($tableOutput.count) groups stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
     If ($DynamicGroupsCount -gt 0) {
         $AppendixTitle | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $AppendixDynamic | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append

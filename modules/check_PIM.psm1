@@ -14,7 +14,8 @@ function Invoke-CheckPIM {
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$true)][hashtable]$Users,
         [Parameter(Mandatory=$true)][hashtable]$AllCaps,
-        [Parameter(Mandatory=$true)][String[]]$StartTimestamp
+        [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
     ############################## Function section ########################
@@ -823,7 +824,9 @@ $ObjectsDetailsHEAD = @'
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $tableOutput | format-table Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    if ($Csv) {
+        $tableOutput | select-object Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    }
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append    
 
     # Set generic information which get injected into the HTML

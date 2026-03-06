@@ -16,7 +16,8 @@ function Invoke-CheckAppRegistrations {
         [Parameter(Mandatory=$true)][Object[]]$CurrentTenant,
         [Parameter(Mandatory=$true)][hashtable]$EnterpriseApps,
         [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments,
-        [Parameter(Mandatory=$true)][String[]]$StartTimestamp
+        [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
+        [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
     ############################## Function section ########################
@@ -1041,7 +1042,9 @@ $headerHtml = @"
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    if ($Csv) {
+        $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    }
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $AppsWithSecrets = $AppsWithSecrets | sort-object DisplayName | select-object AppName,Displayname,StartDateTime,EndDateTime,Expired
     if (($AppsWithSecrets | Measure-Object).count -ge 1) {
@@ -1063,7 +1066,8 @@ $headerHtml = @"
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
-    write-host "[+] Details of $($AllAppRegistrations.count) App Registrations stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
+    write-host "[+] Details of $($AllAppRegistrations.count) App Registrations stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
    
     #Add information to the enumeration summary
     $AppLock = 0
