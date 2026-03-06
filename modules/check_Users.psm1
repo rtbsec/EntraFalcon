@@ -173,12 +173,12 @@ function Invoke-CheckUsers {
     write-host "[*] Get all users"
     if ($PermissionUserSignInActivity) {
         $QueryParameters = @{
-            '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,AssignedLicenses,OtherMails,OnPremisesSyncEnabled,SignInActivity,CreatedDateTime,JobTitle,Department"
+            '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,AssignedLicenses,OtherMails,OnPremisesSyncEnabled,SignInActivity,CreatedDateTime,JobTitle,Department,perUserMfaState"
             '$top' = $ApiTop
         }
     } else {
         $QueryParameters = @{
-            '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,AssignedLicenses,OtherMails,OnPremisesSyncEnabled,CreatedDateTime,JobTitle,Department"
+            '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,AssignedLicenses,OtherMails,OnPremisesSyncEnabled,CreatedDateTime,JobTitle,Department,perUserMfaState"
             '$top' = $ApiTop
         } 
     }
@@ -624,6 +624,9 @@ function Invoke-CheckUsers {
             $IsMfaCapable = "?"
         }
 
+        # Per-user MFA state from /users endpoint
+        $PerUserMfa = if ([string]::IsNullOrWhiteSpace([string]$item.perUserMfaState)) { "-" } else { [string]$item.perUserMfaState }
+
     ########################################## SECTION: RISK RATING AND WARNINGS ##########################################   
 
         #Increase the risk score if user is not MFA capable and is not the sync account
@@ -1001,6 +1004,7 @@ function Invoke-CheckUsers {
             DeviceOwnerDetails = $DeviceOwner
             DeviceRegisteredDetails = $DeviceRegistered
             MfaCap = $IsMfaCapable
+            PerUserMfa = $PerUserMfa
             DeviceReg = @($DeviceRegistered).count
             RolesDetails = $UserEntraRoles
             Impact = [math]::Round($Impact)
@@ -1022,7 +1026,7 @@ function Invoke-CheckUsers {
     write-host "[*] Processing results"
 
     #Define output of the main table
-    $tableOutput = $AllUsersDetails | Sort-Object Risk -Descending | select-object UPN,UPNlink,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllUsersDetails | Sort-Object Risk -Descending | select-object UPN,UPNlink,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -1089,6 +1093,7 @@ function Invoke-CheckUsers {
             "User UPN" = $item.Upn
             "User ObjectID" = $item.Id
             "Enabled" = $item.Enabled
+            "PerUserMfa" = $item.PerUserMfa
             "Protected" = $item.Protected
             "Entra Max Tier" = $item.EntraMaxTier
             "Azure Max Tier" = $item.AzureMaxTier
@@ -1559,7 +1564,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
     write-host "[+] Writing log files"
     write-host ""
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -1578,8 +1583,8 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object UPN,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
-    $tableOutput | format-table -Property UPN,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | select-object UPN,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | format-table -Property UPN,Enabled,UserType,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $DetailOutputTxt | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
 
     write-host "[+] Details of $($tableOutput.count) users stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
@@ -1672,6 +1677,7 @@ $headerHtml = @"
             AzureRoles     = $user.AzureRoles
             AzureMaxTier   = $user.AzureMaxTier
             MfaCap         = $user.MfaCap
+            PerUserMfa    = $user.PerUserMfa
             Inactive       = $user.Inactive
             LastSignInDays = $user.LastSignInDays
             Impact         = $user.Impact

@@ -98,12 +98,19 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                   {
-                    label: "User Owning Applications",
+                    label: "Users Owning Applications",
                     filters: {
                         AppRegOwn: "or_>0",
                         SPOwn: "or_>0"
                     },
                     columns: ["UPN", "Enabled", "UserType", "Protected", "AppRegOwn", "SpOwn", "Inactive", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                },
+                  {
+                    label: "Users Disabled Per-User MFA",
+                    filters: {
+                        PerUserMfa: "=disabled"
+                    },
+                    columns: ["UPN", "Enabled", "UserType","LastSignInDays","Inactive", "Impact", "MfaCap", "PerUserMfa", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Entra Connect Accounts",
@@ -562,7 +569,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersTroughGroups", "ExcUsersTroughGroups"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersTroughGroups", "ExcUsersTroughGroups", "PerUserMfa"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -1746,7 +1753,7 @@ $global:GLOBALJavaScript_Table = @'
             const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
             const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2']);
-            const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier']);
+            const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier', 'PerUserMfa']);
 
             const redColor = isDark ? "#800000" : "#FFB6C1";
             const greenColor = isDark ? "#005f00" : "#98FB98";
@@ -3953,7 +3960,7 @@ function Invoke-CheckTokenExpiration ($Object) {
 
 }
 
-#Rough Entra role rating (Tier level per role)
+#Entra role rating (Tier level per role)
 $global:GLOBALEntraRoleRating = @{
     "62e90394-69f5-4237-9190-012177145e10" = 0 #Global Administrator
     "e00e864a-17c5-4a4b-9c06-f5b95a8d5bd8" = 0 #Partner Tier2 Support
@@ -3995,7 +4002,7 @@ $global:GLOBALEntraRoleRating = @{
     "88d8e3e3-8f55-4a1e-953a-9b9898b8876b" = 2 #Directory Readers
 }
 
-#Rough Entra role rating (Tier level per role)
+#Azure role rating (Tier level per role)
 $global:GLOBALAzureRoleRating = @{
     "8e3af657-a8ff-443c-a75c-2fe8c4bcb635" = 0 #Owner
     "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9" = 0 #User Access Administrator
@@ -4025,7 +4032,7 @@ $global:GLOBALAzureRoleRating = @{
 }
 
 $global:GLOBALImpactScore = @{
-    "EntraRoleTier0"            = 1600
+    "EntraRoleTier0"            = 2000
     "EntraRoleTier1"            = 400
     "EntraRoleTier2"            = 80
     "EntraRoleTier?Privileged"  = 100
