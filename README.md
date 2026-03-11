@@ -19,14 +19,18 @@ Findings are presented in interactive HTML reports to support efficient explorat
 
 ## 🚀 Features
 
-- Simple PowerShell script compatible with PowerShell 5.1 and 7. Works on both Windows and Linux with no external dependencies.
-- Built-in authentication supporting multiple methods (Interactive Authorization Code Flow and Device Code Flow)
+- Simple PowerShell script compatible with PowerShell 5.1 and 7. Works on Windows, Linux
+- Built-in authentication supporting multiple methods
 - Uses first-party Microsoft applications with pre-consented scopes to bypass Graph API consent prompts
 - Generates navigable HTML reports that support filtering, sorting, data export, etc.
+- Performs 65 automated checks and summarizes the results in a Security Findings Report
+    - Includes checks for weak tenant configurations and risky object properties or permissions
+    - Provides severity ratings as well as descriptions of the issue, potential threats, and remediation guidance
+    - Lists affected objects and links directly to their detailed reports for further investigation
 - Performs basic impact, likelihood, and risk scoring to highlight weakly protected high-privilege objects and sort the data.
 - Displays warnings for risky configurations and elevated privileges
 - Enumerates Entra ID objects, including:
-    - Users
+    - Users (including Agent Users)
     - Groups
     - Enterprise Applications
     - App Registrations
@@ -70,42 +74,51 @@ Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process
 ### Run EntraFalcon
 EntraFalcon includes built-in support for Entra ID authentication.  
 Multiple authentication flows are available to support different environments and restrictions.  
-Depending on the selected flow, this require multiple interactive authentications.  
+Depending on the selected flow, this requires multiple interactive authentications.  
 
-| Auth Flow                    | Windows | Linux | Interactive Logins | Convenience | Parameter(s)                         | Notes |
+Use `-AuthFlow` to select the authentication flow.  
+
+| Auth Flow                    | Windows | Linux/macOS | Interactive Logins | Convenience | Parameter(s)                         | Notes |
 |-----------------------------|---------|-------|--------------------|-------------|--------------------------------------|-------|
-| BroCi                       | Yes     | No    | 1                  | High        | `-BroCi`                             | Avoids reliance on legacy clients such as *Azure Active Directory PowerShell*.|
-| Auth Code Flow              | Yes     | No    | 3                  | Normal      | *(default)*                          | Default authentication flow. |
-| Device Code Flow            | Yes     | Yes   | 3                  | Normal      | `-AuthMethod DeviceCode`             | Authentication can be done on a different device. |
-| Manual Code Flow            | Yes     | Yes   | 3                  | Low-Normal  | `-AuthMethod ManualCode`             | Authentication can be done on a different device or browser session. |
-| BroCi + Manual Code Flow    | Yes     | Yes   | 1                  | Low         | `-BroCi -AuthMethod ManualCode`      | Authorization code must be manually extracted from browser developer tools. |
-| BroCi with Token            | Yes     | Yes   | 0                  | Low         | `-BroCiToken "<refresh_token>"`      | Refresh token must be obtained manually (e.g., from browser dev tools or another auth tool). |
+| BroCi                       | Yes     | No    | 1                  | High        | `-AuthFlow BroCi` *(default)*        | Avoids reliance on legacy clients such as *Azure Active Directory PowerShell*. |
+| Auth Code Flow              | Yes     | No    | 4                  | Normal      | `-AuthFlow AuthCode`                 | Standard non-BroCi auth code flow. |
+| Device Code Flow            | Yes     | Yes   | 3                  | Normal      | `-AuthFlow DeviceCode`               | Authentication can be completed on another device, but two Security Findings checks run with reduced depth. |
+| Auth Code + Manual Code Flow| Yes     | Yes   | 4                  | Low-Normal  | `-AuthFlow ManualCode`               | Authentication be completed on a different device or browser session. |
+| BroCi + Manual Code Flow    | Yes     | Yes   | 1                  | Low         | `-AuthFlow BroCiManualCode`          | Authorization code must be manually extracted from browser developer tools. |
+| BroCi with Token            | Yes     | Yes   | 0                  | Low         | `-AuthFlow BroCiToken -BroCiToken "<refresh_token>"` | Refresh token must be obtained manually (e.g., from browser dev tools or another auth tool). |
 
 
-#### Use BroCi flow (Beta / Windows only)
-BroCi uses alternate first-party applications and requires fewer interactive sign-ins.  
+#### Use BroCi flow (default, Beta / Windows only)
+BroCi uses alternate first-party applications and requires only one interactive sign-in.  
 It is further useful, when the *Azure Active Directory PowerShell* client requires assignment and must be avoided.
-
-```powershell
-.\run_EntraFalcon.ps1 -BroCi
-```
-
-#### Auth Code Flow (default, Windows only)
 
 ```powershell
 .\run_EntraFalcon.ps1
 ```
 
-#### Device Code Flow
-This flow is restricted in many environments.
+Explicit BroCi selection:
 ```powershell
-.\run_EntraFalcon.ps1 -AuthMethod "DeviceCode"
+.\run_EntraFalcon.ps1 -AuthFlow BroCi
 ```
 
-#### Use Manual Code Flow Authentication
+#### Auth Code Flow (Windows only)
 
 ```powershell
-.\run_EntraFalcon.ps1 -AuthMethod "ManualCode"
+.\run_EntraFalcon.ps1 -AuthFlow AuthCode
+```
+
+#### Device Code Flow
+It is often restricted by Conditional Access in hardened environments.  
+With `DeviceCode`, two Security Findings checks run with reduced depth (`CAP-004` and `CAP-005`).
+
+```powershell
+.\run_EntraFalcon.ps1 -AuthFlow DeviceCode
+```
+
+#### Use Auth Code + Manual Code Flow Authentication
+
+```powershell
+.\run_EntraFalcon.ps1 -AuthFlow ManualCode
 ```
 1. The script copies the authentication URL to the clipboard.
 2. Paste the URL into a browser (optionally on another device for SSO support).
@@ -116,7 +129,7 @@ This flow is restricted in many environments.
 
 #### BroCi + Manual Code Flow 
 ```powershell
-.\run_EntraFalcon.ps1 -BroCi -AuthMethod ManualCode
+.\run_EntraFalcon.ps1 -AuthFlow BroCiManualCode
 ```
 1. The script copies the authentication URL to the clipboard.
 2. Paste the URL into a browser (optionally on another device for SSO support).
@@ -134,7 +147,7 @@ Example: Obtaining the refresh token from the browser
 3. Search the network log for brk_client_id=c44b4083-3bb0-49c1-b47d-974e53cbdf3c and extract the refresh token from the response.
 
 ```powershell
-.\run_EntraFalcon.ps1 -BroCiToken "1.XXXXXXXXXXX"
+.\run_EntraFalcon.ps1 -AuthFlow BroCiToken -BroCiToken "1.XXXXXXXXXXX"
 ```
 
 
@@ -159,12 +172,13 @@ This skips the additional authentication needed to access PIM for Groups data.
 | **UserAgent**          | User agent used for the requests to the token endpoint and API calls.                                                            | `EntraFalcon`                                     |  
 | **DisableCAE**         | Disables requesting Continuous Access Evaluation (CAE) tokens.                                                                   | `false`                                           |
 | **Tenant**             | Specifies the tenant (ID or domain) to authenticate against. Useful when assessing a tenant other than the account’s home tenant.| `Account's home tenant`                           |
-| **OutputFolder**       | Output folder where the reports are stored.                                                                                      | `Results_%TenantName%_YYYYMMDD_HHSS`              |
+| **OutputFolder**       | Output folder where the reports are stored.                                                                                      | `Results_%TenantName%_YYYYMMDD_HHMM`              |
 | **LimitResults**       | Limits the number of groups and users in the report (after sorting by risk). Useful for large tenants.                           | -                                                 |
 | **LogLevel**           | Controls runtime cli logging verbosity. Supported values: `Off` (default), `Verbose`, `Debug`, `Trace`.                          | `Off`                                             |
 | **ApiTop**             | Sets the max number of objects returned from the API. Lower values reduce timeout risk (HTTP 504), but increase request count.   | `999` (Valid range: 5–999)                        |
-| **BroCi**              | Enables BroCi authentication flow (alternate first-party client/redirect + token exchange).                                      | `false`                                           |
-| **BroCiToken**         | Optional Azure Portal **refresh token** used for BroCi. If set, no interactive authentication is required.                       | -                                                 |
+| **AuthFlow**           | Preferred auth-flow selector. Values: `BroCi` (default), `AuthCode`, `DeviceCode`, `ManualCode`, `BroCiManualCode`, `BroCiToken`. | `BroCi`                                         |
+| **BroCiToken**         | Azure Portal **refresh token** for `AuthFlow BroCiToken`.                                                                          | -                                                 |
+| **Csv**                | Enables writing CSV report files in addition to TXT/HTML report files.                                                             | `false`                                           |
 
 
 ## 📊 Some Example Reports
@@ -514,7 +528,7 @@ The following table roughly summarizes the checks performed, along with their im
 |Groups|PIM for Groups: Unprotected group nested in protected group|No|Yes|
 |EnterpriseApp|Entra Role|Yes|Yes|
 |EnterpriseApp|Azure Role|Yes|Yes|
-|EnterpriseApp|Foreign|Yes|Yes|
+|EnterpriseApp|Foreign|Yes|No|
 |EnterpriseApp|API Permission (Application)|Yes|Yes|
 |EnterpriseApp|API Permission (Delegated)|Yes|Yes|
 |EnterpriseApp|Credentials|Yes|Yes|
@@ -588,12 +602,13 @@ The following table roughly summarizes the checks performed, along with their im
 EntraFalcon is not stealthy and can be detected in environments where Microsoft Graph API and Azure sign-in activity are logged and monitored.
 
 ### Default Authentication Used
-When a full enumeration is performed, the tool actively initiates three interactive logins and one non-interactive logins (refresh to another API and another FOCI client):
+When a full enumeration is performed with non-BroCi flows, the tool typically initiates four interactive logins and one non-interactive login. Depending on flow and endpoint support, one additional interactive sign-in may occur for Security Findings policy endpoints.
 |Application ID|Type|Resource ID|Purpose|
 |-|-|-|-|
 |1b730954-1685-4b74-9bfd-dac224a7b894|Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Groups data|
-|04b07795-8ddb-461a-bbee-02f9e1bf7b46|Interactive|00000003-0000-0000-c000-000000000000|	Retrieve general tenant object data|
+|04b07795-8ddb-461a-bbee-02f9e1bf7b46|Interactive|00000003-0000-0000-c000-000000000000|Retrieve general tenant object data|
 |51f81489-12ee-4a9e-aaae-a2591f45987d|Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Entra / Azure roles|
+|80ccca67-54bd-44ab-8625-4b79c4dc7775|Interactive|00000003-0000-0000-c000-000000000000|Retrieve Security Findings policy context|
 |04b07795-8ddb-461a-bbee-02f9e1bf7b46|Non-Interactive|797f4846-ba00-4fd7-ba43-dac1f8f63013|Retrieve Azure IAM role assignment data|
 
 ### BroCi Authentication Used
@@ -620,6 +635,7 @@ To detect usage of EntraFalcon, blue teams can monitor for the listed applicatio
 - **Defender for Endpoint RBAC**: Not assessed
 - **Intune RBAC**: Not assessed
 - **Cloud Environment**: Cloud platforms evolve rapidly. As a result, some assessments or detections may become outdated or inaccurate over time. Moreover, tenants are becoming increasingly complex, and specific configurations or combinations of settings may lead to inaccurate results. While we strive to keep EntraFalcon up to date, it is always recommended to validate findings independently and not rely solely on the tool for critical decisions.
+- **HTML Reports**: The generated HTML reports do not implement protection mechanisms against cross-site scripting (XSS).
 
 
 ## 📦 Integrated External Tools
