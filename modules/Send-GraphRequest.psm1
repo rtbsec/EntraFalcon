@@ -158,8 +158,7 @@ function Send-GraphRequest {
 
             if ($Response.PSObject.Properties.Name -contains 'value') {
                 if ($Response.value.Count -eq 0) {
-                    if ($VerboseMode) { Write-Host "[i] Empty 'value' array detected. Returning nothing." }
-                    return
+                    if ($VerboseMode) { Write-Host "[i] Empty 'value' array detected on current page." }
                 } else {
                     $Results += $Response.value
                 }
@@ -178,8 +177,7 @@ function Send-GraphRequest {
                 $Response = Invoke-RestMethod @irmParams
                 if ($Response.PSObject.Properties.Name -contains 'value') {
                     if ($Response.value.Count -eq 0) {
-                        if ($VerboseMode) { Write-Host "[i] Empty 'value' array detected. Returning nothing." }
-                        return
+                        if ($VerboseMode) { Write-Host "[i] Empty 'value' array detected on current page." }
                     } else {
                         $Results += $Response.value
                     }
