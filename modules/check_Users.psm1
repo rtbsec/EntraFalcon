@@ -430,7 +430,7 @@ function Invoke-CheckUsers {
                     }
 
                     '#microsoft.graph.agentIdentity' {
-                        Write-Log -Level Verbose -Message "The user $($user.Id) owns the AgentIdentity $($OwnedObject.Id)"
+                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentity $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentitys.Add(
                             [PSCustomObject]@{
                                 Id = $OwnedObject.Id
@@ -439,14 +439,22 @@ function Invoke-CheckUsers {
                     }
 
                     '#microsoft.graph.agentIdentityBlueprint' {
-                        Write-Log -Level Verbose -Message "The user $($user.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
+                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentityBlueprint.Add(
                             [PSCustomObject]@{
                                 Id = $OwnedObject.Id
                             }
                         )
                     }
-
+                    '#microsoft.graph.agentIdentityBlueprintPrincipal' {
+                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentityBlueprintPrincipal $($OwnedObject.Id)"
+                        [void]$UserOwnedAgentIdentityBlueprint.Add(
+                            [PSCustomObject]@{
+                                Id = $OwnedObject.Id
+                            }
+                        )
+                    }
+                    
                     '#microsoft.graph.group' {
                         [void]$UserOwnedGroups.Add(
                             [PSCustomObject]@{
