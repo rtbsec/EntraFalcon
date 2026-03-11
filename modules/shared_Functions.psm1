@@ -3566,14 +3566,17 @@ function Get-GroupActiveRoleMetrics {
     $details = @($Group.$detailsProperty | Where-Object { $null -ne $_ })
 
     if ($details.Count -gt 0) {
-        $assignmentsInScope = if ($IncludeEligible) {
-            @($details)
-        } else {
-            @($details | Where-Object { $_.AssignmentType -eq "Active" })
-        }
+        $assignmentsInScope = @(
+            if ($IncludeEligible) {
+                $details
+            } else {
+                $details | Where-Object { $_.AssignmentType -eq "Active" }
+            }
+        )
+        $roleCount = @($assignmentsInScope).Count
 
         return [PSCustomObject]@{
-            RoleCount       = $assignmentsInScope.Count
+            RoleCount       = $roleCount
             PrivilegedCount = if ($RoleSystem -eq "Entra") { @($assignmentsInScope | Where-Object { $_.IsPrivileged -eq $true }).Count } else { 0 }
             MaxTier         = Get-HighestTierLabel -Assignments $assignmentsInScope
             Source          = if ($IncludeEligible) { "DetailsAll" } else { "DetailsActive" }
@@ -4978,13 +4981,13 @@ function Initialize-TenantReportTabs {
 
     $defs = @(
         @{ Prop = 'Summary';                   Key = 'Summary';    Title = 'Summary';                   File = "_EntraFalconEnumerationSummary_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'SecurityFindings';          Key = 'SecurityFindings'; Title = 'Security Findings';    File = "TenantSecurityFindings_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'SecurityFindings';          Key = 'SecurityFindings'; Title = 'Security Findings';    File = "SecurityFindings_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'ConditionalAccessPolicies'; Key = 'CAP';        Title = 'Conditional Access';        File = "ConditionalAccessPolicies_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Users';                     Key = 'Users';      Title = 'Users';                     File = "Users_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Groups';                    Key = 'Groups';     Title = 'Groups';                    File = "Groups_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'ManagedIdenties';           Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'ManagedIdentities';         Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'Agents';                    Key = 'Agents';     Title = 'Agents';                    File = "Agents_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EntraRoles';                Key = 'RoleEntra';  Title = 'Role Assignments (Entra)';  File = "Role_Assignments_Entra_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AzureRoles';                Key = 'RoleAz';     Title = 'Role Assignments (Azure)';  File = "Role_Assignments_Azure_${StartTimestamp}_${tenantNameEscaped}.html" }
@@ -5189,7 +5192,7 @@ function Get-TenantReportAvailability {
     $requestSpecs = @(
         @{ Name = 'Groups';           Url = '/groups' }
         @{ Name = 'AppRegistrations'; Url = '/applications' }
-        @{ Name = 'ManagedIdenties';  Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ManagedIdentity'" } }
+        @{ Name = 'ManagedIdentities'; Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ManagedIdentity'" } }
         #@{ Name = 'EnterpriseApps';   Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'Application'" } }
         #@{ Name = 'Agents';           Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ServiceIdentity'" } }
     )
