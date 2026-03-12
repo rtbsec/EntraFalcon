@@ -3984,6 +3984,7 @@ $global:GLOBALEntraRoleRating = @{
     "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2" = 0 #Hybrid Identity Administrator
     "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3" = 0 #Application Administrator
     "158c047a-c907-4556-b7ef-446551a6b5f7" = 0 #Cloud Application Administrator
+    "db506228-d27e-4b7d-95e5-295956d6615f" = 1 #Agent ID Administrator
     "194ae4cb-b126-40b2-bd5b-6091b380977d" = 1 #Security Administrator
     "d29b2b05-8046-44ba-8758-1e26182fcf32" = 1 #Directory Synchronization Accounts
     "a92aed5d-d78a-4d16-b381-09adb37eb3b0" = 1 #On Premises Directory Sync Account
@@ -4067,7 +4068,9 @@ $global:GLOBALApiPermissionCategorizationList= @{
     "fee28b28-e1f3-4841-818e-2704dc62245f" = "Dangerous" #RoleEligibilitySchedule.ReadWrite.Directory
     "618b6020-bca8-4de6-99f6-ef445fa4d857" = "Dangerous" #PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup
     "7e05723c-0bb0-42da-be95-ae9f08a6e53c" = "Dangerous" #Domain.ReadWrite.All
-    "fc023787-fd04-4e44-9bc7-d454f00c0f0a" = "Dangerous" #Application.ReadUpdate.All   
+    "fc023787-fd04-4e44-9bc7-d454f00c0f0a" = "Dangerous" #Application.ReadUpdate.All
+    "7fddd33b-d884-4ec0-8696-72cff90ff825" = "High" #AgentIdentityBlueprint.ReadWrite.All
+    "0510736e-bdfb-4b37-9a1f-89b4a074763a" = "High" #AgentIdentityBlueprint.AddRemoveCreds.All
     "ab43b826-2c7a-4aff-9ecd-d0629d0ca6a9" = "High" #ADSynchronization.ReadWrite.All
     "9acd699f-1e81-4958-b001-93b1d2506e19" = "High" #EntitlementManagement.ReadWrite.All
     "292d869f-3427-49a8-9dab-8c70152b74e9" = "High" #Organization.ReadWrite.All
@@ -4128,6 +4131,8 @@ $global:GLOBALDelegatedApiPermissionCategorizationList= @{
     "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup" = "Dangerous" #ba974594-d163-484e-ba39-c330d5897667
     "Domain.ReadWrite.All" = "Dangerous" #0b5d694c-a244-4bde-86e6-eb5cd07730fe
     "Application.ReadUpdate.All" = "Dangerous" #0586a906-4d89-4de8-b3c8-1aacdcc0c679
+    "AgentIdentityBlueprint.AddRemoveCreds.All" = "High" #75b5feb2-bfe7-423f-907d-cc505186f246
+    "AgentIdentityBlueprint.ReadWrite.All" = "High" #4fd490fc-1467-48eb-8a4c-421597ab0402
     "EntitlementManagement.ReadWrite.All" = "High" #ae7a573d-81d7-432b-ad44-4ed5c9d89038
     "Organization.ReadWrite.All" = "High" #46ca0847-7e6b-426e-9775-ea810a948356
     "Policy.ReadWrite.PermissionGrant" = "High" #2672f8bb-fd5e-42e0-85e1-ec764dd2614e
@@ -5138,9 +5143,9 @@ function Get-PimforGroupsAssignments {
                         "url"    =   "/identityGovernance/privilegedAccess/group/eligibilitySchedules?`$select=accessId,groupId,principalId&`$filter=groupId eq '$($_.id)'"
                     }
                 }
-    
+                Write-Host "[*] Get eligible objects for those groups"
                 # Send Batch request
-                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -BatchDelay 0.3 -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
+                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -BatchDelay 0.5 -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
                 Write-Host "[+] Got $($PIMforGroupsAssignments.Count) objects eligible for a PIM-enabled group"
                 
             } else {
@@ -5378,7 +5383,7 @@ function start-InitTasks {
         ConditionalAccess      = @{ Count = 0; Enabled = 0 }
         SecurityFindings       = @{ Vulnerable = 0; NotVulnerable = 0; Skipped = 0; Total = 0 }
         EntraRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'App' = 0; 'MI' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Uncategorized' = 0} }
-        AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'Unknown' = 0}; }
+        AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Tier-3' = 0; 'Uncategorized' = 0} }
         PimSettings            = @{ Count = 0}
         Errors                 = @()
     }
