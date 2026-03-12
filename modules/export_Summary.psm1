@@ -295,7 +295,7 @@ return @"
     $ChartsectionAppRegistrations += New-ChartSection -Title "App Registrations" -Prefix "appregistrations" -ChartCount 3
     $ChartsectionManagedIdentities += New-ChartSection -Title "Managed Identities" -Prefix "managedidentities" -ChartCount 2
     $ChartsectionEntraRoles += New-ChartSection -Title "Entra ID Role Assignments" -Prefix "entraroles" -ChartCount 4
-    $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 3
+    $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 4
 
 
     #Dynamically generate sections
@@ -471,6 +471,13 @@ document.addEventListener('DOMContentLoaded', function () {
         azureroles_builtin: {
             builtin: $($GlobalAuditSummary.AzureRoleAssignments.BuiltIn),
             custom: $($($GlobalAuditSummary.AzureRoleAssignments.Count) - $($GlobalAuditSummary.AzureRoleAssignments.BuiltIn))
+        },
+        azureroles_tiers: {
+            'Tier-0': $($GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-0"),
+            'Tier-1': $($GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-1"),
+            'Tier-2': $($GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-2"),
+            'Tier-3': $($GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-3"),
+            'Uncategorized': $($GlobalAuditSummary.AzureRoleAssignments.Tiers.Uncategorized)
         },
         azureroles_principaltypes: {
             'User': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.User),
@@ -757,6 +764,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 }]
             };
         }
+        if (datasetKey === 'azureroles_tiers') {
+            const entries = Object.entries(dataSources.azureroles_tiers);
+            return {
+                labels: entries.map(e => e[0]),
+                datasets: [{
+                    label: 'Assignments',
+                    data: entries.map(e => e[1]),
+                    backgroundColor: chartColorPalette
+                }],
+            };
+        }
         if (datasetKey === 'azureroles_principaltypes') {
             const entries = Object.entries(dataSources.azureroles_principaltypes);
             return {
@@ -963,7 +981,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // ============ Azure Roles ============
         { id: 'azureroles_chart1', title: 'Eligible vs Active', type: 'doughnut', dataset: 'azureroles_general' },
         { id: 'azureroles_chart2', title: 'Built-In vs Custom', type: 'bar', dataset: 'azureroles_builtin', showLegend: false },
-        { id: 'azureroles_chart3', title: 'Principal Types', type: 'bar', dataset: 'azureroles_principaltypes', indexAxis: 'y', showLegend: false }
+        { id: 'azureroles_chart3', title: 'Role Tier Distribution', type: 'bar', dataset: 'azureroles_tiers', indexAxis: 'y', showLegend: false },
+        { id: 'azureroles_chart4', title: 'Principal Types', type: 'bar', dataset: 'azureroles_principaltypes', indexAxis: 'y', showLegend: false }
     ];
 
     // === 4. Render all charts ===
