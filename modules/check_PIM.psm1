@@ -300,18 +300,17 @@ function Invoke-CheckPIM {
             if ($approvalRequired -and $approvalSetting.approvalStages) {
                 foreach ($stage in $approvalSetting.approvalStages) {
                     foreach ($approver in $stage.primaryApprovers) {
+                        $type = 'Unknown'
+                        $MemberCount = "-"
+
                         if ($approver.'@odata.type' -match 'groupMembers') { 
-                                    $type = 'Group'
-                                    if ($AllGroupsDetails.ContainsKey($approver.id)) {
-                                        $MemberCount = $($AllGroupsDetails[$approver.id].Users)
-                                    }
-                                } elseif ($approver.'@odata.type' -match 'singleUser') { 
-                                    $type = 'User' 
-                                    $MemberCount = "-"
-                                } else { 
-                                    $type = 'Unknown'
-                                    $MemberCount = "-"
-                                }
+                            $type = 'Group'
+                            if ($AllGroupsDetails.ContainsKey($approver.id)) {
+                                $MemberCount = $AllGroupsDetails[$approver.id].Users
+                            }
+                        } elseif ($approver.'@odata.type' -match 'singleUser') { 
+                            $type = 'User' 
+                        }
 
                         $approverObj = [PSCustomObject]@{
                             Type        = $type
@@ -830,7 +829,7 @@ $ObjectsDetailsHEAD = @'
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append    
 
     # Set generic information which get injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'Pim' -CurrentReportName 'PIM Enumeration'
+    Set-GlobalReportManifest -CurrentReportKey 'PIM' -CurrentReportName 'PIM Enumeration'
 
 
     # HTML header below the navbar
