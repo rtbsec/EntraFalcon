@@ -1018,7 +1018,10 @@ function Invoke-CheckCaps {
         }
 
         #Check policy with Authentication strengths for enforcing phishing-resistant MFA
-        if ($policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count -eq 0 -and $policy.GrantControls.AuthenticationStrength.id.count -ge 1 -and $policy.Conditions.SignInRiskLevels.count -eq 0 -and $policy.Conditions.UserRiskLevels.count -eq 0) {
+        $authStrengthIdCandidate = "$($policy.GrantControls.AuthenticationStrength.Id)".Trim()
+        $hasNoAuthFlow = @($policy.Conditions.AuthenticationFlows.TransferMethods).Count -eq 0
+        $hasNoUserActions = @($policy.Conditions.Applications.IncludeUserActions).Count -eq 0
+        if ($policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count -eq 0 -and -not [string]::IsNullOrWhiteSpace($authStrengthIdCandidate) -and $policy.Conditions.SignInRiskLevels.count -eq 0 -and $policy.Conditions.UserRiskLevels.count -eq 0 -and $hasNoAuthFlow -and $hasNoUserActions) {
             $PolicyAuthStrength = $true
             $AuthStrengthWarnings = 0
             $ErrorMessages = @()
