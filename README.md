@@ -276,6 +276,7 @@ For Azure roles, this categorization is less precise, as the actual impact depen
 | Application Administrator                     | 0          | 9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3   |
 | Cloud Application Administrator               | 0          | 158c047a-c907-4556-b7ef-446551a6b5f7   |
 | Security Administrator                        | 1          | 194ae4cb-b126-40b2-bd5b-6091b380977d   |
+| Agent ID Administrator                        | 1          | db506228-d27e-4b7d-95e5-295956d6615f   |
 | Conditional Access Administrator              | 1          | b1be1c3e-b65d-4f19-8427-f6fa0d97feb9   |
 | Authentication Administrator                  | 1          | c4e39bd9-1100-46d3-8c65-fb160da0071f   |
 | Azure DevOps Administrator                    | 1          | e3973bdf-4987-49ae-837a-ba8e231c7286   |
@@ -355,6 +356,8 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup        | Dangerous  | 618b6020-bca8-4de6-99f6-ef445fa4d857   |
 | Domain.ReadWrite.All                                        | Dangerous  | 7e05723c-0bb0-42da-be95-ae9f08a6e53c   |
 | Application.ReadUpdate.All                                  | Dangerous  | fc023787-fd04-4e44-9bc7-d454f00c0f0a   |
+| AgentIdentityBlueprint.ReadWrite.All                        | High       | 7fddd33b-d884-4ec0-8696-72cff90ff825   |
+| AgentIdentityBlueprint.AddRemoveCreds.All                   | High       | 0510736e-bdfb-4b37-9a1f-89b4a074763a   |
 | ADSynchronization.ReadWrite.All                             | High       | ab43b826-2c7a-4aff-9ecd-d0629d0ca6a9   |
 | EntitlementManagement.ReadWrite.All                         | High       | 9acd699f-1e81-4958-b001-93b1d2506e19   |
 | Organization.ReadWrite.All                                  | High       | 292d869f-3427-49a8-9dab-8c70152b74e9   |
@@ -400,6 +403,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | OnlineMeetings.ReadWrite.All                                | Medium     | b8bb2037-6e08-44ac-a4ea-4674e010e2a4   |
 | CustomSecAttributeAssignment.ReadWrite.All                  | Medium     | de89b5e4-5b8f-48eb-8925-29c2b33bd8bd   |
 | ServicePrincipalEndpoint.ReadWrite.All                      | Medium     | 89c8469c-83ad-45f7-8ff2-6e3d4285709e   |
+| AgentIdentity.CreateAsManager                               | Low        | 4c390976-b2b7-42e0-9187-c6be3bead001   |
 
 </details>
 
@@ -418,6 +422,8 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup | Dangerous| ba974594-d163-484e-ba39-c330d5897667   |
 | Domain.ReadWrite.All                                 | Dangerous| 0b5d694c-a244-4bde-86e6-eb5cd07730fe   |
 | Application.ReadUpdate.All                           | Dangerous| 0586a906-4d89-4de8-b3c8-1aacdcc0c679   |
+| AgentIdentityBlueprint.AddRemoveCreds.All            | High     | 75b5feb2-bfe7-423f-907d-cc505186f246   |
+| AgentIdentityBlueprint.ReadWrite.All                 | High     | 4fd490fc-1467-48eb-8a4c-421597ab0402   |
 | EntitlementManagement.ReadWrite.All                  | High     | ae7a573d-81d7-432b-ad44-4ed5c9d89038   |
 | Organization.ReadWrite.All                           | High     | 46ca0847-7e6b-426e-9775-ea810a948356   |
 | Policy.ReadWrite.PermissionGrant                     | High     | 2672f8bb-fd5e-42e0-85e1-ec764dd2614e   |

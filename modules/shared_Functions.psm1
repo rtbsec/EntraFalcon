@@ -4118,6 +4118,7 @@ $global:GLOBALApiPermissionCategorizationList= @{
     "b8bb2037-6e08-44ac-a4ea-4674e010e2a4" = "Medium" #OnlineMeetings.ReadWrite.All  
     "de89b5e4-5b8f-48eb-8925-29c2b33bd8bd" = "Medium" #CustomSecAttributeAssignment.ReadWrite.All
     "89c8469c-83ad-45f7-8ff2-6e3d4285709e" = "Medium" #ServicePrincipalEndpoint.ReadWrite.All (Still an issue?)
+    "4c390976-b2b7-42e0-9187-c6be3bead001" = "Low" #AgentIdentity.CreateAsManager
 }
 
 $global:GLOBALDelegatedApiPermissionCategorizationList= @{
