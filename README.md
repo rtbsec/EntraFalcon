@@ -23,7 +23,7 @@ Findings are presented in interactive HTML reports to support efficient explorat
 - Built-in authentication supporting multiple methods
 - Uses first-party Microsoft applications with pre-consented scopes to bypass Graph API consent prompts
 - Generates navigable HTML reports that support filtering, sorting, data export, etc.
-- Performs 65 automated checks and summarizes the results in a Security Findings Report
+- Performs >60 automated checks and summarizes the results in a Security Findings Report
     - Includes checks for weak tenant configurations and risky object properties or permissions
     - Provides severity ratings as well as descriptions of the issue, potential threats, and remediation guidance
     - Lists affected objects and links directly to their detailed reports for further investigation
@@ -182,6 +182,10 @@ This skips the additional authentication needed to access PIM for Groups data.
 
 
 ## 📊 Some Example Reports
+
+### Security Findign Report
+![alt text](/images/security_findings_report.png)
+![alt text](/images/security_findings_report2.png)
 
 ### Users
 ![alt text](/images/user.png)
