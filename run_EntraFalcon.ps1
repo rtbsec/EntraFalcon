@@ -5,7 +5,7 @@
     .Description
     EntraFalcon is a PowerShell-based assessment tool for pentesters, security analysts, and system administrators to evaluate the security posture of a Microsoft Entra ID environment.
     The tool identifies potential privilege escalation paths, excessive permissions, inactive accounts, and Conditional Access misconfigurations across users, groups, applications, roles, and policies. Findings are compiled into interactive HTML reports with a simple risk scoring.
-    Designed with a focus on ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports both Windows and Linux, and requires no external dependencies or Microsoft Graph API consent.
+    Designed with a focus on ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports Windows, Linux, and macOS, and requires no external dependencies or Microsoft Graph API consent.
 
     .PARAMETER Tenant
     Specifies the Entra ID tenant to authenticate against.
@@ -31,20 +31,19 @@
     Limits the number of groups or users included in the report. 
     The limit is applied *after* sorting by risk score, ensuring only the highest-risk groups and users are processed and reported. This helps improve performance and keep the reports usable in large environments.
 
-    .PARAMETER AuthMethod
-    3 different Authentication methods are supported:
-    - `AuthCode` (default): Interactive browser login using legacy .NET
-    - `DeviceCode`: Device Code Flow for environments without a browser
-    - `ManualCode`: Outputs an auth URL for use on a separate device, and requires manual input of the authorization code
-    Note: When a BroCi token is supplied, AuthMethod is ignored for the BroCi bootstrap step.
-
-    .PARAMETER BroCi
-    Enables the BroCi authentication flow, which uses alternate client and redirect parameters and may perform
-    additional token exchange steps.
+    .PARAMETER AuthFlow
+    Preferred authentication flow selector.
+    Supported values:
+    - `BroCi` (default): BroCi flow
+    - `AuthCode`: Auth Code flow (non-BroCi)
+    - `DeviceCode`: Device Code flow
+    - `ManualCode`: Auth Code + Manual Code flow (non-BroCi)
+    - `BroCiManualCode`: BroCi + Manual Code flow
+    - `BroCiToken`: BroCi flow using a supplied refresh token (`-BroCiToken`)
 
     .PARAMETER BroCiToken
     Optional Bring Your Own BroCi refresh token.
-    When specified, BroCi mode is implicitly enabled and the BroCi bootstrap authentication step is skipped.
+    Required when using `-AuthFlow BroCiToken`.
     The provided token must be a valid refresh token for the Azure Portal client (c44b4083-3bb0-49c1-b47d-974e53cbdf3c).
     Treat this value as sensitive secret material.
 
@@ -65,6 +64,10 @@
     .PARAMETER QAMode
     Dumps the AllGroups and AllUsers objects as JSON for internal QA tests.
 
+    .PARAMETER Csv
+    Enables CSV report generation for enumeration modules.
+    By default, reports are written as HTML and TXT only.
+
     .NOTES
     Author: Christian Feuchter, Compass Security Switzerland AG, https://www.compass-security.com/
     Source: https://github.com/CompassSecurity/EntraFalcon 
@@ -74,8 +77,8 @@
 [CmdletBinding()]
 Param (
     [Parameter(Mandatory = $false)]
-    [ValidateSet("AuthCode", "DeviceCode", "ManualCode")]
-    [string]$AuthMethod = "AuthCode",
+    [ValidateSet("BroCi", "AuthCode", "DeviceCode", "ManualCode", "BroCiManualCode", "BroCiToken")]
+    [string]$AuthFlow = "BroCi",
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Off", "Verbose", "Debug", "Trace")]
@@ -94,9 +97,6 @@ Param (
     [switch]$DisableCAE = $false,
 
     [Parameter(Mandatory=$false)]
-    [switch]$BroCi = $false,
-
-    [Parameter(Mandatory=$false)]
     [string]$Tenant,
 
     [Parameter(Mandatory = $false)]
@@ -112,28 +112,20 @@ Param (
     [Parameter(Mandatory=$false)]
     [switch]$QAMode = $false,
 
-    [Parameter(Mandatory = $false)]
-    [string]$BroCiToken,
+    [Parameter(Mandatory=$false)]
+    [switch]$Csv = $false,
 
     [Parameter(Mandatory = $false)]
-    [switch]$ManualCode #Alias because of EntraTokenAid error message
+    [string]$BroCiToken
 )
 
-# Override AuthMethod if -ManualCode is used
-if ($ManualCode.IsPresent) {
-    $AuthMethod = "ManualCode"
-}
-
-if ($BroCi -and $AuthMethod -eq "DeviceCode") {
-    Write-Error "Invalid parameter combination: -AuthMethod DeviceCode cannot be used with -BroCi" -ErrorAction Stop
-}
-
 #Constants
-$EntraFalconVersion = "V20260208"
+$EntraFalconVersion = "V20260316"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 Import-Module (Join-Path $ScriptRoot 'modules\EntraTokenAid.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Send-ApiRequest.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\shared_Functions.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\check_Groups.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\check_EnterpriseApps.psm1') -Force
@@ -146,13 +138,25 @@ Import-Module (Join-Path $ScriptRoot 'modules\Send-GraphBatchRequest.psm1') -For
 Import-Module (Join-Path $ScriptRoot 'modules\Send-GraphRequest.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\export_Summary.psm1') -Force
 Import-Module (Join-Path $ScriptRoot 'modules\check_PIM.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_Tenant.psm1') -Force
 
+if ($AuthFlow -ne "BroCiToken" -and -not [string]::IsNullOrWhiteSpace($BroCiToken)) {
+    Write-Error "Invalid parameter combination: -BroCiToken can only be used with -AuthFlow BroCiToken." -ErrorAction Stop
+}
+
+if ($AuthFlow -eq "BroCiToken" -and [string]::IsNullOrWhiteSpace($BroCiToken)) {
+    Write-Error "Invalid parameter combination: -AuthFlow BroCiToken requires -BroCiToken." -ErrorAction Stop
+}
+
+# Check non-Windows auth flow compatibility (Linux/macOS)
+if (-not (Test-NonWindowsAuthFlowCompatibility -AuthFlow $AuthFlow -ReadmePath (Join-Path $ScriptRoot 'README.md'))) {
+    return
+}
 
 #Splat AuthMethods
 $Global:GLOBALAuthMethods = @{ 
-    AuthMethod = $AuthMethod
+    AuthFlow = $AuthFlow
  }
-if ($BroCi) { $GLOBALAuthMethods.BroCi = $true }
 
 if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
 
@@ -166,7 +170,6 @@ if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
         Write-Error "Invalid -BroCiToken: expected a refresh token starting with '1.'." -ErrorAction Stop
     }
     $GLOBALAuthMethods.BroCiToken = $BroCiToken
-    $GLOBALAuthMethods.BroCi = $true
 }
 
 
@@ -195,6 +198,11 @@ if ($QAMode) {
     $optionalParamsUserandGroup['QAMode'] = $QAMode
 }
 
+$optionalParamsOutput = @{}
+if ($Csv) {
+    $optionalParamsOutput['Csv'] = $true
+}
+
 #Define summary array and show banner
 Start-InitTasks -EntraFalconVersion $EntraFalconVersion -UserAgent $UserAgent
 Show-EntraFalconBanner -EntraFalconVersion $EntraFalconVersion
@@ -211,7 +219,7 @@ if (-Not(EnsureAuthMsGraph)) {
 if (-not($SkipPimForGroups)) {
 write-host ""
 write-host "********************************** PIM for Groups: Pre-Collection Phase **********************************"
-    $TenantPimForGroupsAssignments = Get-PimforGroupsAssignments -AuthMethod $AuthMethod
+    $TenantPimForGroupsAssignments = Get-PimforGroupsAssignments
 } else {
     $global:GLOBALPimForGroupsChecked = $false
 }
@@ -270,6 +278,34 @@ if ($TenantPimForGroupsAssignments) {
     $TenantPimForGroupsAssignments = Get-PIMForGroupsAssignmentsDetails -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments
 }
 
+# Prepare authentication context for Security Findings extra API calls.
+$global:GLOBALSecurityFindingsAccessContext = @{
+    TokenSource = "MainGraph"
+    IsAvailable = $true
+    Reason      = ""
+}
+
+# Authentication for Security Findings
+$isBroCiFlow = @("BroCi", "BroCiManualCode", "BroCiToken") -contains $AuthFlow
+if ($isBroCiFlow) {
+    Write-Log -Level Verbose -Message "[SecurityFindings] BroCi flow detected. Reusing existing Graph token for special policy endpoints."
+} elseif ($AuthFlow -eq "DeviceCode") {
+    $global:GLOBALSecurityFindingsAccessContext.TokenSource = "Unavailable"
+    $global:GLOBALSecurityFindingsAccessContext.IsAvailable = $false
+    $global:GLOBALSecurityFindingsAccessContext.Reason = "DeviceCodeNotSupported"
+    Write-Log -Level Verbose -Message "[SecurityFindings] DeviceCode flow detected. Special policy endpoints are skipped for this flow."
+} else {
+    if (EnsureAuthSecurityFindingsMsGraph) {
+        $global:GLOBALSecurityFindingsAccessContext.TokenSource = "SecurityFindingsSpecial"
+        Write-Log -Level Verbose -Message "[SecurityFindings] Special Graph token acquired."
+    } else {
+        $global:GLOBALSecurityFindingsAccessContext.TokenSource = "Unavailable"
+        $global:GLOBALSecurityFindingsAccessContext.IsAvailable = $false
+        $global:GLOBALSecurityFindingsAccessContext.Reason = "AuthenticationFailed"
+        Write-Log -Level Verbose -Message "[SecurityFindings] Special policy endpoints will be skipped because special authentication failed."
+    }
+}
+
 # Get user's MFA status
 $UserAuthMethodsTable = Get-RegisterAuthMethodsUsers
 
@@ -285,19 +321,20 @@ $TenantReports = [pscustomobject]@{
     Users                     = $true
     Groups                    = $false
     EnterpriseApps            = $true
-    ManagedIdenties           = $false
+    ManagedIdentities         = $false
     AppRegistrations          = $false
     ConditionalAccessPolicies = $false
     Agents                    = $false
     EntraRoles                = $true
     AzureRoles                = $false
     PimForEntra               = $false
+    SecurityFindings          = $true
     Summary                   = $true
 }
 $ReportsBasedOnObjects = Get-TenantReportAvailability -IncludeMsApps:$IncludeMsApps
 $global:GLOBALAzureIamWarningText = $null
 if (-not $GLOBALAzurePsChecks) {
-    if ($ReportsBasedOnObjects.ManagedIdenties) {
+    if ($ReportsBasedOnObjects.ManagedIdentities) {
         $global:GLOBALAzureIamWarningText = "Coverage gap: Azure IAM not assessed (no subscription visible or accessible, but managed identities exist). Azure role assignments are therefore missing from this report."
     } else {
         $global:GLOBALAzureIamWarningText = "Coverage gap: Azure IAM not assessed (no subscriptions exist or no access). Azure role assignments are therefore missing from this report."
@@ -308,7 +345,7 @@ $TenantReports.PimForEntra               = ($null -ne $TenantPimRoleAssignments 
 $TenantReports.AzureRoles                = ($null -ne $AzureIAMAssignments -and $AzureIAMAssignments.Count -gt 0)
 $TenantReports.Groups           = $ReportsBasedOnObjects.Groups
 $TenantReports.AppRegistrations = $ReportsBasedOnObjects.AppRegistrations
-$TenantReports.ManagedIdenties  = $ReportsBasedOnObjects.ManagedIdenties
+$TenantReports.ManagedIdentities = $ReportsBasedOnObjects.ManagedIdentities
 #$TenantReports.EnterpriseApps   = $ReportsBasedOnObjects.EnterpriseApps
 #$TenantReports.Agents   = $ReportsBasedOnObjects.Agents
 $global:ReportContext = [pscustomobject]@{
@@ -321,35 +358,39 @@ $TenantReportsText = ($TenantReports.PSObject.Properties | Sort-Object Name | Fo
 Write-Log -Level Debug -Message ("Reports:{0}" -f $TenantReportsText)
 
 # Main enumeration
-write-host "`n********************************** [1/9] Enumerating Groups **********************************"
-$AllGroupsDetails = Invoke-CheckGroups -AdminUnitWithMembers $AdminUnitWithMembers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -OutputFolder $OutputFolder -Devices $Devices -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsUserandGroup
+write-host "`n********************************** [1/10] Enumerating Groups **********************************"
+$AllGroupsDetails = Invoke-CheckGroups -AdminUnitWithMembers $AdminUnitWithMembers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -OutputFolder $OutputFolder -Devices $Devices -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsUserandGroup @optionalParamsOutput
 
-write-host "`n********************************** [2/9] Enumerating Enterprise Apps **********************************"
-$EnterpriseApps = Invoke-CheckEnterpriseApps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsET
+write-host "`n********************************** [2/10] Enumerating Enterprise Apps **********************************"
+$EnterpriseApps = Invoke-CheckEnterpriseApps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsET @optionalParamsOutput
 
-write-host "`n********************************** [3/9] Enumerating Managed Identities **********************************"
-$ManagedIdentities = Invoke-CheckManagedIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -ApiTop $ApiTop
+write-host "`n********************************** [3/10] Enumerating Managed Identities **********************************"
+$ManagedIdentities = Invoke-CheckManagedIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsOutput
 
-write-host "`n********************************** [4/9] Enumerating App Registrations **********************************"
-$AppRegistrations = Invoke-CheckAppRegistrations -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -TenantRoleAssignments $TenantRoleAssignments -OutputFolder $OutputFolder
+write-host "`n********************************** [4/10] Enumerating App Registrations **********************************"
+$AppRegistrations = Invoke-CheckAppRegistrations -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -TenantRoleAssignments $TenantRoleAssignments -OutputFolder $OutputFolder @optionalParamsOutput
 
-write-host "`n********************************** [5/9] Enumerating Users **********************************"
-$Users = Invoke-CheckUsers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -UserAuthMethodsTable $UserAuthMethodsTable -Devices $Devices -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsUserandGroup
+write-host "`n********************************** [5/10] Enumerating Users **********************************"
+$Users = Invoke-CheckUsers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -UserAuthMethodsTable $UserAuthMethodsTable -Devices $Devices -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsUserandGroup @optionalParamsOutput
 
-write-host "`n********************************** [6/9] Generating Role Assignments **********************************"
-Invoke-CheckRoles -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -Users $Users -ManagedIdentities $ManagedIdentities -OutputFolder $OutputFolder
+write-host "`n********************************** [6/10] Generating Role Assignments **********************************"
+Invoke-CheckRoles -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -Users $Users -ManagedIdentities $ManagedIdentities -OutputFolder $OutputFolder @optionalParamsOutput
 
-write-host "`n********************************** [7/9] Enumerating Conditional Access Policies **********************************"
-$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments
+write-host "`n********************************** [7/10] Enumerating Conditional Access Policies **********************************"
+$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments @optionalParamsOutput
 
-write-host "`n********************************** [8/9] Enumerating PIM Role Settings **********************************"
+write-host "`n********************************** [8/10] Enumerating PIM Role Settings **********************************"
 if ($GLOBALPIMForEntraRolesChecked) {
-    Invoke-CheckPIM -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -AllGroupsDetails $AllGroupsDetails -Users $Users -TenantRoleAssignments $TenantRoleAssignments -AllCaps $AllCaps
+    $PimforEntraRoles = Invoke-CheckPIM -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -AllGroupsDetails $AllGroupsDetails -Users $Users -TenantRoleAssignments $TenantRoleAssignments -AllCaps $AllCaps @optionalParamsOutput
 } else {
     write-host "[!] Tenant is not licensed to use PIM. Skipping role settings checks..."
+    $PimforEntraRoles = @{}
 }
 
-write-host "`n********************************** [9/9] Generating Summary Report **********************************"
+write-host "`n********************************** [9/10] Enumerating Security Findings **********************************"
+Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices
+
+write-host "`n********************************** [10/10] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
 Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder
 

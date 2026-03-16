@@ -3686,10 +3686,10 @@ function Test-NonWindowsAuthFlowCompatibility {
     Write-Host "[!] The current auth flow is not supported on $hostOs." -ForegroundColor Red
     Write-Host "[!] Selected flow: $selectedDisplay ($selectedHint)" -ForegroundColor Red
     Write-Host "[i] Supported non-Windows alternatives (Linux/macOS) are:" -ForegroundColor Yellow
-    Write-Host "    - Device Code Flow: -AuthFlow DeviceCode"
     Write-Host "    - Auth Code + Manual Code Flow: -AuthFlow ManualCode"
     Write-Host "    - BroCi + Manual Code Flow: -AuthFlow BroCiManualCode"
     Write-Host "    - BroCi with Token: -AuthFlow BroCiToken -BroCiToken `"<refresh_token>`""
+    Write-Host "    - Device Code Flow: -AuthFlow DeviceCode"
     Write-Host "[i] See '$ReadmePath' for more details."
 
     return $false

@@ -4,7 +4,7 @@
 
 EntraFalcon is a PowerShell-based assessment tool for pentesters, security analysts, and system administrators to evaluate the security posture of a Microsoft Entra ID environment.
 
-Designed for ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports both Windows and Linux, and requires no additional PowerShell modules, additional installations or Microsoft Graph API consent.
+Designed for ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports both Windows and Linux, and requires no additional PowerShell modules, extra installations, or Microsoft Graph API consent.
 
 The tool helps uncover privileged objects, potentially risky assignments and Conditional Access misconfigurations that are often overlooked, such as:
 - Users with control over high-privilege groups or applications
@@ -19,7 +19,7 @@ Findings are presented in interactive HTML reports to support efficient explorat
 
 ## 🚀 Features
 
-- Simple PowerShell script compatible with PowerShell 5.1 and 7. Works on Windows, Linux
+- Simple PowerShell script compatible with PowerShell 5.1 and 7. Works on Windows and Linux
 - Built-in authentication supporting multiple methods
 - Uses first-party Microsoft applications with pre-consented scopes to bypass Graph API consent prompts
 - Generates navigable HTML reports that support filtering, sorting, data export, etc.
@@ -43,7 +43,7 @@ Findings are presented in interactive HTML reports to support efficient explorat
     - Azure Role Assignments
     - Conditional Access Policies
     - Administrative Units
-	- PIM settings (for Entra Roles)
+    - PIM settings (for Entra Roles)
 
 
 ## ✅ Requirements
@@ -83,7 +83,7 @@ Use `-AuthFlow` to select the authentication flow.
 | BroCi                       | Yes     | No    | 1                  | High        | `-AuthFlow BroCi` *(default)*        | Avoids reliance on legacy clients such as *Azure Active Directory PowerShell*. |
 | Auth Code Flow              | Yes     | No    | 4                  | Normal      | `-AuthFlow AuthCode`                 | Standard non-BroCi auth code flow. |
 | Device Code Flow            | Yes     | Yes   | 3                  | Normal      | `-AuthFlow DeviceCode`               | Authentication can be completed on another device, but two Security Findings checks run with reduced depth. |
-| Auth Code + Manual Code Flow| Yes     | Yes   | 4                  | Low-Normal  | `-AuthFlow ManualCode`               | Authentication be completed on a different device or browser session. |
+| Auth Code + Manual Code Flow| Yes     | Yes   | 4                  | Low-Normal  | `-AuthFlow ManualCode`               | Authentication can be completed on a different device or browser session. |
 | BroCi + Manual Code Flow    | Yes     | Yes   | 1                  | Low         | `-AuthFlow BroCiManualCode`          | Authorization code must be manually extracted from browser developer tools. |
 | BroCi with Token            | Yes     | Yes   | 0                  | Low         | `-AuthFlow BroCiToken -BroCiToken "<refresh_token>"` | Refresh token must be obtained manually (e.g., from browser dev tools or another auth tool). |
 
@@ -151,7 +151,7 @@ Example: Obtaining the refresh token from the browser
 ```
 
 
-### Other Parameter
+### Other Parameters
 
 #### Include Microsoft-Owned Enterprise Apps
 By default, official Microsoft enterprise applications are excluded from the assessment to reduce noise. To include them in the enumeration and analysis, use the `-IncludeMsApps` switch:
@@ -183,7 +183,7 @@ This skips the additional authentication needed to access PIM for Groups data.
 
 ## 📊 Some Example Reports
 
-### Security Findign Report
+### Security Finding Report
 ![alt text](/images/security_findings_report.png)
 ![alt text](/images/security_findings_report2.png)
 
@@ -652,5 +652,6 @@ To detect usage of EntraFalcon, blue teams can monitor for the listed applicatio
 The following submodules have been forked and integrated into EntraFalcon to support authentication, Microsoft Graph interaction and report charts:
 - [EntraTokenAid](https://github.com/zh54321/EntraTokenAid)
 - [GraphRequest](https://github.com/zh54321/GraphRequest)
+- [Send-ApiRequest](https://github.com/zh54321/Send-ApiRequest)
 - [GraphBatchRequest](https://github.com/zh54321/GraphBatchRequest)
 - [Chart.js](https://github.com/chartjs/Chart.js)
