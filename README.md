@@ -279,7 +279,7 @@ For Azure roles, this categorization is less precise, as the actual impact depen
 | Hybrid Identity Administrator                 | 0          | 8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2   |
 | Application Administrator                     | 0          | 9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3   |
 | Cloud Application Administrator               | 0          | 158c047a-c907-4556-b7ef-446551a6b5f7   |
-| Security Administrator                        | 1          | 194ae4cb-b126-40b2-bd5b-6091b380977d   |
+| Security Administrator                        | 0          | 194ae4cb-b126-40b2-bd5b-6091b380977d   |
 | Agent ID Administrator                        | 1          | db506228-d27e-4b7d-95e5-295956d6615f   |
 | Conditional Access Administrator              | 1          | b1be1c3e-b65d-4f19-8427-f6fa0d97feb9   |
 | Authentication Administrator                  | 1          | c4e39bd9-1100-46d3-8c65-fb160da0071f   |
