@@ -457,12 +457,12 @@ function Invoke-CheckRoles {
     $SortedAzureRoles = $SortedAzureRoles | Sort-Object -Property @{
         # Primary sorting: Scope depth and specific path rules
         Expression = {
-            if ($_['Scope'] -eq '/') {
+            if ($_.Scope -eq '/') {
                 0  # Root path should come first
-            } elseif ($_['Scope'] -like '/providers/Microsoft.Management/managementGroups/*') {
+            } elseif ($_.Scope -like '/providers/Microsoft.Management/managementGroups/*') {
                 1  # Management group paths come second
             } else {
-                2 + ($_['Scope'] -split '/').Count  # Subscription paths sorted by depth
+                2 + ($_.Scope -split '/').Count  # Subscription paths sorted by depth
             }
         }
     }, @{
