@@ -183,9 +183,55 @@ function Invoke-CheckAppRegistrations {
         Return $AllAppRegistrationsHT
     }
 
+    # Build lookups once to avoid repeated full scans in the per-app loop.
+    $EnterpriseAppsByAppId = @{}
+    foreach ($entry in $EnterpriseApps.GetEnumerator()) {
+        if ($null -eq $entry.Value) { continue }
+        if ([string]::IsNullOrWhiteSpace($entry.Value.AppId)) { continue }
+        if (-not $EnterpriseAppsByAppId.ContainsKey($entry.Value.AppId)) {
+            $EnterpriseAppsByAppId[$entry.Value.AppId] = [PSCustomObject]@{
+                ObjectId = $entry.Name
+                Data     = $entry.Value
+            }
+        }
+    }
+
+    $CloudAppAdminAssignmentsByScope = @{}
+    $AppAdminAssignmentsByScope = @{}
+    foreach ($assignmentSet in $TenantRoleAssignments.Values) {
+        foreach ($assignment in @($assignmentSet)) {
+            if ([string]::IsNullOrWhiteSpace([string]$assignment.DirectoryScopeId)) { continue }
+            switch ($assignment.RoleDefinitionId) {
+                "158c047a-c907-4556-b7ef-446551a6b5f7" {
+                    if (-not $CloudAppAdminAssignmentsByScope.ContainsKey($assignment.DirectoryScopeId)) {
+                        $CloudAppAdminAssignmentsByScope[$assignment.DirectoryScopeId] = @()
+                    }
+                    $CloudAppAdminAssignmentsByScope[$assignment.DirectoryScopeId] += [PSCustomObject]@{
+                        PrincipalId     = $assignment.PrincipalId
+                        AssignmentType  = $assignment.AssignmentType
+                    }
+                    break
+                }
+                "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3" {
+                    if (-not $AppAdminAssignmentsByScope.ContainsKey($assignment.DirectoryScopeId)) {
+                        $AppAdminAssignmentsByScope[$assignment.DirectoryScopeId] = @()
+                    }
+                    $AppAdminAssignmentsByScope[$assignment.DirectoryScopeId] += [PSCustomObject]@{
+                        PrincipalId     = $assignment.PrincipalId
+                        AssignmentType  = $assignment.AssignmentType
+                    }
+                    break
+                }
+            }
+        }
+    }
 
     #Get members of Cloud Application Administrator (158c047a-c907-4556-b7ef-446551a6b5f7) with the scope for the Tenant
-    $CloudAppAdminTenant = $TenantRoleAssignments.Values | ForEach-Object {$_ | Where-Object { $_.RoleDefinitionId -eq "158c047a-c907-4556-b7ef-446551a6b5f7" -and $_.DirectoryScopeId -eq "/" }} | Select-Object PrincipalId,AssignmentType
+    $CloudAppAdminTenant = if ($CloudAppAdminAssignmentsByScope.ContainsKey("/")) {
+        @($CloudAppAdminAssignmentsByScope["/"])
+    } else {
+        @()
+    }
     $CloudAppAdminTenantDetails = foreach ($Object in $CloudAppAdminTenant) {
         # Get the object details
         $ObjectDetails = GetObjectInfo $Object.PrincipalId
@@ -197,7 +243,11 @@ function Invoke-CheckAppRegistrations {
     }
     
     #Get members of Application Administrator (9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3) with the scope for current the Tenant
-    $AppAdminTenant = $TenantRoleAssignments.Values | ForEach-Object {$_ | Where-Object { $_.RoleDefinitionId -eq "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3" -and $_.DirectoryScopeId -eq "/" }} | Select-Object PrincipalId,AssignmentType
+    $AppAdminTenant = if ($AppAdminAssignmentsByScope.ContainsKey("/")) {
+        @($AppAdminAssignmentsByScope["/"])
+    } else {
+        @()
+    }
     $AppAdminTenantDetails = foreach ($Object in $AppAdminTenant) {
         # Get the object details
         $ObjectDetails = GetObjectInfo $Object.PrincipalId
@@ -493,7 +543,12 @@ function Invoke-CheckAppRegistrations {
 
 
         #Get members of Cloud Application Administrator (158c047a-c907-4556-b7ef-446551a6b5f7) with the scope for current App Registrations
-        $CloudAppAdminCurrentApp = $TenantRoleAssignments.Values | ForEach-Object {$_ | Where-Object { $_.RoleDefinitionId -eq "158c047a-c907-4556-b7ef-446551a6b5f7" -and $_.DirectoryScopeId -eq "/$($item.Id)" }} | Select-Object PrincipalId,AssignmentType
+        $scopeKey = "/$($item.Id)"
+        $CloudAppAdminCurrentApp = if ($CloudAppAdminAssignmentsByScope.ContainsKey($scopeKey)) {
+            @($CloudAppAdminAssignmentsByScope[$scopeKey])
+        } else {
+            @()
+        }
         
         $CloudAppAdminCurrentAppDetails = foreach ($Object in $CloudAppAdminCurrentApp) {
             # Get the object details
@@ -506,7 +561,11 @@ function Invoke-CheckAppRegistrations {
         }
         
         #Get members of Application Administrator (9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3) with the scope for current App Registrations
-        $AppAdminCurrentApp = $TenantRoleAssignments.Values | ForEach-Object {$_ | Where-Object { $_.RoleDefinitionId -eq "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3" -and $_.DirectoryScopeId -eq "/$($item.Id)" }} | Select-Object PrincipalId,AssignmentType
+        $AppAdminCurrentApp = if ($AppAdminAssignmentsByScope.ContainsKey($scopeKey)) {
+            @($AppAdminAssignmentsByScope[$scopeKey])
+        } else {
+            @()
+        }
         $AppAdminCurrentAppDetails = foreach ($Object in $AppAdminCurrentApp) {
             # Get the object details
             $ObjectDetails = GetObjectInfo $Object.PrincipalId
@@ -606,10 +665,11 @@ function Invoke-CheckAppRegistrations {
         }
 
         #Take ImpactScore and ObjectId from SP
-        $EnterpriseApps.GetEnumerator() | Where-Object { $_.Value.AppId -eq $item.AppId } | Select-Object -First 1 | ForEach-Object { 
-            $ImpactScore += $_.Value.Impact
-            $SPObjectID = $_.Name
-            $ApiDelegatedCount = $_.Value.ApiDelegated
+        if ($EnterpriseAppsByAppId.ContainsKey($item.AppId)) {
+            $MatchingEnterpriseApp = $EnterpriseAppsByAppId[$item.AppId]
+            $ImpactScore += $MatchingEnterpriseApp.Data.Impact
+            $SPObjectID = $MatchingEnterpriseApp.ObjectId
+            $ApiDelegatedCount = $MatchingEnterpriseApp.Data.ApiDelegated
         }
 
         #Format warning messages
