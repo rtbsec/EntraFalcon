@@ -1253,7 +1253,7 @@ function Invoke-CheckEnterpriseApps {
 
     #Process direct App ownerships (SP->SP) (take over Impact, inherit likelihood)
     $SPOwningSPs = $AllServicePrincipal | Where-Object { $_.SpOwn -ge 1 }
-    Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningApps.count)"
+    Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningSPs.count)"
     #For each object which owns an App registration
     foreach ($SpOwnerObject in $SPOwningSPs) {
         
