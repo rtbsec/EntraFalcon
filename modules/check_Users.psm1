@@ -1285,7 +1285,7 @@ function Invoke-CheckUsers {
                     "GroupOwnership" = $app.GroupOwnership
                     "AppOwnership" = $app.AppOwnership
                     "EntraRoles" = $app.EntraRoles
-                    "AzureRoles" = $app.GroupOwnership
+                    "AzureRoles" = $app.AzureRoles
                     "APIPermission" = "D:$($app.ApiDangerous) / H:$($app.ApiHigh) / M:$($app.ApiMedium) / L:$($app.ApiLow) / U:$($app.ApiMisc)"
                     "Warnings" = $app.Warnings
                 }
