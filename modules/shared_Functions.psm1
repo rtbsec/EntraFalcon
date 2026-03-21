@@ -4327,11 +4327,7 @@ function Invoke-AzureRoleProcessing {
                 }
                 default {
                     $UnknownTierCount++
-                    if ($Role.IsPrivileged) {
-                        $RoleImpact = $GLOBALImpactScore["AzureRoleTier?Privileged"]
-                    } else {
-                        $RoleImpact = $GLOBALImpactScore["AzureRoleTier?"]
-                    }
+                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier?"]
                     break
                 }
             }
