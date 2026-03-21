@@ -725,8 +725,8 @@ function Invoke-CheckAppRegistrations {
                 [pscustomobject]@{ 
                     "Type" = $($object.Type)
                     "DisplayName" = $($object.DisplayName)
-                    "StartDateTime" = $($object.StartDateTime.ToString())
-                    "EndDateTime" = $($object.EndDateTime.ToString())
+                    "StartDateTime" = $(if ($null -ne $object.StartDateTime) { $object.StartDateTime.ToString() } else { "-" })
+                    "EndDateTime" = $(if ($null -ne $object.EndDateTime) { $object.EndDateTime.ToString() } else { "-" })
                 }
             }
 
