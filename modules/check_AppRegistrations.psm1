@@ -266,6 +266,7 @@ function Invoke-CheckAppRegistrations {
         $AppRolesDetails = @()
         $AppCredentials = @()
         $SPObjectID = @()
+        $ApiDelegatedCount = 0
         $AppHomePage = $null
         $Listfindings = ""
         $DefaultRedirectUri = $item.DefaultRedirectUri
