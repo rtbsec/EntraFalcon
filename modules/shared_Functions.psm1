@@ -5114,7 +5114,6 @@ function Get-ConditionalAccessPolicies {
         $global:GLOBALPermissionForCaps = $true
     } else {
         Write-Host "[!] No Conditional Access Policies found."
-        $GroupScriptWarningList += "Coverage gap: Conditional Access group assignments not assessed; CAP links may be missing."
         $global:GLOBALPermissionForCaps = $false
     }
     Return $CapGroups
