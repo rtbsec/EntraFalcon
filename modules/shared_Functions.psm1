@@ -1218,6 +1218,9 @@ $global:GLOBALJavaScript_Table = @'
             if (input.includes('||')) {
                 return input.split('||').some(part => parseOperatorFilter(part.trim(), rawValue));
             }
+            if (input.includes('&&')) {
+                return input.split('&&').map(part => part.trim()).filter(Boolean).every(part => parseOperatorFilter(part, rawValue));
+            }
             const visibleText = extractText(rawValue).trim();
             const valStr = visibleText.toLowerCase();
             const rawStr = String(rawValue).toLowerCase(); // includes HTML
@@ -2303,6 +2306,7 @@ $global:GLOBALJavaScript_Nav = @'
                         <li>Filters can be negated by starting with <code>!</code> (except for numeric comparisons).<br>Examples: <code>!Mallory</code>, <code>!=Mallory</code>, <code>!^Mallory</code> or <code>!$domain.ch</code>.</li>
                         <li>Use <code>=empty</code> to match empty cells, or <code>!=empty</code> to match non-empty cells.</li>
                         <li>Use <code>||</code> to match any of multiple values in the same column (e.g., <code>Admin || Guest</code>).</li>
+                        <li>Use <code>&amp;&amp;</code> to require multiple matches in the same column (e.g., <code>!adm &amp;&amp; !svc &amp;&amp; !sql</code>).</li>
                         <li>To apply <code>OR</code> logic across columns, use <code>or_</code> or <code>group1_</code>. Examples: Column1:<code>or_>1</code> Column2:<code>or_!Mallory</code>.</li>
                         <li>The <strong>DisplayName</strong> column includes the object's ID (hidden), allowing filtering by ID.</li>
                     </ul>
