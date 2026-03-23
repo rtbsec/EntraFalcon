@@ -9,7 +9,8 @@ function Export-Summary {
     Param (
         [Parameter(Mandatory=$false)][string]$OutputFolder = ".",
         [Parameter(Mandatory=$true)][Object[]]$CurrentTenant,
-        [Parameter(Mandatory=$true)][String[]]$StartTimestamp
+        [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
+        [Parameter(Mandatory=$false)][object[]]$TenantDomains = @()
     )
 
     ############################## Function section ########################
@@ -196,6 +197,84 @@ return @"
 "@
     }
 
+    function New-DomainsSection {
+        param(
+            [object[]]$Domains
+        )
+
+        if (-not $Domains -or $Domains.Count -eq 0) { return "" }
+
+        $displayDomains = @(
+            @($Domains | Where-Object { $_.IsDefault }) +
+            @($Domains | Where-Object { -not $_.IsDefault })
+        )
+
+        $rowsHtml = foreach ($domain in $displayDomains) {
+            $authenticationHtml = ConvertTo-SummaryHtmlText $domain.AuthenticationType
+            $defaultHtml = if ($domain.IsDefault) {
+                New-GeneralStatusBadge -Text "Yes" -Tone "neutral"
+            } else {
+                New-GeneralStatusBadge -Text "No" -Tone "muted"
+            }
+            $verifiedHtml = if ($domain.IsVerified) {
+                New-GeneralStatusBadge -Text "Yes" -Tone "success"
+            } else {
+                New-GeneralStatusBadge -Text "No" -Tone "warning"
+            }
+            $supportedServices = if (@($domain.SupportedServices).Count -gt 0) {
+                @($domain.SupportedServices) -join ", "
+            } else {
+                "-"
+            }
+            $federationMfa = if ($domain.AuthenticationType -eq "Federated") {
+                if ([string]::IsNullOrWhiteSpace($domain.FederatedIdpMfaBehavior)) {
+                    "- (defaults to: acceptIfMfaDoneByFederatedIdp)"
+                } else {
+                    $domain.FederatedIdpMfaBehavior
+                }
+            } else {
+                "-"
+            }
+
+@"
+<tr>
+    <td class='summary-domain-name'>$(ConvertTo-SummaryHtmlText $domain.Id)</td>
+    <td>$authenticationHtml</td>
+    <td>$defaultHtml</td>
+    <td>$verifiedHtml</td>
+    <td class='summary-domain-text'>$(ConvertTo-SummaryHtmlText $supportedServices)</td>
+    <td class='summary-domain-text'>$(ConvertTo-SummaryHtmlText $federationMfa)</td>
+</tr>
+"@
+        }
+
+return @"
+<section class='summary-panel summary-domains-panel'>
+    <div class='summary-chart-panel-header'>
+        <h2>Domains</h2>
+        <div class='summary-chart-panel-meta'>$($Domains.Count) domains</div>
+    </div>
+    <div class='summary-domain-table-wrap'>
+        <table class='summary-domain-table'>
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Authentication</th>
+                    <th>Default</th>
+                    <th>Verified</th>
+                    <th>Supported Services</th>
+                    <th>Federation MFA</th>
+                </tr>
+            </thead>
+            <tbody>
+                $($rowsHtml -join "`n")
+            </tbody>
+        </table>
+    </div>
+</section>
+"@
+    }
+
     ############################## Script section ########################
 
     #Define basic variables
@@ -255,6 +334,8 @@ return @"
         New-GeneralStatusBadge -Text "Not Collected (default)" -Tone "muted"
     }
 
+    $domainsSectionHtml = New-DomainsSection -Domains $TenantDomains
+
     $generalSectionHtml = New-GeneralSection `
         -TenantName $GlobalAuditSummary.Tenant.Name `
         -TenantId $GlobalAuditSummary.Tenant.ID `
@@ -281,6 +362,7 @@ return @"
             "Managed Identities"          = $($GlobalAuditSummary.ManagedIdentities.Count)
             "Administrative Units"        = $($GlobalAuditSummary.AdministrativeUnits.Count)
             "Conditional Access Policies" = $($GlobalAuditSummary.ConditionalAccess.Count)
+            "Domains"                     = @($TenantDomains).Count
             "PIM Settings"                = $($GlobalAuditSummary.PimSettings.Count)
             "Findings"                    = $securityFindingsSummary.Vulnerable
         }
@@ -1112,6 +1194,11 @@ body.dark-mode .summary-info-card {
     color: #2f6a34;
     border-color: rgba(47, 106, 52, 0.20);
 }
+.summary-status-badge.tone-warning {
+    background: rgba(191, 119, 18, 0.16);
+    color: #9a5c00;
+    border-color: rgba(154, 92, 0, 0.18);
+}
 .summary-status-badge.tone-neutral {
     background: rgba(79, 129, 189, 0.12);
     color: #2e567f;
@@ -1130,6 +1217,11 @@ body.dark-mode .summary-status-badge.tone-success {
     color: #cfe8cf;
     border-color: rgba(180, 220, 180, 0.18);
 }
+body.dark-mode .summary-status-badge.tone-warning {
+    background: rgba(191, 119, 18, 0.20);
+    color: #ffd392;
+    border-color: rgba(255, 211, 146, 0.18);
+}
 body.dark-mode .summary-status-badge.tone-neutral {
     background: rgba(120, 165, 214, 0.16);
     color: #d6e7f8;
@@ -1139,6 +1231,70 @@ body.dark-mode .summary-status-badge.tone-muted {
     background: rgba(170,170,170,0.10);
     color: #dddddd;
     border-color: rgba(210,210,210,0.16);
+}
+.summary-domain-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.52);
+}
+body.dark-mode .summary-domain-table-wrap {
+    border-color: rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.03);
+}
+.summary-domain-table {
+    width: 100%;
+    min-width: 700px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.summary-domain-table th {
+    text-align: left;
+    padding: 9px 10px;
+    background: rgba(0,0,0,0.04);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.summary-domain-table thead tr:first-child th {
+    position: static;
+    top: auto;
+    z-index: auto;
+}
+body.dark-mode .summary-domain-table th {
+    background: rgba(255,255,255,0.06);
+    border-bottom-color: rgba(255,255,255,0.10);
+}
+.summary-domain-table td {
+    padding: 9px 10px;
+    vertical-align: top;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    line-height: 1.35;
+}
+.summary-domain-table tbody tr:first-child td {
+    border-top: 0;
+}
+body.dark-mode .summary-domain-table td {
+    border-top-color: rgba(255,255,255,0.08);
+}
+.summary-domain-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+}
+.summary-domain-text {
+    color: rgba(30, 36, 45, 0.72);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+body.dark-mode .summary-domain-text {
+    color: rgba(255,255,255,0.72);
+}
+.summary-domain-table .summary-status-badge {
+    padding: 2px 8px;
+    font-size: 11px;
+    line-height: 1.15;
 }
 .summary-chart-panel-header,
 .summary-kpi-panel-header {
@@ -1235,6 +1391,7 @@ Enumeration Results:
     - Managed Identities:          $($GlobalAuditSummary.ManagedIdentities.Count)
     - Administrative Units:        $($GlobalAuditSummary.AdministrativeUnits.Count)
     - Conditional Access Policies: $($GlobalAuditSummary.ConditionalAccess.Count) ($($GlobalAuditSummary.ConditionalAccess.Enabled) Enabled)
+    - Domains:                     $(@($TenantDomains).Count)
     - Entra Role Assignments:      $($GlobalAuditSummary.EntraRoleAssignments.Count) ($($GlobalAuditSummary.EntraRoleAssignments.Eligible) Eligible)
     - Azure Role Assignments:      $($GlobalAuditSummary.AzureRoleAssignments.Count) ($($GlobalAuditSummary.AzureRoleAssignments.Eligible) Eligible)
     - PIM Settings:                $($GlobalAuditSummary.PimSettings.Count)
@@ -1248,7 +1405,7 @@ Enumeration Results:
     $headerHTML = "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div>$generalSectionHtml"
   
     #Write HTML
-    $PostContentCombined =  $Chartsection + "`n" + $GLOBALJavaScript
+    $PostContentCombined =  $Chartsection + "`n" + $domainsSectionHtml + "`n" + $GLOBALJavaScript
     $CssCombined = $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
     $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
