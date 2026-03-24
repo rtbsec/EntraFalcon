@@ -27,6 +27,9 @@ $global:GLOBALJavaScript_Table = @'
         const predefinedViews = {
             "User": [
                 {
+                    id: "PVU-001",
+                    group: "Privileges",
+                    description: "Users with Tier-0 roles in Entra ID or Azure",
                     label: "Tier-0 Users",
                     filters: {
                         EntraMaxTier: "or_Tier-0",
@@ -35,6 +38,9 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVU-002",
+                    group: "Privileges",
+                    description: "Users with Tier-0 roles in Entra ID",
                     label: "Tier-0 Users (Entra Only)",
                     filters: {
                         EntraMaxTier: "=Tier-0"
@@ -42,7 +48,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Users with Roles (Entra ID / Azure)",
+                    id: "PVU-003",
+                    group: "Privileges",
+                    description: "Any user holding at least one role assignment",
+                    label: "Users with Roles (Entra / Azure)",
                     filters: {
                         AzureRoles: "or_>0",
                         EntraRoles: "or_>0",
@@ -51,7 +60,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Users with Roles (Entra ID only)",
+                    id: "PVU-004",
+                    group: "Privileges",
+                    description: "Users with at least one Entra ID role",
+                    label: "Users with Roles (Entra Only)",
                     filters: {
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles"
@@ -59,22 +71,35 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Inactive Users",
+                    id: "PVU-005",
+                    group: "Privileges",
+                    description: "Users with app registration or service principal ownership",
+                    label: "Users Owning Applications",
                     filters: {
-                        Inactive: "=true",
-                        Enabled: "=true"
+                        AppRegOwn: "or_>0",
+                        SPOwn: "or_>0"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
-                    sort: { column: "LastSignInDays", direction: "desc" }
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "AppRegOwn", "SpOwn", "Inactive", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Users Without MFA Methods",
+                    id: "PVU-014",
+                    group: "Privileges",
+                    description: "Licensed Tier-0 users without admin-naming convention",
+                    label: "Users Tier-0 None-Admin",
                     filters: {
-                        MfaCap: "=false",
-                        Agent: "=false"
-                    }
+                        EntraMaxTier: "or_Tier-0",
+                        AzureMaxTier: "or_Tier-0",
+                        Enabled: "=true",
+                        Agent: "=false",
+                        LicenseStatus: "=Licensed",
+                        UPN: "!adm_ && !_adm && !adm- && !-adm && !svc_ && !svc. && !admin && !srv- && !SYNC && !emergency && !breakglass"
+                    },
+                    columns: ["UPN", "Enabled", "LicenseStatus", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVU-006",
+                    group: "Security",
+                    description: "Role holders and app owners which can be influenced by low-tier admins",
                     label: "Privileged Unprotected Users",
                     filters: {
                         Protected: "=false",
@@ -87,34 +112,19 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "New Users",
-                    filters: { CreatedDays: "<91"},
-                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"],
-                    sort: { column: "CreatedDays", direction: "asc" }
+                    id: "PVU-007",
+                    group: "Security",
+                    description: "User accounts with no MFA method registered",
+                    label: "Users Without MFA Methods",
+                    filters: {
+                        MfaCap: "=false",
+                        Agent: "=false"
+                    }
                 },
                 {
-                    label: "Agent Users",
-                    filters: {
-                        Agent: "=True"
-                    },
-                    columns: ["UPN", "Enabled", "Agent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
-                },
-                {
-                    label: "Guest Users",
-                    filters: {
-                        UserType: "=Guest"
-                    },
-                    columns: ["UPN", "Enabled", "UserType", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
-                },
-                  {
-                    label: "Users Owning Applications",
-                    filters: {
-                        AppRegOwn: "or_>0",
-                        SPOwn: "or_>0"
-                    },
-                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "AppRegOwn", "SpOwn", "Inactive", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
-                },
-                  {
+                    id: "PVU-008",
+                    group: "Security",
+                    description: "Accounts with per-user MFA explicitly disabled",
                     label: "Users Disabled Per-User MFA",
                     filters: {
                         PerUserMfa: "=disabled",
@@ -123,6 +133,50 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["UPN", "Enabled", "UserType","LastSignInDays","Inactive", "Impact", "MfaCap", "PerUserMfa", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVU-009",
+                    group: "Lifecycle",
+                    description: "Enabled accounts with no sign-in activity in the last 180 days",
+                    label: "Inactive Users",
+                    filters: {
+                        Inactive: "=true",
+                        Enabled: "=true"
+                    },
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "LastSignInDays", direction: "desc" }
+                },
+                {
+                    id: "PVU-010",
+                    group: "Lifecycle",
+                    description: "Accounts created within the last 90 days",
+                    label: "New Users",
+                    filters: { CreatedDays: "<91"},
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "CreatedDays", direction: "asc" }
+                },
+                {
+                    id: "PVU-011",
+                    group: "Identity Type",
+                    description: "Accounts flagged as agent/workload identities",
+                    label: "Agent Users",
+                    filters: {
+                        Agent: "=True"
+                    },
+                    columns: ["UPN", "Enabled", "Agent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVU-012",
+                    group: "Identity Type",
+                    description: "External B2B guest accounts",
+                    label: "Guest Users",
+                    filters: {
+                        UserType: "=Guest"
+                    },
+                    columns: ["UPN", "Enabled", "UserType", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVU-013",
+                    group: "Identity Type",
+                    description: "Entra Connect service accounts",
                     label: "Entra Connect Accounts",
                     filters: {
                         UPN: "^Sync_||^ADToAADSyncServiceAccount"
@@ -132,26 +186,36 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "Groups": [
                 {
-                    label: "Groups Tier-0",
+                    id: "PVG-001",
+                    group: "Privileges",
+                    description: "Groups with Tier-0 roles in Entra or Azure",
+                    label: "Tier-0 Groups",
                     filters: { EntraMaxTier: "or_Tier-0", AzureMaxTier: "or_Tier-0", },
                     columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Groups Tier-0 (Entra Only)",
+                    id: "PVG-002",
+                    group: "Privileges",
+                    description: "Groups with Tier-0 Entra ID roles",
+                    label: "Tier-0 Groups (Entra Only)",
                     filters: { EntraMaxTier: "Tier-0"},
                     columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Public M365 Groups",
-                    filters: { Visibility: "=Public", Type: "=M365 Group", Dynamic: "=false" },
-                    columns: ["DisplayName", "Type", "SecurityEnabled", "Visibility", "Users", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    id: "PVG-003",
+                    group: "Privileges",
+                    description: "Groups referenced in Conditional Access Policies",
+                    label: "Groups Used in CAPs",
+                    filters: {
+                        CAPs: "or_>0",
+                        Warnings: "or_used in CAP"
+                    },
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "NestedGroups", "NestedInGroups", "CAPs", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Dynamic Groups",
-                    filters: { Dynamic: "=true"},
-                    columns: ["DisplayName", "Type", "Dynamic", "SecurityEnabled", "Visibility", "Users", "Devices",  "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
-                },
-                {
+                    id: "PVG-004",
+                    group: "Security",
+                    description: "Privileged groups which can be influenced by low-tier admins",
                     label: "Privileged Unprotected Groups",
                     filters: {
                         Protected: "=false",
@@ -164,14 +228,9 @@ $global:GLOBALJavaScript_Table = @'
                     sort: { column: "Impact", direction: "desc" }
                 },
                 {
-                    label: "Groups Used in CAPs",
-                    filters: {
-                        CAPs: "or_>0",
-                        Warnings: "or_used in CAP"
-                    },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "Visibility", "Users", "Devices", "NestedGroups", "NestedInGroups", "CAPs", "Impact", "Likelihood", "Risk", "Warnings"]
-                },
-                {
+                    id: "PVG-005",
+                    group: "Security",
+                    description: "Groups with a guest user as an owner",
                     label: "Groups Owned by Guests",
                     filters: {
                         Warnings: "Guest as owner"
@@ -179,11 +238,9 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "Users", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
-                    label: "Groups Onboarded to PIM",
-                    filters: { PIM: "=true" },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
-                },
-                {
+                    id: "PVG-006",
+                    group: "Security",
+                    description: "Protected PIM groups containing unprotected nested groups",
                     label: "PIM for Groups PrivEsc",
                     filters: {
                         PIM: "=true",
@@ -193,6 +250,33 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVG-007",
+                    group: "Security",
+                    description: "Publicly joinable M365 groups",
+                    label: "Public M365 Groups",
+                    filters: { Visibility: "=Public", Type: "=M365 Group", Dynamic: "=false" },
+                    columns: ["DisplayName", "Type", "SecurityEnabled", "Visibility", "Users", "AzureRoles", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVG-008",
+                    group: "Configuration",
+                    description: "Groups with dynamic membership rules",
+                    label: "Dynamic Groups",
+                    filters: { Dynamic: "=true"},
+                    columns: ["DisplayName", "Type", "Dynamic", "SecurityEnabled", "Visibility", "Users", "Devices",  "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVG-009",
+                    group: "Configuration",
+                    description: "Groups enrolled in Privileged Identity Management",
+                    label: "Groups Onboarded to PIM",
+                    filters: { PIM: "=true" },
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVG-010",
+                    group: "Special",
+                    description: "Groups with security-relevant keywords in the name",
                     label: "Interesting Groups by Keywords",
                     filters: {
                         DisplayName: "admin||subscription||owner||contributor||secret||geheim||keyvault||passwor"
@@ -203,9 +287,12 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "Enterprise Apps": [
                 {
+                    id: "PVE-001",
+                    group: "Foreign Apps",
+                    description: "Third-party apps with significant privileges",
                     label: "Foreign Apps: Privileged",
-                    filters: { 
-                        Foreign: "=True", 
+                    filters: {
+                        Foreign: "=True",
                         ApiDangerous: "or_>0",
                         ApiHigh: "or_>0",
                         ApiMedium: "or_>0",
@@ -221,9 +308,12 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-002",
+                    group: "Foreign Apps",
+                    description: "Third-party apps with high application-level API permissions",
                     label: "Foreign Apps: Extensive API Privs (Application)",
-                    filters: { 
-                        Foreign: "=True", 
+                    filters: {
+                        Foreign: "=True",
                         ApiDangerous: "or_>0",
                         ApiHigh: "or_>0",
                         ApiMedium: "or_>0"
@@ -231,9 +321,12 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-003",
+                    group: "Foreign Apps",
+                    description: "Third-party apps with high delegated API permissions",
                     label: "Foreign Apps: Extensive API Privs (Delegated)",
-                    filters: { 
-                        Foreign: "=True", 
+                    filters: {
+                        Foreign: "=True",
                         ApiDelegatedDangerous: "or_>0",
                         ApiDelegatedHigh: "or_>0",
                         ApiDelegatedMedium: "or_>0"
@@ -241,18 +334,24 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium","ApiDelegatedLow", "ApiDelegatedMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-004",
+                    group: "Foreign Apps",
+                    description: "Third-party apps with Entra or Azure role assignments",
                     label: "Foreign Apps: With Roles",
-                    filters: { 
-                        Foreign: "=True", 
+                    filters: {
+                        Foreign: "=True",
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-005",
+                    group: "Internal Apps",
+                    description: "Internal apps with significant privileges",
                     label: "Internal Apps: Privileged",
-                    filters: { 
-                        Foreign: "=False", 
+                    filters: {
+                        Foreign: "=False",
                         ApiDangerous: "or_>0",
                         ApiHigh: "or_>0",
                         ApiDelegatedDangerous: "or_>0",
@@ -266,6 +365,9 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-006",
+                    group: "Configuration",
+                    description: "Non-SAML apps with active secret or certificate credentials",
                     label: "Apps with Credentials (Excludes SAML)",
                     filters: {
                         Credentials: ">0",
@@ -274,6 +376,9 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "SAML", "Credentials", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-007",
+                    group: "Configuration",
+                    description: "Apps that have at least one owner assigned",
                     label: "Apps with Owners",
                     filters: {
                         Owners: ">0"
@@ -281,6 +386,9 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
+                    id: "PVE-008",
+                    group: "Lifecycle",
+                    description: "Enabled apps with no recent sign-in activity",
                     label: "Inactive Apps",
                     filters: {
                         Inactive: "=true",
@@ -290,8 +398,11 @@ $global:GLOBALJavaScript_Table = @'
                     sort: { column: "LastSignInDays", direction: "desc" }
                 },
                 {
+                    id: "PVE-009",
+                    group: "Special",
+                    description: "Microsoft Entra Connect sync app",
                     label: "Entra Connect Application",
-                    filters: { 
+                    filters: {
                         DisplayName: "^ConnectSyncProvisioning_"
                     },
                     columns: ["DisplayName", "Enabled", "Inactive", "Owners", "Credentials", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
@@ -299,6 +410,9 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "Managed Identities": [
                 {
+                    id: "PVM-001",
+                    group: "Privileges",
+                    description: "Managed identities with significant role or API privileges",
                     label: "Privileged Managed Identities",
                     filters: {
                         ApiDangerous: "or_>0",
@@ -314,6 +428,9 @@ $global:GLOBALJavaScript_Table = @'
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
+                    id: "PVM-002",
+                    group: "Privileges",
+                    description: "Managed identities with medium-to-dangerous API permissions",
                     label: "Managed Identities: Extensive API Privs",
                     filters: {
                         ApiDangerous: "or_>0",
@@ -324,6 +441,9 @@ $global:GLOBALJavaScript_Table = @'
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
+                    id: "PVM-003",
+                    group: "Privileges",
+                    description: "Managed identities with Entra or Azure role assignments",
                     label: "Managed Identities: With Roles",
                     filters: {
                         EntraRoles: "or_>0",
@@ -335,12 +455,18 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "App Registrations": [
                 {
+                    id: "PVA-001",
+                    group: "Access",
+                    description: "App registrations with at least one owner",
                     label: "Apps with Owners",
                     filters: {
                         Owners: ">0"
                     }
                 },
                 {
+                    id: "PVA-002",
+                    group: "Access",
+                    description: "Apps controlled by Cloud App or App Administrator role holders",
                     label: "Apps Controlled by App Admins",
                     filters: {
                         CloudAppAdmins: "or_>0",
@@ -349,26 +475,38 @@ $global:GLOBALJavaScript_Table = @'
                     sort: { column: "Impact", direction: "desc" }
                 },
                 {
-                    label: "App with Secrets",
+                    id: "PVA-003",
+                    group: "Configuration",
+                    description: "App registrations with secret credentials",
+                    label: "Apps with Secrets",
                     filters: {
                         SecretsCount: ">0"
                     }
                 },
                 {
-                    label: "App Not Protected by AppLock",
+                    id: "PVA-004",
+                    group: "Configuration",
+                    description: "App registrations without AppLock enabled",
+                    label: "Apps Not Protected by AppLock",
                     filters: {
                         AppLock: "=false"
                     }
                 },
                 {
+                    id: "PVA-005",
+                    group: "Configuration",
+                    description: "Apps accepting sign-ins from multiple tenants or personal accounts",
                     label: "Multitenant Apps",
                     filters: {
                         SignInAudience: "AzureADandPersonalMicrosoftAccount||AzureADMultipleOrgs"
                     }
                 },
                 {
+                    id: "PVA-006",
+                    group: "Special",
+                    description: "Microsoft Entra Connect sync app registration",
                     label: "Entra Connect Application",
-                    filters: { 
+                    filters: {
                         DisplayName: "^ConnectSyncProvisioning_"
                     }
                 }
@@ -376,61 +514,91 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "Conditional Access Policies": [
                 {
+                    id: "PVC-001",
+                    group: "Status",
+                    description: "Policies currently in enabled state",
                     label: "Enabled Policies",
                     filters: {
                         State: "=enabled"
                     }
                 },
                 {
+                    id: "PVC-002",
+                    group: "Status",
+                    description: "Policies that block access as the grant control",
                     label: "Blocking Policies",
                     filters: {
                         GrantControls: "=block"
                     }
                 },
                 {
+                    id: "PVC-003",
+                    group: "Authentication",
+                    description: "Policies requiring multi-factor authentication",
                     label: "MFA Policies",
                     filters: {
                         GrantControls: "mfa"
                     }
                 },
                 {
+                    id: "PVC-004",
+                    group: "Authentication",
+                    description: "Policies enforcing a specific authentication strength",
                     label: "Authentication Strength Policies",
                     filters: {
                         AuthStrength: "!=empty"
                     }
                 },
                 {
+                    id: "PVC-005",
+                    group: "Authentication",
+                    description: "Policies targeting legacy and Exchange ActiveSync clients",
+                    label: "Legacy Authentication Policies",
+                    filters: {
+                        AppTypes: "exchangeActiveSync||other"
+                    }
+                },
+                {
+                    id: "PVC-006",
+                    group: "Authentication",
+                    description: "Policies targeting device code flow sign-in",
+                    label: "Device Code Flow Policies",
+                    filters: {
+                        AuthFlow: "deviceCodeFlow"
+                    }
+                },
+                {
+                    id: "PVC-007",
+                    group: "Registration",
+                    description: "Policies scoped to the device registration user action",
                     label: "Device Registration Policies",
                     filters: {
                         UserActions: "urn:user:registerdevice"
                     }
                 },
                 {
+                    id: "PVC-008",
+                    group: "Registration",
+                    description: "Policies scoped to the security info registration user action",
                     label: "Security Info Registration Policies",
                     filters: {
                         UserActions: "urn:user:registersecurityinfo"
                     }
                 },
                 {
-                    label: "Legacy Authentication Policies",
-                    filters: {
-                        AppTypes: "exchangeActiveSync||other"
-                    }
-                },                
-                {
-                    label: "Device Code Flow Policies",
-                    filters: {
-                        AuthFlow: "deviceCodeFlow"
-                    }
-                },                
-                {
+                    id: "PVC-009",
+                    group: "Conditions",
+                    description: "Policies with named network location conditions",
                     label: "Network Location Policies",
                     filters: {
                         IncNw: "or_!=0",
                         ExcNw: "or_!=0"
                     }
-                },                
+                },
                 {
+                    id: "PVC-010",
+                    group: "Controls",
+                    description: "Policies with session control settings configured",
                     label: "Session Control Policies",
                     filters: {
                         SessionControls: ">0"
@@ -439,68 +607,101 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "Role Assignments Entra ID": [
                 {
+                    id: "PVRE-001",
+                    group: "Assignment Type",
+                    description: "PIM-eligible role assignments",
                     label: "Eligible Assignments",
                     filters: {
                         AssignmentType: "=Eligible"
                     }
                 },
                 {
+                    id: "PVRE-002",
+                    group: "Assignment Type",
+                    description: "Active role assignments (permanent or activated)",
                     label: "Active Assignments",
                     filters: {
                         AssignmentType: "Active"
                     }
                 },
                 {
+                    id: "PVRE-003",
+                    group: "Scope",
+                    description: "Assignments to Tier-0 classified roles",
                     label: "Tier-0 Assignments",
                     filters: {
                         RoleTier: "=Tier-0"
                     }
                 },
                 {
-                    label: "Service Principal Assignments",
-                    filters: {
-                        PrincipalType: "Managed Identity||Enterprise Application"
-                    }
-                },
-                {
+                    id: "PVRE-004",
+                    group: "Scope",
+                    description: "Assignments scoped to a specific object",
                     label: "Scoped Assignments",
                     filters: {
                         Scope: "!=/ (Tenant)"
                     }
                 },
                 {
+                    id: "PVRE-005",
+                    group: "Principal Type",
+                    description: "Role assignments held by managed identities or enterprise apps",
+                    label: "Service Principal Assignments",
+                    filters: {
+                        PrincipalType: "Managed Identity||Enterprise Application"
+                    }
+                },
+                {
+                    id: "PVRE-006",
+                    group: "Role Type",
+                    description: "Assignments using custom-defined roles",
                     label: "Custom Roles",
                     filters: {
-                        RoleType: "=CustomRole"
+                        IsBuiltIn: "=false"
                     }
                 }
             ],
             "Role Assignments Azure IAM": [
                 {
+                    id: "PVRA-001",
+                    group: "Assignment Type",
+                    description: "PIM-eligible role assignments",
                     label: "Eligible Assignments",
                     filters: {
                         AssignmentType: "=Eligible"
                     }
                 },
                 {
+                    id: "PVRA-002",
+                    group: "Assignment Type",
+                    description: "Active role assignments (permanent or activated)",
                     label: "Active Assignments",
                     filters: {
                         AssignmentType: "Active"
                     }
                 },
                 {
-                    label: "Additional Conditions",
-                    filters: {
-                        Conditions: "=true"
-                    }
-                },
-                {
+                    id: "PVRA-003",
+                    group: "Principal Type",
+                    description: "Azure role assignments held by service principals",
                     label: "Service Principal Assignments",
                     filters: {
                         PrincipalType: "ServicePrincipal"
                     }
                 },
                 {
+                    id: "PVRA-004",
+                    group: "Configuration",
+                    description: "Assignments with attribute-based conditions",
+                    label: "Additional Conditions",
+                    filters: {
+                        Conditions: "=true"
+                    }
+                },
+                {
+                    id: "PVRA-005",
+                    group: "Role Type",
+                    description: "Assignments using custom-defined Azure roles",
                     label: "Custom Roles",
                     filters: {
                         RoleType: "=CustomRole"
@@ -509,7 +710,10 @@ $global:GLOBALJavaScript_Table = @'
             ],
             "PIM": [
                 {
-                    label: "Tier 0 Roles: With Warnings",
+                    id: "PVP-001",
+                    group: "Tier-0",
+                    description: "Tier-0 roles with active security warnings",
+                    label: "Tier-0 Roles: With Warnings",
                     filters: {
                         Tier: "=Tier-0",
                         Warnings: "!=empty"
@@ -517,7 +721,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationAuthContext", "ActivationMFA", "ActivationJustification", "ActivationTicketing", "ActivationApproval", "ActivationDuration", "ActiveAssignMFA", "ActiveAssignJustification", "Warnings"]
                 },
                 {
-                    label: "Tier 0 Roles: No Auth Context",
+                    id: "PVP-002",
+                    group: "Tier-0",
+                    description: "Tier-0 roles missing activation authentication context",
+                    label: "Tier-0 Roles: No Auth Context",
                     filters: {
                         Tier: "=Tier-0",
                         ActivationAuthContext: "=false"
@@ -525,7 +732,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationAuthContext", "Warnings"]
                 },
                 {
-                    label: "Tier 0 Roles: Activation Duration >4 Hours",
+                    id: "PVP-003",
+                    group: "Tier-0",
+                    description: "Tier-0 roles with maximum activation time over 4 hours",
+                    label: "Tier-0 Roles: Activation Duration >4 Hours",
                     filters: {
                         Tier: "=Tier-0",
                         ActivationDuration	: ">4"
@@ -533,7 +743,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationDuration", "Warnings"]
                 },
                 {
-                    label: "Tier 0 Roles: Only Active Assignments",
+                    id: "PVP-004",
+                    group: "Tier-0",
+                    description: "Tier-0 roles with active but no eligible assignments",
+                    label: "Tier-0 Roles: Only Active Assignments",
                     filters: {
                         Tier: "Tier-0",
                         Eligible: "=0",
@@ -542,7 +755,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "Active"]
                 },
                 {
-                    label: "Tier 0/1 Roles: With Warnings",
+                    id: "PVP-005",
+                    group: "Tier-0/1",
+                    description: "Tier-0 and Tier-1 roles with active security warnings",
+                    label: "Tier-0/1 Roles: With Warnings",
                     filters: {
                         Tier: "Tier-0 || Tier-1",
                         Warnings: "!=empty"
@@ -550,7 +766,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationAuthContext", "ActivationMFA", "ActivationJustification", "ActivationTicketing", "ActivationApproval", "ActivationDuration", "ActiveAssignMFA", "ActiveAssignJustification", "Warnings"]
                 },
                 {
-                    label: "Used Tier 0/1 Roles (Eligible): With Warnings",
+                    id: "PVP-006",
+                    group: "Tier-0/1",
+                    description: "In-use eligible Tier-0/1 roles with security warnings",
+                    label: "Tier-0/1 Roles (Used): With Warnings",
                     filters: {
                         Eligible: ">0",
                         Tier: "Tier-0 || Tier-1",
@@ -559,7 +778,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationAuthContext", "ActivationMFA", "ActivationJustification", "ActivationTicketing", "ActivationApproval", "ActivationDuration", "ActiveAssignMFA", "ActiveAssignJustification", "Warnings"]
                 },
                 {
-                    label: "Tier 0/1 Roles: Only Active Assignments",
+                    id: "PVP-007",
+                    group: "Tier-0/1",
+                    description: "Tier-0/1 roles with active but no eligible assignments",
+                    label: "Tier-0/1 Roles: Only Active Assignments",
                     filters: {
                         Tier: "Tier-0 || Tier-1",
                         Eligible: "=0",
@@ -568,7 +790,10 @@ $global:GLOBALJavaScript_Table = @'
                     columns: ["Role", "Tier", "Eligible", "Active"]
                 },
                 {
-                    label: "Used Roles (Eligible): With Warnings",
+                    id: "PVP-008",
+                    group: "All Roles",
+                    description: "Any used role with active security warnings",
+                    label: "Used Roles: With Warnings",
                     filters: {
                         Eligible: ">0",
                         Warnings: "!=empty"
@@ -885,15 +1110,40 @@ $global:GLOBALJavaScript_Table = @'
                 currentSort = { column: "Risk", asc: false };
                 filterData();
                 createColumnSelector();
+                history.replaceState(null, "", window.location.pathname);
             });
+
+            // Build grouped items HTML
+            const groupMap = new Map();
+            views.forEach(v => {
+                const g = v.group || "";
+                if (!groupMap.has(g)) groupMap.set(g, []);
+                groupMap.get(g).push(v);
+            });
+
+            let itemsHtml = "";
+            let isFirstGroup = true;
+            for (const [group, items] of groupMap) {
+                if (group) {
+                    itemsHtml += `<div class="preset-group-header${isFirstGroup ? " first" : ""}">${group}</div>`;
+                }
+                items.forEach(v => {
+                    itemsHtml += `<button class="preset-btn" data-id="${v.id || ""}" data-label="${v.label}">` +
+                        `<span class="preset-btn-label">${v.label}</span>` +
+                        (v.description ? `<span class="preset-btn-sub">${v.description}</span>` : "") +
+                        `</button>`;
+                });
+                isFirstGroup = false;
+            }
 
             const modal = document.createElement("div");
             modal.className = "preset-modal hidden";
             modal.innerHTML = `
                 <div class="preset-modal-content">
-                    <h3>Preset Views for ${type}</h3>
-                    ${views.map(v => `<button class="preset-btn" data-label="${v.label}">${v.label}</button>`).join("")}
-                            <button class="close-preset-modal" style="margin-top: 20px;">\u2716 Close</button>
+                    <div class="preset-modal-body">${itemsHtml}</div>
+                    <div class="preset-modal-footer">
+                        <button class="close-preset-modal">\u2716 Close</button>
+                    </div>
                 </div>
             `;
             document.body.appendChild(modal);
@@ -904,8 +1154,11 @@ $global:GLOBALJavaScript_Table = @'
             // Apply view
             modal.querySelectorAll(".preset-btn").forEach(btn => {
                 btn.addEventListener("click", () => {
-                    const view = views.find(v => v.label === btn.dataset.label);
-                    if (view) applyPredefinedView(view);
+                    const view = views.find(v => v.id ? v.id === btn.dataset.id : v.label === btn.dataset.label);
+                    if (view) {
+                        applyPredefinedView(view);
+                        if (view.id) history.replaceState(null, "", "?view=" + view.id);
+                    }
                     modal.classList.add("hidden");
                 });
             });
@@ -1486,6 +1739,12 @@ $global:GLOBALJavaScript_Table = @'
         createColumnSelector();
         createToolbar();
         createPresetFilterModal(manifest);
+
+        if (urlParams.view) {
+            var allViews = predefinedViews[getReportTypeFromManifest(manifest)] || [];
+            var viewFromUrl = allViews.find(v => v.id === urlParams.view);
+            if (viewFromUrl) applyPredefinedView(viewFromUrl);
+        }
 
         filterData();
         })();
@@ -2790,7 +3049,21 @@ $global:GLOBALCss = @"
     .preset-modal-content {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        max-height: 80vh;
+        overflow: hidden;
+    }
+
+    .preset-modal-body {
+        overflow-y: auto;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .preset-modal-footer {
+        flex-shrink: 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--nav-link-hover-bg);
     }
 
     .preset-modal.show,
@@ -2811,6 +3084,41 @@ $global:GLOBALCss = @"
     .preset-modal button:hover {
         background-color: var(--nav-link-hover-bg);
     }
+
+    .preset-modal .preset-group-header {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.45;
+        padding: 10px 4px 2px;
+        border-top: 1px solid var(--nav-link-hover-bg);
+    }
+
+    .preset-modal .preset-group-header.first {
+        border-top: none;
+        padding-top: 2px;
+    }
+
+    .preset-modal .preset-btn {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 12px;
+        text-align: left;
+    }
+
+    .preset-modal .preset-btn-label {
+        font-size: 14px;
+    }
+
+    .preset-modal .preset-btn-sub {
+        font-size: 11px;
+        opacity: 0.55;
+        font-weight: 400;
+        line-height: 1.3;
+    }
+
     /* ======== Dark Mode ======== */
     body.dark-mode {
         background-color: #121212;
