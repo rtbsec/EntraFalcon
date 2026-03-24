@@ -237,6 +237,8 @@ $licenseResult = Get-EffectiveEntraLicense
 $GlobalAuditSummary.TenantLicense.Name  = $licenseResult.EntraIDLicencesString
 $GlobalAuditSummary.TenantLicense.Level = $licenseResult.EntraIDLicencesInt
 
+$TenantDomains = Get-TenantDomains
+
 #Define output folder if not defined
 if ($null -eq $OutputFolder -or "" -eq $OutputFolder) {
     $OutputFolder = "Results_$($CurrentTenant.DisplayName)_$($StartTimestamp)"
@@ -392,7 +394,7 @@ Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp
 
 write-host "`n********************************** [10/10] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
-Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder
+Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TenantDomains $TenantDomains
 
 # Remove global variables
 Start-CleanUp
