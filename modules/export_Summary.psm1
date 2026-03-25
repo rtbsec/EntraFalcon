@@ -10,7 +10,8 @@ function Export-Summary {
         [Parameter(Mandatory=$false)][string]$OutputFolder = ".",
         [Parameter(Mandatory=$true)][Object[]]$CurrentTenant,
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
-        [Parameter(Mandatory=$false)][object[]]$TenantDomains = @()
+        [Parameter(Mandatory=$false)][object[]]$TenantDomains = @(),
+        [Parameter(Mandatory=$false)][hashtable]$Users = @{}
     )
 
     ############################## Function section ########################
@@ -199,11 +200,32 @@ return @"
 
     function New-DomainsSection {
         param(
-            [object[]]$Domains
+            [object[]]$Domains,
+            [hashtable]$Users = @{},
+            [string]$StartTimestamp,
+            [object]$CurrentTenant
         )
 
         if (-not $Domains -or $Domains.Count -eq 0) { return "" }
 
+        # Build domain -> user count lookup (single pass, no regex)
+        $domainUserCount = @{}
+        foreach ($userObj in $Users.Values) {
+            if ($userObj.UPN) {
+                $at = $userObj.UPN.IndexOf('@')
+                if ($at -ge 0) {
+                    $upnDomain = $userObj.UPN.Substring($at + 1).ToLower()
+                    if ($domainUserCount.ContainsKey($upnDomain)) {
+                        $domainUserCount[$upnDomain]++
+                    } else {
+                        $domainUserCount[$upnDomain] = 1
+                    }
+                }
+            }
+        }
+        $escapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
+        $userReportBase = "Users_$($StartTimestamp)_$($escapedTenantName).html"
+        
         $displayDomains = @(
             @($Domains | Where-Object { $_.IsDefault }) +
             @($Domains | Where-Object { -not $_.IsDefault })
@@ -236,6 +258,17 @@ return @"
                 "-"
             }
 
+            $domainKey = $domain.Id.ToLower()
+            $userCount = if ($domainUserCount.ContainsKey($domainKey)) { $domainUserCount[$domainKey] } else { 0 }
+            $usersHtml = if ($Users.Count -eq 0) {
+                "-"
+            } elseif ($userCount -gt 0) {
+                $href = "${userReportBase}?UPN=`$$($domain.Id)"
+                "<a href='$href'>$userCount</a>"
+            } else {
+                "0"
+            }
+
 @"
 <tr>
     <td class='summary-domain-name'>$(ConvertTo-SummaryHtmlText $domain.Id)</td>
@@ -244,6 +277,7 @@ return @"
     <td>$verifiedHtml</td>
     <td class='summary-domain-text'>$(ConvertTo-SummaryHtmlText $supportedServices)</td>
     <td class='summary-domain-text'>$(ConvertTo-SummaryHtmlText $federationMfa)</td>
+    <td>$usersHtml</td>
 </tr>
 "@
         }
@@ -264,6 +298,7 @@ return @"
                     <th>Verified</th>
                     <th>Supported Services</th>
                     <th>Federation MFA</th>
+                    <th>Users</th>
                 </tr>
             </thead>
             <tbody>
@@ -334,7 +369,7 @@ return @"
         New-GeneralStatusBadge -Text "Not Collected (default)" -Tone "muted"
     }
 
-    $domainsSectionHtml = New-DomainsSection -Domains $TenantDomains
+    $domainsSectionHtml = New-DomainsSection -Domains $TenantDomains -Users $Users -StartTimestamp $StartTimestamp -CurrentTenant $CurrentTenant
 
     $generalSectionHtml = New-GeneralSection `
         -TenantName $GlobalAuditSummary.Tenant.Name `

@@ -394,7 +394,7 @@ Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp
 
 write-host "`n********************************** [10/10] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
-Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TenantDomains $TenantDomains
+Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TenantDomains $TenantDomains -Users $Users
 
 # Remove global variables
 Start-CleanUp
