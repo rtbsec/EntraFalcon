@@ -452,21 +452,6 @@ function Invoke-CheckAppRegistrations {
             $Listfindings += "$($Finding.Severity): $($Finding.Match)"
         }
 
-        #Experimental collect app authentication properties
-        $AppAuthentication += [pscustomobject]@{
-            AppName = $item.DisplayName
-            ApiDelegated = $ApiDelegatedCount
-            IsFallbackPublicClient = $IsFallbackPublicClient
-            AllowPublicClientflows = $AllowPublicClientflows
-            WebOauth2AllowImplicitFlow = $WebOauth2AllowImplicitFlow
-            DefaultRedirectUri = $DefaultRedirectUri
-            PublicClientRedirectUris = $PublicClientRedirectUris
-            SpaRedirectUris = $SpaRedirectUris
-            WebRedirectUris = $WebRedirectUris
-            WindowsRedirectUris = $WindowsRedirectUris
-            Warning = $Listfindings
-        }
-
         #Get application lock config
         $AppLockConfiguration = $item | Select-Object -ExpandProperty ServicePrincipalLockConfiguration
 
@@ -670,6 +655,21 @@ function Invoke-CheckAppRegistrations {
             $ImpactScore += $MatchingEnterpriseApp.Data.Impact
             $SPObjectID = $MatchingEnterpriseApp.ObjectId
             $ApiDelegatedCount = $MatchingEnterpriseApp.Data.ApiDelegated
+        }
+
+        # Experimental collect app authentication properties after delegated API lookup
+        $AppAuthentication += [pscustomobject]@{
+            AppName = $item.DisplayName
+            ApiDelegated = $ApiDelegatedCount
+            IsFallbackPublicClient = $IsFallbackPublicClient
+            AllowPublicClientflows = $AllowPublicClientflows
+            WebOauth2AllowImplicitFlow = $WebOauth2AllowImplicitFlow
+            DefaultRedirectUri = $DefaultRedirectUri
+            PublicClientRedirectUris = $PublicClientRedirectUris
+            SpaRedirectUris = $SpaRedirectUris
+            WebRedirectUris = $WebRedirectUris
+            WindowsRedirectUris = $WindowsRedirectUris
+            Warning = $Listfindings
         }
 
         #Format warning messages
