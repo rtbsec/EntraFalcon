@@ -4090,22 +4090,39 @@ function Get-TenantDomains {
     $QueryParameters = @{
         '$select' = "id,authenticationType,isAdminManaged,isDefault,isVerified,supportedServices"
     }
-    $DomainsRaw = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters $QueryParameters -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    try {
+        $DomainsRaw = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters $QueryParameters -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    } catch {
+        Write-Host "[!] Could not retrieve tenant domains. Domain-related summary data will be incomplete."
+        Write-Log -Level Verbose -Message "Could not retrieve tenant domains: $($_.Exception.Message)"
+        $GlobalAuditSummary.Domains.Count = 0
+        $GlobalAuditSummary.Domains.Federated = 0
+        $GlobalAuditSummary.Domains.Verified = 0
+        $GlobalAuditSummary.Domains.Default = 0
+        $GlobalAuditSummary.Domains.AdminManaged = 0
+        return @()
+    }
     Write-Log -Level Debug -Message "Retrieved $($DomainsRaw.Count) domains"
 
+    $federationLookupFailed = $false
     $Domains = foreach ($domain in $DomainsRaw) {
         $federatedIdpMfaBehavior = $null
         if ($domain.authenticationType -eq "Federated") {
             Write-Log -Level Debug -Message "Fetching federation configuration for domain: $($domain.id)"
-            $FedConfig = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains/$($domain.id)/federationConfiguration" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters @{ '$select' = 'federatedIdpMfaBehavior' } -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-            if ($FedConfig.Count -gt 0) {
-                if ($FedConfig.Count -gt 1) {
-                    Write-Log -Level Debug -Message "Multiple federation configurations found for domain: $($domain.id). Using the first entry."
+            try {
+                $FedConfig = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains/$($domain.id)/federationConfiguration" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters @{ '$select' = 'federatedIdpMfaBehavior' } -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+                if ($FedConfig.Count -gt 0) {
+                    if ($FedConfig.Count -gt 1) {
+                        Write-Log -Level Debug -Message "Multiple federation configurations found for domain: $($domain.id). Using the first entry."
+                    }
+                    $federatedIdpMfaBehavior = [string]$FedConfig[0].federatedIdpMfaBehavior
+                    Write-Log -Level Debug -Message "federatedIdpMfaBehavior for $($domain.id): $federatedIdpMfaBehavior"
+                } else {
+                    Write-Log -Level Debug -Message "No federation configuration found for domain: $($domain.id)"
                 }
-                $federatedIdpMfaBehavior = [string]$FedConfig[0].federatedIdpMfaBehavior
-                Write-Log -Level Debug -Message "federatedIdpMfaBehavior for $($domain.id): $federatedIdpMfaBehavior"
-            } else {
-                Write-Log -Level Debug -Message "No federation configuration found for domain: $($domain.id)"
+            } catch {
+                $federationLookupFailed = $true
+                Write-Log -Level Verbose -Message "Could not retrieve federation configuration for domain $($domain.id): $($_.Exception.Message)"
             }
         }
         [PSCustomObject]@{

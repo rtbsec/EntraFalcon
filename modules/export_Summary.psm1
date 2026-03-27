@@ -225,7 +225,7 @@ return @"
         }
         $escapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
         $userReportBase = "Users_$($StartTimestamp)_$($escapedTenantName).html"
-        
+
         $displayDomains = @(
             @($Domains | Where-Object { $_.IsDefault }) +
             @($Domains | Where-Object { -not $_.IsDefault })
