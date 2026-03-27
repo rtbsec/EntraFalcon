@@ -238,6 +238,7 @@ This skips the additional authentication needed to access PIM for Groups data.
 - Filters can be negated by starting with `!` (except for numeric comparisons). Examples: `!Mallory`, `!=Mallory`,`!^Mallory` or `!$domain.ch`.
 - Use `=empty` to match empty cells, or `!=empty` to match non-empty cells.
 - Use `||` to match any of multiple values in the same column (e.g., `Admin || Guest`).
+- Use `&&` to require multiple matches in the same column (e.g., `!adm && !svc && !sql`).
 - To apply OR logic across columns, use `or_`, `group1_`, `group2_`... directly in a filter field. Examples: in column 1: `or_>1`, in column 2: `or_!Mallory`
 - *Note:* The **DisplayName** column also includes the object's ID (invisible), so filtering by ID is also possible.
 
