@@ -120,7 +120,7 @@ Param (
 )
 
 #Constants
-$EntraFalconVersion = "V20260321"
+$EntraFalconVersion = "V20260327"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -390,7 +390,7 @@ if ($GLOBALPIMForEntraRolesChecked) {
 }
 
 write-host "`n********************************** [9/10] Enumerating Security Findings **********************************"
-Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices
+Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments
 
 write-host "`n********************************** [10/10] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
