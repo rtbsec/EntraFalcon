@@ -5677,7 +5677,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
             Set-FindingOverride -FindingId "PIM-002" -Props @{
                 Status = "Vulnerable"
-                Description = "<p>There are $($pim002Violations.Count) Tier-0 Entra roles with active user or group assignments that are not activated via PIM.</p><p><strong>Allowed exception:</strong> the Global Administrator role may have up to two directly assigned users or one directly assigned group.</p>"
+                Description = "<p>There are $($pim002Violations.Count) Tier-0 Entra roles with active user or group assignments that are not activated via PIM.</p>"
                 RelatedReportUrl = $pim002RoleReportUrl
                 AffectedObjects = $pim002Violations
             }
