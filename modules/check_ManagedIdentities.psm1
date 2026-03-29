@@ -178,7 +178,6 @@ function Invoke-CheckManagedIdentities {
         $WarningsHighPermission = $null
         $WarningsDangerousPermission = $null
         $AppCredentials = @()
-        $OwnerSPDetails = @()
         
 
         # Display status based on the objects numbers (slightly improves performance)
@@ -690,7 +689,6 @@ function Invoke-CheckManagedIdentities {
             AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
             AzureRoleDetails = $AzureRoleDetails
-            OwnerSPDetails = $OwnerSPDetails
             AppCredentials = $AppCredentialsCount
             AppCredentialsDetails = $AppCredentials
             AppApiPermission = $AppApiPermission

@@ -589,7 +589,6 @@ function Invoke-CheckGroups {
     remove-variable parents -ErrorAction SilentlyContinue
     remove-variable RawResponse -ErrorAction SilentlyContinue
     remove-variable Requests -ErrorAction SilentlyContinue
-    remove-variable AllUsersBasic -ErrorAction SilentlyContinue
     remove-variable GroupMembers -ErrorAction SilentlyContinue
     
     $PmDataCollection.Stop()
