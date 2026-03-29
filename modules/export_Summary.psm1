@@ -414,6 +414,7 @@ return @"
     $ChartsectionEnterpriseApps += New-ChartSection -Title "Enterprise Applications" -Prefix "enterpriseapps" -ChartCount 3
     $ChartsectionAppRegistrations += New-ChartSection -Title "App Registrations" -Prefix "appregistrations" -ChartCount 3
     $ChartsectionManagedIdentities += New-ChartSection -Title "Managed Identities" -Prefix "managedidentities" -ChartCount 2
+    $ChartsectionAgentIdentities += New-ChartSection -Title "Agent Identities" -Prefix "agentidentities" -ChartCount 4
     $ChartsectionEntraRoles += New-ChartSection -Title "Entra ID Role Assignments" -Prefix "entraroles" -ChartCount 4
     $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 4
 
@@ -430,6 +431,9 @@ return @"
     }
     if ($($GlobalAuditSummary.ManagedIdentities.Count) -ge 1) {
         $Chartsection += $ChartsectionManagedIdentities
+    }
+    if ($($GlobalAuditSummary.AgentIdentities.Count + $GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Count + $GlobalAuditSummary.AgentIdentityBlueprints.Count) -ge 1) {
+        $Chartsection += $ChartsectionAgentIdentities
     }
     if ($($GlobalAuditSummary.EntraRoleAssignments.Count) -ge 1) {
         $Chartsection += $ChartsectionEntraRoles
@@ -556,6 +560,31 @@ document.addEventListener('DOMContentLoaded', function () {
             'Medium': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Medium),
             'Low': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Low),
             'Uncategorized': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Misc)
+        },
+
+        // ============ Agent Identities ============   
+        agentidentities_general: {
+            internal: $($($GlobalAuditSummary.AgentIdentities.Count) - $($GlobalAuditSummary.AgentIdentities.Foreign)),
+            foreign: $($GlobalAuditSummary.AgentIdentities.Foreign),
+            total: $($GlobalAuditSummary.AgentIdentities.Count)
+        },
+        agentidentities_apicategorization: {
+            'Dangerous': $($GlobalAuditSummary.AgentIdentities.ApiCategorization.Dangerous),
+            'High': $($GlobalAuditSummary.AgentIdentities.ApiCategorization.High),
+            'Medium': $($GlobalAuditSummary.AgentIdentities.ApiCategorization.Medium),
+            'Low': $($GlobalAuditSummary.AgentIdentities.ApiCategorization.Low),
+            'Uncategorized': $($GlobalAuditSummary.AgentIdentities.ApiCategorization.Misc)
+        },
+        agentblueprintprincipals_general: {
+            internal: $($($GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Count) - $($GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Foreign)),
+            foreign: $($GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Foreign),
+            total: $($GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Count)
+        },
+        agentblueprints_credentials: {
+            'Secrets': $($GlobalAuditSummary.AgentIdentityBlueprints.Credentials.'Secrets'),
+            'Certificates': $($GlobalAuditSummary.AgentIdentityBlueprints.Credentials.'Certificates'),
+            'Federated Credentials': $($GlobalAuditSummary.AgentIdentityBlueprints.Credentials.'Federated Credentials'),
+            'None': $($GlobalAuditSummary.AgentIdentityBlueprints.Credentials.'None')
         },
 
         // ============ Entra Roles ============
@@ -822,6 +851,48 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
+        // ============ Agent Identities ============
+        if (datasetKey === 'agentidentities_general') {
+            return {
+                labels: ['Internal Agent Identities', 'Foreign Agent Identities'],
+                datasets: [{
+                    data: [dataSources.agentidentities_general.internal, dataSources.agentidentities_general.foreign],
+                    backgroundColor: chartColorPalette
+                }]
+            };
+        }
+        if (datasetKey === 'agentidentities_apicategorization') {
+            const entries = Object.entries(dataSources.agentidentities_apicategorization);
+            return {
+                labels: entries.map(e => e[0]),
+                datasets: [{
+                    label: 'Agent Identities',
+                    data: entries.map(e => e[1]),
+                    backgroundColor: chartColorPalette
+                }],
+            };
+        }
+        if (datasetKey === 'agentblueprintprincipals_general') {
+            return {
+                labels: ['Internal Blueprint Principals', 'Foreign Blueprint Principals'],
+                datasets: [{
+                    data: [dataSources.agentblueprintprincipals_general.internal, dataSources.agentblueprintprincipals_general.foreign],
+                    backgroundColor: chartColorPalette
+                }]
+            };
+        }
+        if (datasetKey === 'agentblueprints_credentials') {
+            const entries = Object.entries(dataSources.agentblueprints_credentials);
+            return {
+                labels: entries.map(e => e[0]),
+                datasets: [{
+                    label: 'Agent Blueprints',
+                    data: entries.map(e => e[1]),
+                    backgroundColor: chartColorPalette
+                }],
+            };
+        }
+
         // ============ Entra Roles ============
         if (datasetKey === 'entraroles_general') {
             return {
@@ -917,51 +988,19 @@ document.addEventListener('DOMContentLoaded', function () {
         const titleColor = isDarkMode ? '#ccc' : '#222';
         const labelColor = isDarkMode ? '#eee' : '#111';
         const chartData = getChartData(datasetKey);
-        const hasData = hasRenderableChartData(chartData);
 
         if (chartData && Array.isArray(chartData.datasets)) {
             chartData.datasets.forEach(function (dataset) {
                 dataset.backgroundColor = getDatasetColors(datasetKey, chartData.labels);
-                if (!hasData) {
-                    dataset.backgroundColor = 'rgba(0,0,0,0)';
-                    dataset.borderColor = 'rgba(0,0,0,0)';
-                    dataset.hoverBackgroundColor = 'rgba(0,0,0,0)';
-                    dataset.hoverBorderColor = 'rgba(0,0,0,0)';
-                    dataset.borderWidth = 0;
-                }
             });
         }
 
-        const plugins = [{
-            id: 'emptyState',
-            afterDraw: (chart) => {
-                if (hasData) {
-                    return;
-                }
-
-                const { ctx, chartArea } = chart;
-                if (!chartArea) {
-                    return;
-                }
-
-                ctx.save();
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = isDarkMode ? '#bbbbbb' : '#666666';
-                ctx.font = '600 14px Arial';
-                ctx.fillText('No data available', (chartArea.left + chartArea.right) / 2, (chartArea.top + chartArea.bottom) / 2);
-                ctx.restore();
-            }
-        }];
+        const plugins = [];
 
         if (type === 'bar') {
             plugins.push({
                 id: 'barValueLabels',
                 afterDatasetsDraw: (chart) => {
-                    if (!hasData) {
-                        return;
-                    }
-
                     const { ctx, chartArea } = chart;
                     const isHorizontal = chart.options.indexAxis === 'y';
 
@@ -1005,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        if (type === 'doughnut' && hasData) {
+        if (type === 'doughnut') {
             plugins.push({
                 id: 'centerText',
                 beforeDraw: (chart) => {
@@ -1033,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 indexAxis: indexAxis,
                 plugins: {
                     legend: {
-                        display: hasData && showLegend,
+                        display: showLegend,
                         position: 'top',
                         labels: { color: axisColor }
                     },
@@ -1047,12 +1086,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 scales: type === 'bar' ? {
                     x: {
-                        display: hasData,
+                        display: true,
                         ticks: { color: axisColor },
                         grid: { color: gridColor }
                     },
                     y: {
-                        display: hasData,
+                        display: true,
                         ticks: { color: axisColor },
                         grid: { color: gridColor }
                     }
@@ -1060,6 +1099,26 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             plugins
         };
+    }
+
+    function updateChartSectionVisibility() {
+        document.querySelectorAll('.summary-chart-panel').forEach(panel => {
+            const chartGrid = panel.querySelector('.chart-grid');
+            if (!chartGrid) {
+                return;
+            }
+
+            const chartBoxes = Array.from(chartGrid.querySelectorAll('.chart-box'));
+            const visibleChartBoxes = chartBoxes.filter(box => box.style.display !== 'none');
+            const metaNode = panel.querySelector('.summary-chart-panel-meta');
+            const visibleCount = visibleChartBoxes.length;
+
+            panel.style.display = visibleCount > 0 ? '' : 'none';
+
+            if (metaNode) {
+                metaNode.textContent = String(visibleCount) + ' chart' + (visibleCount === 1 ? '' : 's');
+            }
+        });
     }
 
     // === 3. Chart layout/config ===
@@ -1092,6 +1151,12 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'managedidentities_chart1', title: 'System vs User Assigned', type: 'doughnut', dataset: 'managedidentities_general' },
         { id: 'managedidentities_chart2', title: 'API Permission Severity', type: 'bar', dataset: 'managedidentities_apicategorization', indexAxis: 'y', showLegend: false },
 
+        // ============ Agent Identities ============
+        { id: 'agentidentities_chart1', title: 'Agent Identities: Internal vs Foreign', type: 'doughnut', dataset: 'agentidentities_general' },
+        { id: 'agentidentities_chart2', title: 'Agent Identities: API Permission Severity', type: 'bar', dataset: 'agentidentities_apicategorization', indexAxis: 'y', showLegend: false },
+        { id: 'agentidentities_chart3', title: 'Blueprint Principals: Internal vs Foreign', type: 'doughnut', dataset: 'agentblueprintprincipals_general' },
+        { id: 'agentidentities_chart4', title: 'Blueprints: Credential Types', type: 'bar', dataset: 'agentblueprints_credentials', indexAxis: 'y', showLegend: false },
+
         // ============ Entra Roles ============
         { id: 'entraroles_chart1', title: 'Eligible vs Active', type: 'doughnut', dataset: 'entraroles_general' },
         { id: 'entraroles_chart2', title: 'Built-In vs Custom', type: 'bar', dataset: 'entraroles_builtin', showLegend: false },
@@ -1112,14 +1177,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
         chartConfigs.forEach(config => {
             const ctx = document.getElementById(config.id);
-            if (ctx) {
-                const chart = new Chart(
-                    ctx,
-                    getChartOptions(config.title, config.type, config.dataset, config.indexAxis || 'x', config.showLegend !== false)
-                );
-                chartInstances.push(chart);
+            if (!ctx) {
+                return;
             }
+
+            const chartBox = ctx.closest('.chart-box');
+            const chartData = getChartData(config.dataset);
+            const hasData = hasRenderableChartData(chartData);
+
+            if (!hasData) {
+                if (chartBox) {
+                    chartBox.style.display = 'none';
+                }
+                return;
+            }
+
+            if (chartBox) {
+                chartBox.style.display = '';
+            }
+
+            const chart = new Chart(
+                ctx,
+                getChartOptions(config.title, config.type, config.dataset, config.indexAxis || 'x', config.showLegend !== false)
+            );
+            chartInstances.push(chart);
         });
+
+        updateChartSectionVisibility();
     }
 
     renderCharts(); // Initial load
