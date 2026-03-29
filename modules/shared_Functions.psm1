@@ -4866,6 +4866,52 @@ function Get-AllAzureIAMAssignmentsNative {
         return $Scope
     }
 
+    # Build a normalized lookup key so active role assignments can be matched
+    # against Azure PIM schedule instances even when the ARM object IDs differ.
+    function Get-AzureIamAssignmentLookupKey {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$PrincipalId,
+            [Parameter(Mandatory = $true)]
+            [string]$RoleDefinitionId,
+            [Parameter(Mandatory = $false)]
+            [string]$Scope
+        )
+
+        $normalizedScope = if ([string]::IsNullOrWhiteSpace($Scope)) { "/" } else { $Scope }
+        return ("{0}|{1}|{2}" -f $PrincipalId, $RoleDefinitionId, $normalizedScope).ToLowerInvariant()
+    }
+
+    # Keep the most relevant schedule instance for a lookup key. When multiple
+    # instances exist, prefer the one with the latest end time.
+    function Set-AzureScheduleLookupEntry {
+        param(
+            [Parameter(Mandatory = $true)]
+            [hashtable]$Lookup,
+            [Parameter(Mandatory = $true)]
+            [string]$Key,
+            [Parameter(Mandatory = $true)]
+            [pscustomobject]$Entry
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Key)) {
+            return
+        }
+
+        if (-not $Lookup.ContainsKey($Key)) {
+            $Lookup[$Key] = $Entry
+            return
+        }
+
+        $existingEntry = $Lookup[$Key]
+        $existingEnd = if ($null -ne $existingEntry.EndDateTime -and -not [string]::IsNullOrWhiteSpace([string]$existingEntry.EndDateTime)) { [datetime]$existingEntry.EndDateTime } else { [datetime]::MinValue }
+        $newEnd = if ($null -ne $Entry.EndDateTime -and -not [string]::IsNullOrWhiteSpace([string]$Entry.EndDateTime)) { [datetime]$Entry.EndDateTime } else { [datetime]::MinValue }
+
+        if ($newEnd -gt $existingEnd) {
+            $Lookup[$Key] = $Entry
+        }
+    }
+
     #Get all Azure roles for lookup
     $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
     $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
@@ -4905,12 +4951,62 @@ function Get-AllAzureIAMAssignmentsNative {
 
 
     foreach ($subscription in $subscriptions) {       
+        # Two lookup strategies are used for Azure PIM activations:
+        # - by originating roleAssignment id when ARM provides a direct link
+        # - by principal/role/scope as a fallback for less explicit responses
+        $ActiveScheduleAssignmentsByOriginId = @{}
+        $ActiveScheduleAssignmentsByKey = @{}
+
+        try {
+            Write-Log -Level Debug -Message "Checking PIM activation schedule instances for subscription $($subscription.Id)"
+            $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleAssignmentScheduleInstances?api-version=2020-10-01"
+            $AssignmentScheduleInstances = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Silent -ErrorAction Stop)
+
+            foreach ($instance in $AssignmentScheduleInstances) {
+                $instanceProperties = $instance.properties
+                if ($null -eq $instanceProperties) {
+                    continue
+                }
+
+                $roleId = ($instanceProperties.roleDefinitionId -split '/')[-1]
+                $lookupKey = Get-AzureIamAssignmentLookupKey -PrincipalId ([string]$instanceProperties.principalId) -RoleDefinitionId ([string]$roleId) -Scope ([string]$instanceProperties.scope)
+                $linkedEligibilityScheduleId = [string]$instanceProperties.linkedRoleEligibilityScheduleId
+                # Only schedule instances linked to an eligibility schedule are
+                # considered PIM activations. Plain scheduled direct assignments
+                # must not be reported as "ActivatedViaPIM".
+                if (
+                    [string]::IsNullOrWhiteSpace($linkedEligibilityScheduleId) -and
+                    [string]::IsNullOrWhiteSpace([string]$instanceProperties.linkedRoleEligibilityScheduleInstanceId)
+                ) {
+                    continue
+                }
+
+                $scheduleEntry = [pscustomobject]@{
+                    StartDateTime          = $instanceProperties.startDateTime
+                    EndDateTime            = $instanceProperties.endDateTime
+                    OriginRoleAssignmentId = [string]$instanceProperties.originRoleAssignmentId
+                }
+
+                Set-AzureScheduleLookupEntry -Lookup $ActiveScheduleAssignmentsByKey -Key $lookupKey -Entry $scheduleEntry
+
+                if (-not [string]::IsNullOrWhiteSpace($scheduleEntry.OriginRoleAssignmentId)) {
+                    Set-AzureScheduleLookupEntry -Lookup $ActiveScheduleAssignmentsByOriginId -Key $scheduleEntry.OriginRoleAssignmentId.ToLowerInvariant() -Entry $scheduleEntry
+                }
+            }
+
+            Write-Log -Level Debug -Message "Got $($ActiveScheduleAssignmentsByKey.Count) Azure PIM activation schedule instances for subscription $($subscription.Id)"
+        } catch {
+            Write-Log -Level Debug -Message "Unable to enrich Azure role assignments with PIM activation data for subscription $($subscription.Id): $($_.Exception.Message)"
+        }
+
         #Active Roles
         $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
         $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
         $AssignmentsActive = $response | ForEach-Object {
             $roleId = ($_.properties.roleDefinitionId -split '/')[-1]
-            $resolvedScope = Resolve-AzureIamScopePath -Scope $_.properties.scope
+            $rawScope = [string]$_.properties.scope
+            $resolvedScope = Resolve-AzureIamScopePath -Scope $rawScope
+            $lookupKey = Get-AzureIamAssignmentLookupKey -PrincipalId ([string]$_.properties.principalId) -RoleDefinitionId ([string]$roleId) -Scope $rawScope
 
             # Null safe check
             if (-not $roleHashTable.ContainsKey($roleId)) {
@@ -4928,8 +5024,23 @@ function Get-AllAzureIAMAssignmentsNative {
                 # Set to ? if not assigned to a tier level
                 $RoleTier = "?"
             }
+
+            # Prefer an explicit origin-roleAssignment match. Only fall back to
+            # the composite key when ARM did not expose an origin assignment id.
+            $ActiveScheduleAssignment = $null
+            $roleAssignmentId = [string]$_.id
+            if (-not [string]::IsNullOrWhiteSpace($roleAssignmentId) -and $ActiveScheduleAssignmentsByOriginId.ContainsKey($roleAssignmentId.ToLowerInvariant())) {
+                $ActiveScheduleAssignment = $ActiveScheduleAssignmentsByOriginId[$roleAssignmentId.ToLowerInvariant()]
+            } elseif ($ActiveScheduleAssignmentsByKey.ContainsKey($lookupKey)) {
+                $scheduleCandidate = $ActiveScheduleAssignmentsByKey[$lookupKey]
+                if ([string]::IsNullOrWhiteSpace([string]$scheduleCandidate.OriginRoleAssignmentId)) {
+                    $ActiveScheduleAssignment = $scheduleCandidate
+                }
+            }
+
             [PSCustomObject]@{
                 ObjectId           = $_.properties.principalId
+                RoleAssignmentId   = $roleAssignmentId
                 RoleDefinitionName = $RoleDetails.RoleName
                 RoleType           = $RoleDetails.RoleType
                 RoleTier           = $RoleTier
@@ -4937,6 +5048,9 @@ function Get-AllAzureIAMAssignmentsNative {
                 Conditions         = $hasCondition 
                 PrincipalType      = $_.properties.principalType
                 AssignmentType     = "Active"
+                ActivatedViaPIM    = ($null -ne $ActiveScheduleAssignment)
+                StartDateTime      = if ($null -ne $ActiveScheduleAssignment -and $null -ne $ActiveScheduleAssignment.StartDateTime) { $ActiveScheduleAssignment.StartDateTime } else { "-" }
+                EndDateTime        = if ($null -ne $ActiveScheduleAssignment -and $null -ne $ActiveScheduleAssignment.EndDateTime) { $ActiveScheduleAssignment.EndDateTime } else { "Permanent" }
             }
         }
         Write-Log -Level Debug -Message "Got $($AssignmentsActive.count) active role assignments"
@@ -4981,11 +5095,16 @@ function Get-AllAzureIAMAssignmentsNative {
                     Conditions         = $hasCondition 
                     PrincipalType      = $_.properties.principalType
                     AssignmentType     = "Eligible"
+                    ActivatedViaPIM    = $false
+                    StartDateTime      = if ($null -ne $_.properties.startDateTime) { $_.properties.startDateTime } else { "-" }
+                    EndDateTime        = if ($null -ne $_.properties.endDateTime) { $_.properties.endDateTime } else { "Permanent" }
                 }
             }
             Write-Log -Level Debug -Message "Got $($AssignmentsEligible.count) eligible role assignments"
         }
    
+        # Keep the existing "Active" vs "Eligible" model and enrich only the
+        # active entries with PIM activation metadata.
         $AllAssignments = @($AssignmentsActive) + @($AssignmentsEligible)
 
         foreach ($assignment in $AllAssignments) {
@@ -5011,6 +5130,9 @@ function Get-AllAzureIAMAssignmentsNative {
                     Conditions = $assignment.Conditions
                     PrincipalType = $assignment.PrincipalType
                     AssignmentType = $assignment.AssignmentType
+                    ActivatedViaPIM = $assignment.ActivatedViaPIM
+                    StartDateTime = $assignment.StartDateTime
+                    EndDateTime = $assignment.EndDateTime
                 }
             }
         }
@@ -5042,6 +5164,9 @@ function Get-AzureRoleDetails {
                 Conditions = $role.Conditions
                 RoleTier = $role.RoleTier
                 AssignmentType  = $role.AssignmentType
+                ActivatedViaPIM = $role.ActivatedViaPIM
+                StartDateTime = $role.StartDateTime
+                EndDateTime = $role.EndDateTime
             }
             $azureRoleDetails += $roleInfo
         }

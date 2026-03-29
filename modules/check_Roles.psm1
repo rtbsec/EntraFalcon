@@ -356,7 +356,7 @@ function Invoke-CheckRoles {
             "PrincipalType" = $($PrincipalDetails.Type)
             "RoleTier" = $RoleTier
             "AssignmentType" = $($item.AssignmentType)
-            "ActivatedViaPIM" = if ($item.PSObject.Properties.Match('ActivatedViaPIM').Count -gt 0) { $item.ActivatedViaPIM } elseif ($item.PSObject.Properties.Match('Activated').Count -gt 0) { $item.Activated } else { $false }
+            "ActivatedViaPIM" = $($item.ActivatedViaPIM)
             "Start" = Format-RoleAssignmentDateTime -Value $item.StartDateTime
             "Expires" = Format-RoleAssignmentDateTime -Value $item.EndDateTime
             "DirectoryScopeId" = $($item.DirectoryScopeId)
@@ -433,6 +433,7 @@ function Invoke-CheckRoles {
                 $PrincipalDisplayNameLink = $PrincipalDetails.DisplayNameLink
             }
 
+            # Flatten one principal -> many Azure assignments into the same row
             foreach ($Assignment in $Assignments) {
                 switch ($Assignment.RoleTier) {
                     0 { $RoleTier = "Tier-0"; break }
@@ -452,6 +453,9 @@ function Invoke-CheckRoles {
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
                     AssignmentType            = $Assignment.AssignmentType
+                    ActivatedViaPIM           = $Assignment.ActivatedViaPIM
+                    Start                     = Format-RoleAssignmentDateTime -Value $Assignment.StartDateTime
+                    Expires                   = Format-RoleAssignmentDateTime -Value $Assignment.EndDateTime
                 })
             }
         } else {
@@ -476,6 +480,9 @@ function Invoke-CheckRoles {
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
                     AssignmentType            = $Assignment.AssignmentType
+                    ActivatedViaPIM           = $Assignment.ActivatedViaPIM
+                    Start                     = Format-RoleAssignmentDateTime -Value $Assignment.StartDateTime
+                    Expires                   = Format-RoleAssignmentDateTime -Value $Assignment.EndDateTime
                 })
             }
         }
@@ -523,7 +530,7 @@ function Invoke-CheckRoles {
     $mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
 
 
-    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
     $mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainAzureTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainAzureTableJson + "`n" + '</script>'
@@ -632,9 +639,9 @@ $headerHtml = @"
         $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $SortedAzureRoles | format-table Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $SortedAzureRoles | format-table Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         if ($Csv) {
-            $SortedAzureRoles | select-object Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+            $SortedAzureRoles | select-object Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
         }
         write-host "[+] Details of $($SortedAzureRoles.count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
         
