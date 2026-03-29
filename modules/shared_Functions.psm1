@@ -5474,7 +5474,9 @@ function Initialize-TenantReportTabs {
         @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'ManagedIdentities';         Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'Agents';                    Key = 'Agents';     Title = 'Agents';                    File = "Agents_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AgentIdentities';           Key = 'AgentIdentities'; Title = 'Agent Identities';     File = "AgentIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AgentIdentityBlueprintsPrincipals'; Key = 'AgentIdentityBlueprintsPrincipals'; Title = 'Agent Blueprint Principals'; File = "AgentIdentityBlueprintsPrincipals_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AgentIdentityBlueprints';   Key = 'AgentIdentityBlueprints'; Title = 'Agent Blueprints'; File = "AgentIdentityBlueprints_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EntraRoles';                Key = 'RoleEntra';  Title = 'Role Assignments (Entra)';  File = "Role_Assignments_Entra_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AzureRoles';                Key = 'RoleAz';     Title = 'Role Assignments (Azure)';  File = "Role_Assignments_Azure_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'PimForEntra';               Key = 'PIM';        Title = 'PIM (Entra)';                File = "PIM_${StartTimestamp}_${tenantNameEscaped}.html" }
@@ -5679,8 +5681,10 @@ function Get-TenantReportAvailability {
         @{ Name = 'Groups';           Url = '/groups' }
         @{ Name = 'AppRegistrations'; Url = '/applications' }
         @{ Name = 'ManagedIdentities'; Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ManagedIdentity'" } }
+        @{ Name = 'AgentIdentities'; Url = '/servicePrincipals/Microsoft.Graph.AgentIdentity' }
+        @{ Name = 'AgentIdentityBlueprintsPrincipals'; Url = '/servicePrincipals/graph.agentIdentityBlueprintPrincipal' }
+        @{ Name = 'AgentIdentityBlueprints'; Url = '/applications/microsoft.graph.agentIdentityBlueprint' }
         #@{ Name = 'EnterpriseApps';   Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'Application'" } }
-        #@{ Name = 'Agents';           Url = '/servicePrincipals'; Query = @{ '$filter' = "servicePrincipalType eq 'ServiceIdentity'" } }
     )
 
     foreach ($spec in $requestSpecs) {
