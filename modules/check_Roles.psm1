@@ -19,6 +19,8 @@ function Invoke-CheckRoles {
         [Parameter(Mandatory=$true)][hashtable]$ManagedIdentities,
         [Parameter(Mandatory=$true)][hashtable]$AppRegistrations,
         [Parameter(Mandatory=$true)][hashtable]$Users,
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentities = @{},
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprintsPrincipals = @{},
         [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
@@ -88,6 +90,32 @@ function Invoke-CheckRoles {
                 $ObjectDetailsCache[$cacheKey] = $object
                 Return $object
             } 
+        }
+
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "serviceprincipal") {
+            $MatchingBlueprintPrincipal = $AgentIdentityBlueprintsPrincipals[$ObjectID]
+            if ($MatchingBlueprintPrincipal) {
+                $object = [PSCustomObject]@{
+                    DisplayName     = $MatchingBlueprintPrincipal.DisplayName
+                    DisplayNameLink = "<a href=AgentIdentityBlueprintsPrincipals_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingBlueprintPrincipal.DisplayName)</a>"
+                    Type            = "Agent Identity Blueprint Principal"
+                }
+                $ObjectDetailsCache[$cacheKey] = $object
+                Return $object
+            }
+        }
+
+        if ($normalizedType -eq "unknown" -or $normalizedType -eq "serviceprincipal") {
+            $MatchingAgentIdentity = $AgentIdentities[$ObjectID]
+            if ($MatchingAgentIdentity) {
+                $object = [PSCustomObject]@{
+                    DisplayName     = $MatchingAgentIdentity.DisplayName
+                    DisplayNameLink = "<a href=AgentIdentities_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($ObjectID)>$($MatchingAgentIdentity.DisplayName)</a>"
+                    Type            = "Agent Identity"
+                }
+                $ObjectDetailsCache[$cacheKey] = $object
+                Return $object
+            }
         }
 
         if ($normalizedType -eq "unknown" -or $normalizedType -eq "serviceprincipal") {
@@ -446,7 +474,7 @@ function Invoke-CheckRoles {
                     PrincipalId               = $PrincipalId
                     PrincipalDisplayName      = $PrincipalDisplayName
                     PrincipalDisplayNameLink  = $PrincipalDisplayNameLink
-                    PrincipalType             = $Assignment.PrincipalType
+                    PrincipalType             = if ($PrincipalDetails -and $PrincipalDetails.Type -ne "Unknown Object") { $PrincipalDetails.Type } else { $Assignment.PrincipalType }
                     RoleType                  = $Assignment.RoleType
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
@@ -611,6 +639,8 @@ $headerHtml = @"
             "User" {$AssignmentPrincipalTypUsers++; break}
             "Group" {$AssignmentPrincipalTypGroups++; break}
             "Enterprise Application" {$AssignmentPrincipalTypApps++; break}
+            "Agent Identity" {$AssignmentPrincipalTypApps++; break}
+            "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypApps++; break}
             "Managed Identity" {$AssignmentPrincipalTypMIs++; break}
             "Unknown Object" {$AssignmentPrincipalTypUnknown++}
         }
@@ -678,6 +708,10 @@ $headerHtml = @"
                 "User" {$AssignmentPrincipalTypUsers++; break}
                 "Group" {$AssignmentPrincipalTypGroups++; break}
                 "ServicePrincipal" {$AssignmentPrincipalTypSPs++; break}
+                "Enterprise Application" {$AssignmentPrincipalTypSPs++; break}
+                "Agent Identity" {$AssignmentPrincipalTypSPs++; break}
+                "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypSPs++; break}
+                "Managed Identity" {$AssignmentPrincipalTypSPs++; break}
                 "Unknown Object" {$AssignmentPrincipalTypUnknown++}
             }
         }

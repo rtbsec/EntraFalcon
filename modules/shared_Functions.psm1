@@ -696,7 +696,7 @@ $global:GLOBALJavaScript_Table = @'
                     description: "Azure role assignments held by service principals",
                     label: "Service Principal Assignments",
                     filters: {
-                        PrincipalType: "ServicePrincipal"
+                        PrincipalType: "ServicePrincipal||Enterprise Application||Agent Identity||Agent Identity Blueprint Principal||Managed Identity"
                     }
                 },
                 {
@@ -814,7 +814,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -860,7 +860,8 @@ $global:GLOBALJavaScript_Table = @'
             "Direct": "Number of directly assigned active role assignments that are not activated via PIM",
             "Activated": "Number of currently active role assignments activated via PIM",
             "AssignmentType": "Activated eligible assignments also appear as active",
-            "Conditions": "Has additional conditions"
+            "Conditions": "Has additional conditions",
+            "Coverage": "Percentage of tenant users covered by the policy after exclusions. External users are only approximated for b2bCollaborationGuest and do not include all types or tenant-specific selections."
         };
     
         (function () {    
@@ -1832,6 +1833,7 @@ $global:GLOBALJavaScript_Table = @'
 
                 for (let [key, value] of Object.entries(obj)) {
                     key = key.trim();
+                    if (key === "Object Name" || key === "Object ID" || key === "ObjectId" || key === "Id") continue;
                     if (!value || (Array.isArray(value) && value.length === 0)) continue;
 
                     if (Array.isArray(value)) {
@@ -1849,6 +1851,11 @@ $global:GLOBALJavaScript_Table = @'
                         } else {
                             detailsEl.appendChild(renderDetailsTable(key, [value]));
                         }
+                    } else if (typeof value === 'string') {
+                        const noteEl = document.createElement('p');
+                        noteEl.className = 'detail-note';
+                        noteEl.textContent = value;
+                        detailsEl.appendChild(noteEl);
                     }
                 }
 
@@ -3023,6 +3030,13 @@ $global:GLOBALCss = @"
         font-size: 12px;
         margin-top: 10px;
         overflow-x: auto;
+    }
+
+    .detail-note {
+        font-size: 11px;
+        font-style: italic;
+        margin: 2px 0 8px 0;
+        opacity: 0.75;
     }
 
     #toggle-expand {
@@ -5599,9 +5613,9 @@ function Initialize-TenantReportTabs {
         @{ Prop = 'AppRegistrations';          Key = 'AR';         Title = 'App Registrations';         File = "AppRegistration_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EnterpriseApps';            Key = 'EA';         Title = 'Enterprise Apps';           File = "EnterpriseApps_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'ManagedIdentities';         Key = 'MI';         Title = 'Managed Identities';        File = "ManagedIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'AgentIdentities';           Key = 'AgentIdentities'; Title = 'Agent Identities';     File = "AgentIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
-        @{ Prop = 'AgentIdentityBlueprintsPrincipals'; Key = 'AgentIdentityBlueprintsPrincipals'; Title = 'Agent Blueprint Principals'; File = "AgentIdentityBlueprintsPrincipals_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AgentIdentityBlueprints';   Key = 'AgentIdentityBlueprints'; Title = 'Agent Blueprints'; File = "AgentIdentityBlueprints_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AgentIdentityBlueprintsPrincipals'; Key = 'AgentIdentityBlueprintsPrincipals'; Title = 'Agent Blueprint Principals'; File = "AgentIdentityBlueprintsPrincipals_${StartTimestamp}_${tenantNameEscaped}.html" }
+        @{ Prop = 'AgentIdentities';           Key = 'AgentIdentities'; Title = 'Agent Identities';     File = "AgentIdentities_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'EntraRoles';                Key = 'RoleEntra';  Title = 'Role Assignments (Entra)';  File = "Role_Assignments_Entra_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'AzureRoles';                Key = 'RoleAz';     Title = 'Role Assignments (Azure)';  File = "Role_Assignments_Azure_${StartTimestamp}_${tenantNameEscaped}.html" }
         @{ Prop = 'PimForEntra';               Key = 'PIM';        Title = 'PIM (Entra)';                File = "PIM_${StartTimestamp}_${tenantNameEscaped}.html" }
