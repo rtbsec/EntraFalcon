@@ -1022,7 +1022,7 @@ function Invoke-CheckGroups {
         if ($owneruser.count -ge 1) {
 
             #Check if there is an owner synced from on-prem
-            if ($null -ne $owneruser.onPremisesSyncEnabled) {
+            if ($owneruser.onPremisesSyncEnabled -contains $true) {
                 $LikelihoodScore += $GroupLikelihoodScore["DirectOwnerOnprem"]
             } else {
                 $LikelihoodScore += $GroupLikelihoodScore["DirectOwnerCloud"]
