@@ -660,6 +660,7 @@ function Invoke-CheckGroups {
         $memberDevices = [System.Collections.Generic.List[psobject]]::new()
         $owneruser     = [System.Collections.Generic.List[psobject]]::new()
         $ownersp       = [System.Collections.Generic.List[psobject]]::new()
+        $baseOwnerUserDetails = [System.Collections.Generic.List[psobject]]::new()
 
         # Process group members
         if ($TransitiveMembersRaw.ContainsKey($group.Id)) {
@@ -712,10 +713,17 @@ function Invoke-CheckGroups {
                 switch ($Owner.'@odata.type') {
         
                     '#microsoft.graph.user' {
-                        [void]$owneruser.Add(
+                        $ownerUserEntry = [PSCustomObject]@{
+                            Id                    = $Owner.Id
+                            userType              = $Owner.userType
+                            onPremisesSyncEnabled = $Owner.onPremisesSyncEnabled
+                            AssignmentType        = 'Active'
+                        }
+
+                        [void]$owneruser.Add($ownerUserEntry)
+                        [void]$baseOwnerUserDetails.Add(
                             [PSCustomObject]@{
                                 Id                    = $Owner.Id
-                                userType              = $Owner.userType
                                 onPremisesSyncEnabled = $Owner.onPremisesSyncEnabled
                                 AssignmentType        = 'Active'
                             }
@@ -1281,7 +1289,7 @@ function Invoke-CheckGroups {
             OwnerGroupDetails = $OwnerGroup
             OwnersSynced = $ownersynced
             ownerSpDetails = $ownerSpDetails
-            BaseOwnerUserDetails = $owneruser       #Used for nesting calculations
+            BaseOwnerUserDetails = $baseOwnerUserDetails #Used for nesting calculations
             BaseOwnerSpDetails   = $ownerSpDetails  #Used for nesting calculations
             InheritedHighValue = 0
             Protected = $Protected
