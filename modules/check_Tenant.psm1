@@ -108,7 +108,8 @@ function Invoke-CheckTenant {
     function Test-CapSoftCompliance {
         param(
             $Policy,
-            [switch]$SkipAllUsersCheck
+            [switch]$SkipAllUsersCheck,
+            [switch]$AllowGuestExclusions
         )
         $issues = [System.Collections.Generic.List[string]]::new()
 
@@ -117,9 +118,11 @@ function Invoke-CheckTenant {
             if ($incUsersText -ne "all") { $issues.Add("Included users not set to <code>all</code>") }
         }
 
-        $excUsers = Get-IntSafe $Policy.ExcUsers
-        $excUsersThroughGroups = Get-IntSafe $Policy.ExcUsersViaGroups
-        if ($excUsers -ge 3 -or $excUsersThroughGroups -ge 3) { $issues.Add("Too many excluded users") }
+        $excludedUsersEffective = Get-IntSafe $Policy.ExcludedUsersEffective
+        if ($AllowGuestExclusions) {
+            $excludedUsersEffective = [Math]::Max(($excludedUsersEffective - (Get-IntSafe $Policy.ExcludedGuestUsersEffective)), 0)
+        }
+        if ($excludedUsersEffective -ge 3) { $issues.Add("Too many excluded users") }
 
         if ((Get-IntSafe $Policy.MissingRolesCount) -ne 0) { $issues.Add("Missing roles detected") }
         if ((Get-IntSafe $Policy.ScopedRolesCount) -ne 0) { $issues.Add("Scoped roles detected") }
@@ -192,17 +195,9 @@ function Invoke-CheckTenant {
             [hashtable]$AuthStrengthLookupById
         )
 
-        $authStrengthDisplay = "$($Policy.AuthStrength)"
-        if ([string]::IsNullOrWhiteSpace($authStrengthDisplay)) {
-            $authStrengthId = "$($Policy.AuthStrengthId)".Trim()
-            if (-not [string]::IsNullOrWhiteSpace($authStrengthId) -and $null -ne $AuthStrengthLookupById -and $AuthStrengthLookupById.ContainsKey($authStrengthId)) {
-                $authStrengthDisplay = "$($AuthStrengthLookupById[$authStrengthId].DisplayName)"
-            } else {
-                $authStrengthDisplay = $authStrengthId
-            }
-        }
-
-        return $authStrengthDisplay
+        $authStrengthDisplay = "$($Policy.AuthStrength)".Trim()
+        if (-not [string]::IsNullOrWhiteSpace($authStrengthDisplay)) { return $authStrengthDisplay }
+        return "$($Policy.AuthStrengthId)".Trim()
     }
 
     function New-CapUnifiedEvaluation {
@@ -290,14 +285,7 @@ function Invoke-CheckTenant {
             $additionalConditions = if ($null -ne $policy.additionalConditionTypes) { $policy.additionalConditionTypes } else { $policy.AdditionalConditionTypes }
             $authStrengthDisplay = "$($authStrengthDisplayByPolicyId[$policyId])"
             $incUsersRaw = "$($policy.IncUsers)".Trim()
-            $incUsersDisplay = "0"
-            if ($incUsersRaw.ToLowerInvariant() -eq "all") {
-                $incUsersDisplay = "all"
-            } else {
-                $incUsersDirect = Get-IntSafe $policy.IncUsers
-                $incUsersThroughGroups = Get-IntSafe $policy.IncUsersViaGroups
-                $incUsersDisplay = "$($incUsersDirect + $incUsersThroughGroups)"
-            }
+            $incUsersDisplay = if ($incUsersRaw.ToLowerInvariant() -eq "all") { "all" } else { "$(Get-IntSafe $policy.IncludedUsersEffective)" }
 
             $rowProps = [ordered]@{
                 "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($policy.Id)`" target=`"_blank`">$($policy.DisplayName)</a>"
@@ -309,8 +297,8 @@ function Invoke-CheckTenant {
             if ($showAuthStrength) {
                 $rowProps["Auth Strength"] = $authStrengthDisplay
             }
-            $rowProps["Included Users (direct or groups)"] = $incUsersDisplay
-            $rowProps["Excluded Users (direct or groups)"] = (Get-IntSafe $policy.ExcUsers) + (Get-IntSafe $policy.ExcUsersViaGroups)
+            $rowProps["Included Users (effective)"] = $incUsersDisplay
+            $rowProps["Excluded Users (effective)"] = Get-IntSafe $policy.ExcludedUsersEffective
             if ($showMissingRoles) {
                 $rowProps["Missing Roles"] = $policy.MissingRolesCount
             }
@@ -395,11 +383,10 @@ function Invoke-CheckTenant {
     }
     Write-Log -Level Debug -Message ("Tenant directory settings normalized count: {0}" -f $TenantDirectorySettingsList.Count)
 
-    #Special handling for deviceRegistrationPolicy and authenticationStrength sicne the require a different pre-consented scope which is not available using device code flow
+    # Device registration policy needs a different token in some auth flows.
+    # Authentication strengths are already resolved during Conditional Access enumeration and travel with $AllCaps.
     $deviceRegistrationPolicy = $null
-    $AllAuthStrengths = $null
     $DeviceRegistrationPolicyAvailable = $false
-    $AuthStrengthLookupAvailable = $false
     $specialDataUnavailabilityReason = ""
     $specialDataAccessToken = $null
 
@@ -414,21 +401,21 @@ function Invoke-CheckTenant {
         $specialDataAccessToken = $GLOBALMsGraphAccessToken.access_token
     } elseif ($effectiveAuthFlow -eq "DeviceCode") {
         $specialDataUnavailabilityReason = "DeviceCode flow does not support these endpoints."
-        Write-Log -Level Verbose -Message "Skipping device registration policy and authentication strength lookup: $specialDataUnavailabilityReason"
+        Write-Log -Level Verbose -Message "Skipping device registration policy lookup: $specialDataUnavailabilityReason"
     } else {
         $specialAuthContext = $global:GLOBALSecurityFindingsAccessContext
         $hasSpecialTokenContext = ($null -ne $specialAuthContext -and $specialAuthContext.PSObject.Properties.Name -contains "IsAvailable")
 
         if ($hasSpecialTokenContext -and -not [bool]$specialAuthContext.IsAvailable) {
             $specialDataUnavailabilityReason = "Special authentication failed earlier ($($specialAuthContext.Reason))."
-            Write-Log -Level Verbose -Message "Skipping device registration policy and authentication strength lookup: $specialDataUnavailabilityReason"
+            Write-Log -Level Verbose -Message "Skipping device registration policy lookup: $specialDataUnavailabilityReason"
         } else {
             $refreshOk = RefreshAuthenticationSecurityFindingsMsGraph
             if ($refreshOk -and $null -ne $GLOBALSecurityFindingsGraphAccessTokenSpecial) {
                 $specialDataAccessToken = $GLOBALSecurityFindingsGraphAccessTokenSpecial.access_token
             } else {
                 $specialDataUnavailabilityReason = "Special token is unavailable or refresh failed."
-                Write-Log -Level Verbose -Message "Skipping device registration policy and authentication strength lookup: $specialDataUnavailabilityReason"
+                Write-Log -Level Verbose -Message "Skipping device registration policy lookup: $specialDataUnavailabilityReason"
             }
         }
     }
@@ -441,101 +428,10 @@ function Invoke-CheckTenant {
         } catch {
             Write-Log -Level Verbose -Message "Could not retrieve /policies/deviceRegistrationPolicy. CAP-004 device-settings context will require manual verification."
         }
-
-        try {
-            Write-Host "[*] Get authentication strengths"
-            $authStrengthsQueryParameters = @{
-                '$select' = "id,displayName,allowedCombinations"
-            }
-            $AllAuthStrengths = Send-GraphRequest -AccessToken $specialDataAccessToken -Method GET -Uri "/identity/conditionalAccess/authenticationStrength/policies" -QueryParameters $authStrengthsQueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
-            $AuthStrengthLookupAvailable = $true
-        } catch {
-            Write-Log -Level Verbose -Message "Could not retrieve authentication strength policies. CAP-005 phishing-resistant validation will require manual verification."
-        }
     } else {
-        Write-Host "[i] Security Findings extended policy checks skipped for current auth flow/token context."
+        Write-Host "[i] Security Findings device policy check skipped for current auth flow/token context."
     }
-    Write-Log -Level Debug -Message ("Special endpoint availability: DeviceRegistrationPolicyAvailable={0}; AuthStrengthLookupAvailable={1}" -f $DeviceRegistrationPolicyAvailable, $AuthStrengthLookupAvailable)
-
-    # Post process $AllAuthStrengths to determine which are phishing resistant and which allow single facter auth.
-    $authStrengthItems = @()
-    if ($null -ne $AllAuthStrengths) {
-        if ($AllAuthStrengths -is [hashtable]) {
-            $authStrengthItems = @($AllAuthStrengths.Values)
-        } elseif ($AllAuthStrengths -is [System.Collections.IDictionary]) {
-            foreach ($item in $AllAuthStrengths.GetEnumerator()) {
-                $authStrengthItems += $item.Value
-            }
-        } elseif ($AllAuthStrengths -is [System.Collections.IEnumerable] -and -not ($AllAuthStrengths -is [string])) {
-            $authStrengthItems = @($AllAuthStrengths)
-        } else {
-            $authStrengthItems = @($AllAuthStrengths)
-        }
-    }
-    Write-Log -Level Debug -Message ("Authentication strength policies parsed: {0}" -f $authStrengthItems.Count)
-
-    $phishingResistantFactors = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($factor in @("windowsHelloForBusiness", "fido2", "x509CertificateMultiFactor")) {
-        $phishingResistantFactors.Add($factor) | Out-Null
-    }
-    $singleFactorIndicators = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($factor in @("x509CertificateSingleFactor", "sms", "password", "federatedSingleFactor", "qrCodePin")) {
-        $singleFactorIndicators.Add($factor) | Out-Null
-    }
-
-    foreach ($authStrength in $authStrengthItems) {
-        if (-not $authStrength) { continue }
-        $combinationEntries = @()
-        if ($null -ne $authStrength.allowedCombinations) {
-            if ($authStrength.allowedCombinations -is [System.Collections.IEnumerable] -and -not ($authStrength.allowedCombinations -is [string])) {
-                $combinationEntries = @($authStrength.allowedCombinations)
-            } else {
-                $combinationEntries = @($authStrength.allowedCombinations)
-            }
-        }
-
-        $allowedFactors = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-        foreach ($combination in $combinationEntries) {
-            foreach ($factor in ("$combination" -split ",")) {
-                $factorName = "$factor".Trim()
-                if (-not [string]::IsNullOrWhiteSpace($factorName)) {
-                    $allowedFactors.Add($factorName) | Out-Null
-                }
-            }
-        }
-
-        $isPhishingResistant = ($allowedFactors.Count -gt 0)
-        if ($isPhishingResistant) {
-            foreach ($factor in $allowedFactors) {
-                if (-not $phishingResistantFactors.Contains($factor)) {
-                    $isPhishingResistant = $false
-                    break
-                }
-            }
-        }
-
-        $allowsSingleFactor = $false
-        foreach ($factor in $allowedFactors) {
-            if ($singleFactorIndicators.Contains($factor)) {
-                $allowsSingleFactor = $true
-                break
-            }
-        }
-
-        $authStrength | Add-Member -NotePropertyName phishingResistantOnly -NotePropertyValue $isPhishingResistant -Force
-        $authStrength | Add-Member -NotePropertyName singleFactor -NotePropertyValue $allowsSingleFactor -Force
-    }
-
-    # Build a lookup for auth strength evaluation in CAP finding logic.
-    $AllAuthStrengthsById = @{}
-    foreach ($authStrength in $authStrengthItems) {
-        if (-not $authStrength) { continue }
-        $authStrengthId = "$($authStrength.id)".Trim()
-        if (-not [string]::IsNullOrWhiteSpace($authStrengthId)) {
-            $AllAuthStrengthsById[$authStrengthId] = $authStrength
-        }
-    }
-    Write-Log -Level Debug -Message ("Authentication strength lookup entries: {0}" -f $AllAuthStrengthsById.Count)
+    Write-Log -Level Debug -Message ("Special endpoint availability: DeviceRegistrationPolicyAvailable={0}" -f $DeviceRegistrationPolicyAvailable)
 
 
     #endregion
@@ -2739,72 +2635,72 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $cap001SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap001HardIssueCounts = @{}
     $cap001SoftIssueCounts = @{}
-    $cap001ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap001HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap001ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap001HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap002Candidates = [System.Collections.Generic.List[object]]::new()
     $cap002HardPass = [System.Collections.Generic.List[object]]::new()
     $cap002SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap002HardIssueCounts = @{}
     $cap002SoftIssueCounts = @{}
-    $cap002ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn:user:registersecurityinfo&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap002HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregistersecurityinfo&State=enabled&GrantControls=block%7C%7CdomainJoinedDevice%7C%7CcompliantDevice&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap002ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn:user:registersecurityinfo&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap002HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregistersecurityinfo&State=enabled&GrantControls=block%7C%7CdomainJoinedDevice%7C%7CcompliantDevice&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap003Candidates = [System.Collections.Generic.List[object]]::new()
     $cap003HardPass = [System.Collections.Generic.List[object]]::new()
     $cap003SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap003HardIssueCounts = @{}
     $cap003SoftIssueCounts = @{}
-    $cap003ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap003HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap003ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap003HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap004Candidates = [System.Collections.Generic.List[object]]::new()
     $cap004HardPass = [System.Collections.Generic.List[object]]::new()
     $cap004SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap004HardIssueCounts = @{}
     $cap004SoftIssueCounts = @{}
-    $cap004ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap004HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap004ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap004HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap005Candidates = [System.Collections.Generic.List[object]]::new()
     $cap005HardPass = [System.Collections.Generic.List[object]]::new()
     $cap005SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap005HardIssueCounts = @{}
     $cap005SoftIssueCounts = @{}
-    $cap005ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap005HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap005SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&ExcUsersViaGroups=%3C3&ExcUsers=%3C3&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&ExcUsersViaGroups=%3C3&ExcUsers=%3C3&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap006Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap006ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap006ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap007Candidates = [System.Collections.Generic.List[object]]::new()
     $cap007HardPass = [System.Collections.Generic.List[object]]::new()
     $cap007SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap007HardIssueCounts = @{}
     $cap007SoftIssueCounts = @{}
-    $cap007ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap007HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap007ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap007HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap008Candidates = [System.Collections.Generic.List[object]]::new()
     $cap008HardPass = [System.Collections.Generic.List[object]]::new()
     $cap008SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap008HardIssueCounts = @{}
     $cap008SoftIssueCounts = @{}
-    $cap008ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap008HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa%7C%7CpasswordChange%7C%7CriskRemediation&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap008ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap008HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa%7C%7CpasswordChange%7C%7CriskRemediation&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap009Candidates = [System.Collections.Generic.List[object]]::new()
     $cap009HardPass = [System.Collections.Generic.List[object]]::new()
     $cap009SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap009HardIssueCounts = @{}
     $cap009SoftIssueCounts = @{}
-    $cap009ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap009HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=%3Denabled&IncResources=%3DAll&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap009ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap009HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=%3Denabled&IncResources=%3DAll&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
     $cap010Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap010ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E%3D5&Warnings=missing+used+roles&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
+    $cap010ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E%3D5&Warnings=missing+used+roles&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
     $cap011Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap011ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E0&Warnings=scoped&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
+    $cap011ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E0&Warnings=scoped&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
 
     if ($AllCaps) {
         write-host "[*] Analyzing Conditional Access Policies"
@@ -2972,27 +2868,23 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $hardIssues.Add("not targeting all resources")
                 }
 
-                $resolvedAuthStrength = $null
-                if ($AllAuthStrengthsById.ContainsKey($authStrengthId)) {
-                    $resolvedAuthStrength = $AllAuthStrengthsById[$authStrengthId]
+                $authStrengthResolved = $false
+                $authStrengthPhishingResistantOnly = $false
+                if ($policy.PSObject.Properties.Name -contains "AuthStrengthResolved") {
+                    try { $authStrengthResolved = [System.Convert]::ToBoolean($policy.AuthStrengthResolved) } catch { $authStrengthResolved = $false }
                 }
-                if ($AuthStrengthLookupAvailable) {
-                    if ($null -eq $resolvedAuthStrength) {
-                        Write-Log -Level Trace -Message ("[CAP-005] Policy '{0}' ({1}) authStrengthId='{2}' could not be resolved from lookup." -f $policy.DisplayName, $policy.Id, $authStrengthId)
-                    } else {
-                        Write-Log -Level Trace -Message ("[CAP-005] Policy '{0}' ({1}) authStrengthId='{2}' resolved with phishingResistantOnly={3}." -f $policy.DisplayName, $policy.Id, $authStrengthId, [bool]$resolvedAuthStrength.phishingResistantOnly)
-                    }
+                if ($policy.PSObject.Properties.Name -contains "AuthStrengthPhishingResistantOnly") {
+                    try { $authStrengthPhishingResistantOnly = [System.Convert]::ToBoolean($policy.AuthStrengthPhishingResistantOnly) } catch { $authStrengthPhishingResistantOnly = $false }
+                }
+                if (-not $authStrengthResolved) {
+                    Write-Log -Level Trace -Message ("[CAP-005] Policy '{0}' ({1}) authStrengthId='{2}' does not expose enough inline detail for validation." -f $policy.DisplayName, $policy.Id, $authStrengthId)
                 } else {
-                    Write-Log -Level Trace -Message ("[CAP-005] Policy '{0}' ({1}) authStrengthId='{2}' cannot be validated because lookup is unavailable." -f $policy.DisplayName, $policy.Id, $authStrengthId)
+                    Write-Log -Level Trace -Message ("[CAP-005] Policy '{0}' ({1}) authStrengthId='{2}' resolved inline with phishingResistantOnly={3}." -f $policy.DisplayName, $policy.Id, $authStrengthId, $authStrengthPhishingResistantOnly)
                 }
-                if ($AuthStrengthLookupAvailable) {
-                    if ($null -eq $resolvedAuthStrength) {
-                        $hardIssues.Add("authentication strength not found")
-                    } elseif (-not [bool]$resolvedAuthStrength.phishingResistantOnly) {
-                        $hardIssues.Add("authentication strength is not phishing-resistant only")
-                    }
-                } elseif ($null -eq $resolvedAuthStrength) {
-                    Write-Log -Level Verbose -Message "[CAP-005] Authentication strength details unavailable for policy '$($policy.DisplayName)'. Manual verification is required for phishing-resistant validation."
+                if (-not $authStrengthResolved) {
+                    $hardIssues.Add("authentication strength lacks enough inline detail for validation")
+                } elseif (-not $authStrengthPhishingResistantOnly) {
+                    $hardIssues.Add("authentication strength is not phishing-resistant only")
                 }
 
                 $hasIncludedTargets = $false
@@ -3094,11 +2986,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             # CAP-009 hard checks.
-            $hasMfaGrant = Test-ContainsToken -Value $policy.GrantControls -Token "mfa"
-            $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim())
+            $mfaBaselineCandidate = $false
+            $mfaEquivalentEnforced = $false
+            $mfaEvaluationWarning = "$($policy.MfaEvaluationWarning)".Trim()
+            if ($policy.PSObject.Properties.Name -contains "MfaBaselineCandidate") {
+                try { $mfaBaselineCandidate = [System.Convert]::ToBoolean($policy.MfaBaselineCandidate) } catch { $mfaBaselineCandidate = $false }
+            }
+            if ($policy.PSObject.Properties.Name -contains "MfaEquivalentEnforced") {
+                try { $mfaEquivalentEnforced = [System.Convert]::ToBoolean($policy.MfaEquivalentEnforced) } catch { $mfaEquivalentEnforced = $false }
+            }
             $hasNoAuthFlow = [string]::IsNullOrWhiteSpace("$($policy.AuthFlow)".Trim())
             $hasNoUserActions = [string]::IsNullOrWhiteSpace("$($policy.UserActions)".Trim())
-            $isMfaBaselinePolicy = ($hasMfaGrant -or $hasAuthStrength) -and
+            $isMfaBaselinePolicy = $mfaBaselineCandidate -and
                 ((Get-IntSafe $policy.SignInRisk) -eq 0) -and
                 ((Get-IntSafe $policy.UserRisk) -eq 0) -and
                 ((Get-IntSafe $policy.AuthContext) -eq 0) -and
@@ -3112,6 +3011,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
                 if ("$($policy.IncResources)".Trim().ToLowerInvariant() -ne "all") {
                     $hardIssues.Add("not targeting all resources")
+                }
+                if (-not $mfaEquivalentEnforced) {
+                    if ([string]::IsNullOrWhiteSpace($mfaEvaluationWarning)) {
+                        $hardIssues.Add("mfa-equivalent assurance is not enforced across all grant paths")
+                    } else {
+                        $hardIssues.Add($mfaEvaluationWarning)
+                    }
                 }
                 if ($hardIssues.Count -eq 0) {
                     $cap009HardPass.Add($policy)
@@ -3156,7 +3062,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
     } else {
         foreach ($policy in $cap001HardPass) {
-            $softResult = Test-CapSoftCompliance -Policy $policy
+            $softResult = Test-CapSoftCompliance -Policy $policy -AllowGuestExclusions
             if ($softResult.Pass) { $cap001SoftPass.Add($policy) } else {
                 foreach ($issue in $softResult.Issues) {
                     if ($cap001SoftIssueCounts.ContainsKey($issue)) {
@@ -3359,7 +3265,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $cap004Summary = "<p>Policy evaluation summary: <strong>$($cap004Candidates.Count) candidates</strong> ($($cap004Eval.HardFailCount) hard-fail, $($cap004Eval.SoftFailCount) soft-fail, $($cap004Eval.PassCount) pass).</p>"
         $cap004HardIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap004HardIssueCounts -Title "Hard-check failures"
         $cap004SoftIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap004SoftIssueCounts -Title "Soft-check failures"
-        $cap004SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CExcRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+        $cap004SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
         if ($cap004Eval.PassCount -eq 0) {
             if ($cap004HardPass.Count -eq 0) {
@@ -3464,7 +3370,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
         }
 
-        $cap005Eval = New-CapUnifiedEvaluation -Candidates $cap005Candidates -HardPass $cap005HardPass -SoftPass $cap005SoftPass -ResolveAuthStrength -AuthStrengthLookupById $AllAuthStrengthsById
+        $cap005Eval = New-CapUnifiedEvaluation -Candidates $cap005Candidates -HardPass $cap005HardPass -SoftPass $cap005SoftPass -ResolveAuthStrength
         $cap005Summary = "<p>Policy evaluation summary: <strong>$($cap005Candidates.Count) candidates</strong> ($($cap005Eval.HardFailCount) hard-fail, $($cap005Eval.SoftFailCount) soft-fail, $($cap005Eval.PassCount) pass).</p>"
         $cap005HardIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap005HardIssueCounts -Title "Hard-check failures"
         $cap005SoftIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap005SoftIssueCounts -Title "Soft-check failures"
@@ -3495,21 +3401,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 AffectedObjects = $cap005Eval.AffectedObjects
                 RelatedReportUrl = $cap005SecureReportUrl
             }
-        }
-    }
-
-    if (-not $AuthStrengthLookupAvailable -and $cap005Candidates.Count -gt 0) {
-        $cap005CoverageGapNote = "<p><strong>Important:</strong> Authentication strength details could not be retrieved with the current authentication flow or token. The phishing-resistant validation of referenced strengths requires manual verification.</p>"
-        $currentCap005Description = "$($FindingsById['CAP-005'].Description)"
-        if ([string]::IsNullOrWhiteSpace($currentCap005Description)) {
-            $currentCap005Description = "<p>Conditional Access policies enforcing authentication strengths were detected.</p>"
-        }
-        if ($currentCap005Description -notlike "*Authentication strength details could not be retrieved*") {
-            $currentCap005Description = "$currentCap005Description$cap005CoverageGapNote"
-        }
-        Set-FindingOverride -FindingId "CAP-005" -Props @{
-            Confidence = "Requires Verification"
-            Description = $currentCap005Description
         }
     }
 
@@ -6527,7 +6418,15 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
     # USR-005: Enabled users marked as inactive.
     # Reuse pre-filtered data from the shared users enumeration loop.
-    if ($inactiveEnabledUsers.Count -gt 0) {
+    if ($global:GLOBALUserSignInActivityAvailable -eq $false) {
+        Write-Log -Level Verbose -Message "[USR-005] Skipping check because SignInActivity could not be retrieved during user enumeration."
+        Set-FindingOverride -FindingId "USR-005" -Props @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because the current permissions or license do not allow retrieval of users SignInActivity properties. Inactive user status could not be evaluated.</p>"
+            RelatedReportUrl = ""
+            AffectedObjects = @()
+        }
+    } elseif ($inactiveEnabledUsers.Count -gt 0) {
         Write-Log -Level Verbose -Message "[USR-005] Found $($inactiveEnabledUsers.Count) enabled inactive users."
 
         $usr005Affected = [System.Collections.Generic.List[object]]::new()

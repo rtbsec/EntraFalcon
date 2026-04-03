@@ -6588,6 +6588,7 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALMsTenantIds -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPermissionForCaps -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsChecked -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALUserSignInActivityAvailable -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzurePsChecks -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureIamWarningText -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuthParameters -ErrorAction SilentlyContinue
