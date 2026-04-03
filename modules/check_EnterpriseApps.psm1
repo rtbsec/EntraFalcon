@@ -1831,6 +1831,7 @@ $headerHtml = @"
     $AppApiMedium = 0
     $AppApiLow = 0
     $AppApiMisc = 0
+    $signInBuckets = [System.Collections.Generic.List[string]]::new()
 
     foreach ($app in $tableOutput) {
         if ($app.Foreign) {
@@ -1844,19 +1845,40 @@ $headerHtml = @"
         if ($app.ApiMedium) {$AppApiMedium++}
         if ($app.ApiLow) {$AppApiLow++}
         if ($app.ApiMisc) {$AppApiMisc++}
+
+        $lastSignIn = $app.LastSignInDays
+        if ($lastSignIn -eq "-" -or [string]::IsNullOrWhiteSpace($lastSignIn)) {
+            $signInBuckets.Add("Never")
+        } else {
+            try {
+                $bucket = if ($lastSignIn -le 30) { "0-1 month" }
+                        elseif ($lastSignIn -le 60) { "1-2 months" }
+                        elseif ($lastSignIn -le 90) { "2-3 months" }
+                        elseif ($lastSignIn -le 120) { "3-4 months" }
+                        elseif ($lastSignIn -le 150) { "4-5 months" }
+                        elseif ($lastSignIn -le 180) { "5-6 months" }
+                        else { "6+ months" }
+                $signInBuckets.Add($bucket)
+            } catch {
+                $signInBuckets.Add("Never")
+            }
+        }
     }
 
     # Store in global var
     $GlobalAuditSummary.EnterpriseApps.Count = $EnterpriseAppsCount
     $GlobalAuditSummary.EnterpriseApps.Foreign = $ForeignCount
     $GlobalAuditSummary.EnterpriseApps.Credentials = $CredentialCount
-    
 
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Dangerous = $AppApiDangerous
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.High = $AppApiHigh
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Medium = $AppApiMedium
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Low = $AppApiLow
     $GlobalAuditSummary.EnterpriseApps.ApiCategorization.Misc = $AppApiMisc
+
+    $signInBuckets | Group-Object | ForEach-Object {
+        $GlobalAuditSummary.EnterpriseApps.SignInActivity[$_.Name] = $_.Count
+    }
 
     Return $AllServicePrincipalHT
 
