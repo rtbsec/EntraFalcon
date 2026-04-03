@@ -626,8 +626,10 @@ document.addEventListener('DOMContentLoaded', function () {
         entraroles_principaltypes: {
             'User': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.User),
             'Group': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Group),
-            'App': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.App),
+            'Enterprise App': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.App),
             'Managed Identity': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.MI),
+            'Agent Identity': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.AgentIdentity),
+            'Blueprint Principal': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.BlueprintPrincipal),
             'Unknown': $($GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Unknown)
         },
 
@@ -651,7 +653,10 @@ document.addEventListener('DOMContentLoaded', function () {
         azureroles_principaltypes: {
             'User': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.User),
             'Group': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Group),
-            'ServicePrincipal': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.SP),
+            'Enterprise App': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.SP),
+            'Managed Identity': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.MI),
+            'Agent Identity': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.AgentIdentity),
+            'Blueprint Principal': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.BlueprintPrincipal),
             'Unknown': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Unknown)
         }        
     };
@@ -975,7 +980,7 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
         if (datasetKey === 'entraroles_principaltypes') {
-            const entries = Object.entries(dataSources.entraroles_principaltypes);
+            const entries = Object.entries(dataSources.entraroles_principaltypes).filter(e => e[1] > 0);
             return {
                 labels: entries.map(e => e[0]),
                 datasets: [{
@@ -1018,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
         if (datasetKey === 'azureroles_principaltypes') {
-            const entries = Object.entries(dataSources.azureroles_principaltypes);
+            const entries = Object.entries(dataSources.azureroles_principaltypes).filter(e => e[1] > 0);
             return {
                 labels: entries.map(e => e[0]),
                 datasets: [{

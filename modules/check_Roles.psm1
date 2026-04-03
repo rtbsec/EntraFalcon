@@ -617,6 +617,8 @@ $headerHtml = @"
     $AssignmentPrincipalTypGroups = 0
     $AssignmentPrincipalTypApps = 0
     $AssignmentPrincipalTypMIs = 0
+    $AssignmentPrincipalTypAgentIdentities = 0
+    $AssignmentPrincipalTypBlueprintPrincipals = 0
     $AssignmentPrincipalTypUnknown = 0
 
     foreach ($assignment in $SortedEntraRoles) {
@@ -639,8 +641,8 @@ $headerHtml = @"
             "User" {$AssignmentPrincipalTypUsers++; break}
             "Group" {$AssignmentPrincipalTypGroups++; break}
             "Enterprise Application" {$AssignmentPrincipalTypApps++; break}
-            "Agent Identity" {$AssignmentPrincipalTypApps++; break}
-            "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypApps++; break}
+            "Agent Identity" {$AssignmentPrincipalTypAgentIdentities++; break}
+            "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypBlueprintPrincipals++; break}
             "Managed Identity" {$AssignmentPrincipalTypMIs++; break}
             "Unknown Object" {$AssignmentPrincipalTypUnknown++}
         }
@@ -655,6 +657,8 @@ $headerHtml = @"
     $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Group = $AssignmentPrincipalTypGroups
     $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.App = $AssignmentPrincipalTypApps
     $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.MI = $AssignmentPrincipalTypMIs
+    $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.AgentIdentity = $AssignmentPrincipalTypAgentIdentities
+    $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.BlueprintPrincipal = $AssignmentPrincipalTypBlueprintPrincipals
     $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Unknown = $AssignmentPrincipalTypUnknown
 
     $GlobalAuditSummary.EntraRoleAssignments.Tiers."Tier-0" = $Tier0Count
@@ -686,6 +690,9 @@ $headerHtml = @"
         $AssignmentPrincipalTypUsers = 0
         $AssignmentPrincipalTypGroups = 0
         $AssignmentPrincipalTypSPs = 0
+        $AssignmentPrincipalTypMIs = 0
+        $AssignmentPrincipalTypAgentIdentities = 0
+        $AssignmentPrincipalTypBlueprintPrincipals = 0
         $AssignmentPrincipalTypUnknown = 0
 
         foreach ($assignment in $SortedAzureRoles) {
@@ -709,9 +716,9 @@ $headerHtml = @"
                 "Group" {$AssignmentPrincipalTypGroups++; break}
                 "ServicePrincipal" {$AssignmentPrincipalTypSPs++; break}
                 "Enterprise Application" {$AssignmentPrincipalTypSPs++; break}
-                "Agent Identity" {$AssignmentPrincipalTypSPs++; break}
-                "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypSPs++; break}
-                "Managed Identity" {$AssignmentPrincipalTypSPs++; break}
+                "Agent Identity" {$AssignmentPrincipalTypAgentIdentities++; break}
+                "Agent Identity Blueprint Principal" {$AssignmentPrincipalTypBlueprintPrincipals++; break}
+                "Managed Identity" {$AssignmentPrincipalTypMIs++; break}
                 "Unknown Object" {$AssignmentPrincipalTypUnknown++}
             }
         }
@@ -723,6 +730,9 @@ $headerHtml = @"
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.User = $AssignmentPrincipalTypUsers
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Group = $AssignmentPrincipalTypGroups
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.SP = $AssignmentPrincipalTypSPs
+        $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.MI = $AssignmentPrincipalTypMIs
+        $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.AgentIdentity = $AssignmentPrincipalTypAgentIdentities
+        $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.BlueprintPrincipal = $AssignmentPrincipalTypBlueprintPrincipals
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Unknown = $AssignmentPrincipalTypUnknown
         $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-0" = $AzureTier0Count
         $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-1" = $AzureTier1Count

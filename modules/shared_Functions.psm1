@@ -6009,8 +6009,8 @@ function start-InitTasks {
         AdministrativeUnits    = @{ Count = 0 }
         ConditionalAccess      = @{ Count = 0; Enabled = 0 }
         SecurityFindings       = @{ Vulnerable = 0; NotVulnerable = 0; Skipped = 0; Total = 0 }
-        EntraRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'App' = 0; 'MI' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Uncategorized' = 0} }
-        AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Tier-3' = 0; 'Uncategorized' = 0} }
+        EntraRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'App' = 0; 'MI' = 0; 'AgentIdentity' = 0; 'BlueprintPrincipal' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Uncategorized' = 0} }
+        AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'MI' = 0; 'AgentIdentity' = 0; 'BlueprintPrincipal' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Tier-3' = 0; 'Uncategorized' = 0} }
         PimSettings            = @{ Count = 0}
         Domains                = @{ Count = 0; Federated = 0; Verified = 0; Default = 0; AdminManaged = 0 }
         Errors                 = @()
