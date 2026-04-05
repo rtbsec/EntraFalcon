@@ -694,6 +694,18 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "USR-013",
+    "Title": "Unnecessary Synchronization of On-Premises Accounts to Entra ID",
+    "Category": "Users",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "GRP-001",
     "Title": "Security Group Creation Not Restricted",
     "Category": "Groups",
@@ -1545,6 +1557,23 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Description = "<p>No enabled users without MFA capability were identified.</p>"
         }
     }
+    $USR013VariantProps = @{
+        Default = @{
+            Threat = '<p>Synchronizing accounts to Entra ID exposes them to internet-facing authentication attacks such as password spraying.</p><p>Even if these accounts are not actively used in the cloud, they still increase the externally reachable attack surface. If one of these accounts is protected by a weak or reused password, attackers may be able to compromise it through cloud-based login attempts without first needing access to the internal network.</p>'
+            Remediation = '<p>Review the affected accounts. If no legitimate cloud-related use case exists, these accounts should be excluded from synchronization. In general, only accounts that require access to Microsoft 365, Azure, or other Entra ID-integrated services should be synchronized to Entra ID.</p><p>Reference:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sync-configure-filtering" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sync-configure-filtering</a></li></ul>'
+        }
+        Vulnerable = @{ Status = "Vulnerable" }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>Fewer than 5 enabled synchronized on-premises accounts older than 90 days were identified that never signed in to Entra ID.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because the current permissions or license do not allow retrieval of users SignInActivity properties. The usage of synchronized on-premises accounts in Entra ID could not be evaluated.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region GRP VariantProps
     $GRP001VariantProps = @{
@@ -2040,6 +2069,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "USR-010" = $USR010VariantProps.Default
         "USR-011" = $USR011VariantProps.Default
         "USR-012" = $USR012VariantProps.Default
+        "USR-013" = $USR013VariantProps.Default
         "GRP-001" = $GRP001VariantProps.Default
         "GRP-002" = $GRP002VariantProps.Default
         "GRP-003" = $GRP003VariantProps.Default
@@ -2226,8 +2256,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Users
-    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012: Reuse a single pass over users.
-    # Track inactive users, tier-0 Entra users, tier-0 Azure users (all + hybrid), and users without MFA capability.
+    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013: Reuse a single pass over users.
+    # Track inactive users, tier-0 Entra users, tier-0 Azure users (all + hybrid), users without MFA capability, and likely unnecessary synced accounts.
     $inactiveEnabledUsers = [System.Collections.Generic.List[object]]::new()
     $enabledTier0Users = [System.Collections.Generic.List[object]]::new()
     $enabledTier0OnPremUsers = [System.Collections.Generic.List[object]]::new()
@@ -2236,6 +2266,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $enabledTier0AzureOnPremUsers = [System.Collections.Generic.List[object]]::new()
     $enabledTier0AzureUnprotectedUsers = [System.Collections.Generic.List[object]]::new()
     $enabledUsersWithoutMfaCap = [System.Collections.Generic.List[object]]::new()
+    $enabledOnPremNeverSignedInOlderThan90Users = [System.Collections.Generic.List[object]]::new()
     $enabledUsersForMfaCapCheckCount = 0
     if ($Users) {
         write-host "[*] Analyzing Users"
@@ -2253,6 +2284,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $isUnknownMfaCap = $mfaCapRaw -eq "?"
             $entraMaxTier = "$($user.EntraMaxTier)".Trim()
             $azureMaxTier = "$($user.AzureMaxTier)".Trim()
+            $lastSignInDays = "$($user.LastSignInDays)".Trim()
+            $createdDays = Get-IntSafe $user.CreatedDays
             $excludeSyncUser = Test-IsExcludedSyncUser -UserObject $user
             if ($isEnabled -and -not $excludeSyncUser -and -not $isAgent) {
                 $enabledUsersForMfaCapCheckCount += 1
@@ -2265,6 +2298,12 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             if ($isEnabled -and -not $hasMfaCap -and -not $isUnknownMfaCap -and -not $excludeSyncUser -and -not $isAgent) {
                 $enabledUsersWithoutMfaCap.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
+            }
+            if ($isEnabled -and $isOnPrem -and $lastSignInDays -eq "-" -and $createdDays -gt 90 -and -not $excludeSyncUser) {
+                $enabledOnPremNeverSignedInOlderThan90Users.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
@@ -5891,7 +5930,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     }
 
     # Evaluate findings from pre-collected authorization policy data.
-    ### CHECKS COL-001 COL-002 COL-003 PAS-001 PAS-002 PAS-003 PAS-004 PAS-005 USR-001 USR-002 USR-003 USR-004 USR-005 USR-006 USR-007 USR-008 USR-009 USR-010 USR-011 USR-012 GRP-001 GRP-002 GRP-003 GRP-004 GRP-005
+    ### CHECKS COL-001 COL-002 COL-003 PAS-001 PAS-002 PAS-003 PAS-004 PAS-005 USR-001 USR-002 USR-003 USR-004 USR-005 USR-006 USR-007 USR-008 USR-009 USR-010 USR-011 USR-012 USR-013 GRP-001 GRP-002 GRP-003 GRP-004 GRP-005
     #endregion
 
     #region COL Evaluation
@@ -6742,6 +6781,38 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[USR-012] No enabled users without MFA capability found."
         Set-FindingOverride -FindingId "USR-012" -Props $USR012VariantProps.Secure
+    }
+
+    # USR-013: Enabled synchronized on-premises accounts older than 90 days that never signed in to Entra ID.
+    if ($global:GLOBALUserSignInActivityAvailable -eq $false) {
+        Write-Log -Level Verbose -Message "[USR-013] Skipping check because SignInActivity could not be retrieved during user enumeration."
+        Set-FindingOverride -FindingId "USR-013" -Props $USR013VariantProps.Skipped
+    } elseif ($enabledOnPremNeverSignedInOlderThan90Users.Count -ge 5) {
+        Write-Log -Level Verbose -Message "[USR-013] Found $($enabledOnPremNeverSignedInOlderThan90Users.Count) enabled synchronized on-premises accounts older than 90 days without recorded sign-in to Entra ID."
+        $usr013Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $enabledOnPremNeverSignedInOlderThan90Users) {
+            $user = $entry.User
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+            $usr013Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "OnPrem" = $user.OnPrem
+                "CreatedDays" = $user.CreatedDays
+                "Last sign-in (days)" = $user.LastSignInDays
+            })
+        }
+
+        Set-FindingOverride -FindingId "USR-013" -Props $USR013VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "USR-013" -Props @{
+            Description = "<p>$($enabledOnPremNeverSignedInOlderThan90Users.Count) enabled accounts are synchronized from on-premises Active Directory to Entra ID even though they appear not to be used in the cloud.</p><p>These accounts have all of the following characteristics:</p><ul><li>Synchronized from on-premises Active Directory</li><li>Enabled</li><li>Older than three months</li><li>No recorded authentication to Entra ID</li></ul><p>This indicates that these accounts are likely not required for cloud services, but are still exposed through the cloud identity plane.</p>"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Enabled=%3Dtrue&OnPrem=%3Dtrue&LastSignInDays=%3D-&CreatedDays=%3E90&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CLicenseStatus%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CLastSignInDays%2CCreatedDays%2CMfaCap%2CPerUserMfa%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            AffectedSortKey = "CreatedDays"
+            AffectedSortDir = "DESC"
+            AffectedObjects = $usr013Affected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[USR-013] Found $($enabledOnPremNeverSignedInOlderThan90Users.Count) enabled synchronized on-premises accounts older than 90 days without recorded sign-in to Entra ID (below threshold)."
+        Set-FindingOverride -FindingId "USR-013" -Props $USR013VariantProps.Secure
     }
 
     #endregion
