@@ -9106,6 +9106,33 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 Object.keys(obj).forEach(function (key) {
                     if (key && key.charAt(0) === "_") return; // drop hidden sort helpers
                     var val = obj[key];
+                    if (key === "Warnings") {
+                        if (val == null) {
+                            clean[key] = "";
+                        } else if (typeof val === "string") {
+                            clean[key] = htmlToPlainFormatted(val);
+                        } else if (Array.isArray(val)) {
+                            var warningParts = [];
+                            val.forEach(function (entry) {
+                                if (entry == null) return;
+                                if (typeof entry === "string") {
+                                    warningParts.push(htmlToPlainFormatted(entry));
+                                    return;
+                                }
+                                if (typeof entry === "object") {
+                                    warningParts.push(JSON.stringify(sanitizeAffectedObject(entry)));
+                                    return;
+                                }
+                                warningParts.push(String(entry));
+                            });
+                            clean[key] = warningParts.join(" / ");
+                        } else if (typeof val === "object") {
+                            clean[key] = JSON.stringify(sanitizeAffectedObject(val));
+                        } else {
+                            clean[key] = String(val);
+                        }
+                        return;
+                    }
                     if (val == null) {
                         clean[key] = "";
                     } else if (typeof val === "string") {
