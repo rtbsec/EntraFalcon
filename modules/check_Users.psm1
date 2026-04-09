@@ -24,6 +24,9 @@ function Invoke-CheckUsers {
         [Parameter(Mandatory=$true)][hashtable]$AppRegistrations,
         [Parameter(Mandatory = $true)][int]$ApiTop,
         [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments,
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentities = @{},
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprintsPrincipals = @{},
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprints = @{},
         [Parameter(Mandatory=$false)][switch]$Csv = $false
     )
 
@@ -45,6 +48,7 @@ function Invoke-CheckUsers {
     $TokenCheckLimit = 5000  # Define recheck limit for token lifetime. In large environments the access token might expire during the test.
     $DetailOutputTxt = ""
     $PermissionUserSignInActivity = $true
+    $global:GLOBALUserSignInActivityAvailable = $true
     $AllUsersDetails = [System.Collections.ArrayList]::new()
     $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $WarningReport = [System.Collections.Generic.List[string]]::new()
@@ -70,6 +74,49 @@ function Invoke-CheckUsers {
 	"SyncedFromOnPrem"          = 3
     "Protected"                 = -4
     "NoMFA"                     = 10
+    "ForeignAgentBlueprintPrincipal" = 20
+    }
+
+    # Build the agent-parent context once so Agent Users can be enriched before the user report is written.
+    $PrincipalLookupByBlueprintId = @{}
+    foreach ($principal in $AgentIdentityBlueprintsPrincipals.Values) {
+        foreach ($lookupKey in @("$($principal.AppId)".Trim(), "$($principal.Id)".Trim())) {
+            if ([string]::IsNullOrWhiteSpace($lookupKey)) {
+                continue
+            }
+            if (-not $PrincipalLookupByBlueprintId.ContainsKey($lookupKey)) {
+                $PrincipalLookupByBlueprintId[$lookupKey] = $principal
+            }
+        }
+    }
+
+    $AgentUserParentContext = @{}
+    foreach ($agentIdentity in $AgentIdentities.Values) {
+        $parentPrincipal = $null
+        $parentKey = "$($agentIdentity.AgentIdentityBlueprintId)".Trim()
+        if (-not [string]::IsNullOrWhiteSpace($parentKey) -and $PrincipalLookupByBlueprintId.ContainsKey($parentKey)) {
+            $parentPrincipal = $PrincipalLookupByBlueprintId[$parentKey]
+        }
+
+        foreach ($agentUser in @($agentIdentity.AgentUsersDetails)) {
+            $userId = "$($agentUser.Id)".Trim()
+            if ([string]::IsNullOrWhiteSpace($userId)) {
+                continue
+            }
+
+            if ($AgentUserParentContext.ContainsKey($userId) -and $AgentUserParentContext[$userId].ParentAgentIdentityId -ne $agentIdentity.Id) {
+                Write-Log -Level Debug -Message "Agent user $userId is linked to multiple agent identities in source data. Keeping the first parent reference."
+                continue
+            }
+
+            $AgentUserParentContext[$userId] = [pscustomobject]@{
+                ParentAgentIdentityId = $agentIdentity.Id
+                ParentAgentIdentityDisplayName = $agentIdentity.DisplayName
+                ParentBlueprintPrincipalId = if ($parentPrincipal) { $parentPrincipal.Id } else { $null }
+                ParentBlueprintPrincipalDisplayName = if ($parentPrincipal) { $parentPrincipal.DisplayName } else { $null }
+                ForeignBlueprintPrincipal = if ($parentPrincipal) { [bool]$parentPrincipal.Foreign } else { $false }
+            }
+        }
     }
 
     # List of roles which members are not protected against the password reset of other low-tier admin roles.
@@ -167,6 +214,7 @@ function Invoke-CheckUsers {
         }
         $WarningReport.Add("No permissions to retrieve users SignInActivity properties. Inactive users are not marked.")
         $PermissionUserSignInActivity = $false
+        $global:GLOBALUserSignInActivityAvailable = $false
     }
 
 
@@ -358,6 +406,21 @@ function Invoke-CheckUsers {
         $Inactive = $false
         $UserEntraRoles = @()
         $Agent = $item.'@odata.type' -eq '#microsoft.graph.agentUser'
+        $ParentAgentIdentityId = $null
+        $ParentAgentIdentityDisplayName = $null
+        $ParentBlueprintPrincipalId = $null
+        $ParentBlueprintPrincipalDisplayName = $null
+        $ForeignBlueprintPrincipal = $false
+
+        # Enrich Agent Users with their parent Agent Identity and foreign blueprint principal state.
+        if ($Agent -and $AgentUserParentContext.ContainsKey($item.Id)) {
+            $agentParentContext = $AgentUserParentContext[$item.Id]
+            $ParentAgentIdentityId = $agentParentContext.ParentAgentIdentityId
+            $ParentAgentIdentityDisplayName = $agentParentContext.ParentAgentIdentityDisplayName
+            $ParentBlueprintPrincipalId = $agentParentContext.ParentBlueprintPrincipalId
+            $ParentBlueprintPrincipalDisplayName = $agentParentContext.ParentBlueprintPrincipalDisplayName
+            $ForeignBlueprintPrincipal = [bool]$agentParentContext.ForeignBlueprintPrincipal
+        }
         
         # Check the token lifetime after a specific amount of objects
         if (($ProgressCounter % $TokenCheckLimit) -eq 0 -and $SkipAutoRefresh -eq $false) {
@@ -404,11 +467,13 @@ function Invoke-CheckUsers {
         }
 
         #Get users owned objects (do not contain devices)
-        $UserOwnedSP                        = [System.Collections.Generic.List[object]]::new()
-		$UserOwnedAppRegs                   = [System.Collections.Generic.List[object]]::new()
-        $UserOwnedGroups  	                = [System.Collections.Generic.List[object]]::new()
-        $UserOwnedAgentIdentitys  	        = [System.Collections.Generic.List[object]]::new()
-        $UserOwnedAgentIdentityBlueprint 	= [System.Collections.Generic.List[object]]::new()
+        $UserOwnedSP                                = [System.Collections.Generic.List[object]]::new()
+		$UserOwnedAppRegs                           = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedGroups  	                        = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedAgentIdentitys  	                = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedAgentIdentityBlueprint 	        = [System.Collections.Generic.List[object]]::new()
+        $UserOwnedAgentIdentityBlueprintPrincipal 	= [System.Collections.Generic.List[object]]::new()
+        
         if ($UserOwnedObjectsRaw.ContainsKey($item.Id)) {
             foreach ($OwnedObject in $UserOwnedObjectsRaw[$item.Id]) {
                 switch ($OwnedObject.'@odata.type') {
@@ -437,7 +502,14 @@ function Invoke-CheckUsers {
                             }
                         )
                     }
-
+                    '#microsoft.graph.agentIdentityBlueprintPrincipal' {
+                        Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentityBlueprintPrincipal $($OwnedObject.Id)"
+                        [void]$UserOwnedAgentIdentityBlueprintPrincipal.Add(
+                            [PSCustomObject]@{
+                                Id = $OwnedObject.Id
+                            }
+                        )
+                    }
                     '#microsoft.graph.agentIdentityBlueprint' {
                         Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentityBlueprint.Add(
@@ -446,15 +518,6 @@ function Invoke-CheckUsers {
                             }
                         )
                     }
-                    '#microsoft.graph.agentIdentityBlueprintPrincipal' {
-                        Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentityBlueprintPrincipal $($OwnedObject.Id)"
-                        [void]$UserOwnedAgentIdentityBlueprint.Add(
-                            [PSCustomObject]@{
-                                Id = $OwnedObject.Id
-                            }
-                        )
-                    }
-                    
                     '#microsoft.graph.group' {
                         [void]$UserOwnedGroups.Add(
                             [PSCustomObject]@{
@@ -561,6 +624,52 @@ function Invoke-CheckUsers {
             }
         }
 
+        #Get details for each Agent Identity Blueprint
+        $BlueprintOwnerDetails = foreach ($object in $UserOwnedAgentIdentityBlueprint) {
+            $MatchingBlueprint = $AgentIdentityBlueprints[$object.Id]
+            if ($MatchingBlueprint) {
+                $linkedAgentUserCount = 0
+                foreach ($linkedAgentIdentity in @($MatchingBlueprint.LinkedAgentIdentitiesDetails)) {
+                    $matchingAgentIdentity = $AgentIdentities[$linkedAgentIdentity.Id]
+                    if ($matchingAgentIdentity) {
+                        $linkedAgentUserCount += @($matchingAgentIdentity.AgentUsersDetails).Count
+                    }
+                }
+
+                [PSCustomObject]@{
+                    Id                    = $MatchingBlueprint.Id
+                    DisplayName           = $MatchingBlueprint.DisplayName
+                    BlueprintPrincipals   = $MatchingBlueprint.BlueprintPrincipals
+                    LinkedAgentIdentities = $MatchingBlueprint.LinkedAgentIdentities
+                    LinkedAgentUsers      = $linkedAgentUserCount
+                    Impact                = $MatchingBlueprint.Impact
+                }
+            }
+        }
+
+        # Resolve owned agent objects into detail rows without feeding them into user scoring.
+        $AgentIdentityOwnerDetails = foreach ($object in $UserOwnedAgentIdentitys) {
+            $MatchingAgentIdentity = $AgentIdentities[$object.Id]
+            if ($MatchingAgentIdentity) {
+                [PSCustomObject]@{
+                    Id          = $MatchingAgentIdentity.Id
+                    DisplayName = $MatchingAgentIdentity.DisplayName
+                    Warnings    = $MatchingAgentIdentity.Warnings
+                }
+            }
+        }
+
+        $BlueprintPrincipalOwnerDetails = foreach ($object in $UserOwnedAgentIdentityBlueprintPrincipal) {
+            $MatchingBlueprintPrincipal = $AgentIdentityBlueprintsPrincipals[$object.Id]
+            if ($MatchingBlueprintPrincipal) {
+                [PSCustomObject]@{
+                    Id          = $MatchingBlueprintPrincipal.Id
+                    DisplayName = $MatchingBlueprintPrincipal.DisplayName
+                    Warnings    = $MatchingBlueprintPrincipal.Warnings
+                }
+            }
+        }
+
         #Get details for each Group
         $GroupOwnerDetails = [System.Collections.Generic.List[psobject]]::new()
         foreach ($object in $UserOwnedGroups) {
@@ -640,7 +749,7 @@ function Invoke-CheckUsers {
     ########################################## SECTION: RISK RATING AND WARNINGS ##########################################   
 
         #Increase the risk score if user is not MFA capable and is not the sync account and not an AgentUser
-        if ($IsMfaCapable -ne "?" -and $IsMfaCapable -ne $true -and $item.DisplayName -ne "On-Premises Directory Synchronization Service Account" -and -not $item.Agent) {
+        if ($IsMfaCapable -ne "?" -and $IsMfaCapable -ne $true -and $item.DisplayName -ne "On-Premises Directory Synchronization Service Account" -and -not $Agent) {
             $Likelihood += $UserLikelihood["NoMFA"]
         }
         
@@ -689,6 +798,18 @@ function Invoke-CheckUsers {
             [void]$Warnings.Add("User is owner of $AppRegCount App Registrations")
         }
 
+
+        #Process owned Agent Identity Blueprints
+        if ($BlueprintOwnerDetails) {
+            $BlueprintCount = 0
+            $AddImpact = 0
+            foreach ($object in $BlueprintOwnerDetails) {
+                $BlueprintCount++
+                $AddImpact += $object.Impact
+            }
+            $Impact += $AddImpact
+            [void]$Warnings.Add("User is owner of $BlueprintCount Agent Identity Blueprint(s)")
+        }
 
         #Process owned groups
         if ($GroupOwnerDetails) {
@@ -929,6 +1050,11 @@ function Invoke-CheckUsers {
             $Likelihood += $UserLikelihood["Protected"]
         }
 
+        if ($ForeignBlueprintPrincipal) {
+            $Likelihood += $UserLikelihood["ForeignAgentBlueprintPrincipal"]
+            [void]$Warnings.Add("Child of foreign blueprint principal")
+        }
+
         if ($AzureRoleCount -ge 1) {
             #Use function to get the impact score and warning message for assigned Azure roles
             $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails
@@ -984,6 +1110,11 @@ function Invoke-CheckUsers {
             Department = $item.Department
             JobTitle = $item.JobTitle
             OtherMails = $item.OtherMails
+            ParentAgentIdentityId = $ParentAgentIdentityId
+            ParentAgentIdentityDisplayName = $ParentAgentIdentityDisplayName
+            ParentBlueprintPrincipalId = $ParentBlueprintPrincipalId
+            ParentBlueprintPrincipalDisplayName = $ParentBlueprintPrincipalDisplayName
+            ForeignBlueprintPrincipal = $ForeignBlueprintPrincipal
             CreatedDateTime = $item.CreatedDateTime
             CreatedDays = $CreatedDays
             LastInteractiveSignInDateTime = $LastInteractiveSignIn
@@ -1002,6 +1133,7 @@ function Invoke-CheckUsers {
             EntraRoles = $TotalEntraRoles
             EntraMaxTier = $EntraMaxTier
             AppRegOwn = @($AppRegOwnerDetails).count
+            BlueprintOwn = @($BlueprintOwnerDetails).count
             SPOwn = @($SPOwnerDetails).count
             DeviceOwn = @($DeviceOwner).count
             UserMemberGroups = $GroupMemberDetails
@@ -1011,6 +1143,9 @@ function Invoke-CheckUsers {
             AppRolesDetails = $UserDirectAppRoles
             GroupOwnerDetails = $GroupOwnerDetails
             AppRegOwnerDetails = $AppRegOwnerDetails
+            BlueprintOwnerDetails = $BlueprintOwnerDetails
+            AgentIdentityOwnerDetails = $AgentIdentityOwnerDetails
+            BlueprintPrincipalOwnerDetails = $BlueprintPrincipalOwnerDetails
             SPOwnerDetails = $SPOwnerDetails
             DeviceOwnerDetails = $DeviceOwner
             DeviceRegisteredDetails = $DeviceRegistered
@@ -1037,7 +1172,7 @@ function Invoke-CheckUsers {
     write-host "[*] Processing results"
 
     #Define output of the main table
-    $tableOutput = $AllUsersDetails | Sort-Object Risk -Descending | select-object UPN,UPNlink,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllUsersDetails | Sort-Object Risk -Descending | select-object UPN,UPNlink,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -1088,6 +1223,9 @@ function Invoke-CheckUsers {
         $ReportingRoles = @()
         $ReportingGroupOwner = @()
         $ReportingOwnerAppRegistration = @()
+        $ReportingOwnerBlueprint = @()
+        $ReportingOwnerAgentIdentity = @()
+        $ReportingOwnerBlueprintPrincipal = @()
         $ReportingOwnerSP = @()
         $ReportingOwnerDevice = @()
         $ReportingRegisteredDevice = @()
@@ -1112,6 +1250,9 @@ function Invoke-CheckUsers {
             "UserType" = $item.UserType
             "Agent" = $item.Agent
             "Created" = "{0} ({1} days ago)" -f $item.CreatedDateTime, $item.CreatedDays
+        }
+        if (-not [string]::IsNullOrWhiteSpace($item.ParentAgentIdentityDisplayName)) {
+            $ReportingUserInfo | Add-Member -NotePropertyName "Parent Agent Identity" -NotePropertyValue $item.ParentAgentIdentityDisplayName
         }
         #Add sign-in info to the list if it's not shown in a dedicated table
         if ($null -ne $item.Department) {
@@ -1143,6 +1284,10 @@ function Invoke-CheckUsers {
             [void]$DetailTxtBuilder.AppendLine("$name : $value")
         }
         [void]$DetailTxtBuilder.AppendLine("")
+
+        if (-not [string]::IsNullOrWhiteSpace($item.ParentAgentIdentityId) -and $ReportingUserInfo.PSObject.Properties.Name -contains "Parent Agent Identity") {
+            $ReportingUserInfo."Parent Agent Identity" = "<a href=AgentIdentities_$($StartTimestamp)_$($EscapedTenantName).html#$($item.ParentAgentIdentityId)>$($item.ParentAgentIdentityDisplayName)</a>"
+        }
 
         #Hide Login details section if user had not enough permissions to read the attributes
         if ($PermissionUserSignInActivity) {
@@ -1274,6 +1419,78 @@ function Invoke-CheckUsers {
             }
         }
 
+
+        if (@($item.BlueprintOwnerDetails).count -ge 1) {
+            $ReportingOwnerBlueprint = foreach ($bp in $item.BlueprintOwnerDetails) {
+                [pscustomobject]@{
+                    DisplayName           = $bp.DisplayName
+                    DisplayNameLink       = "<a href=AgentIdentityBlueprints_$($StartTimestamp)_$($EscapedTenantName).html#$($bp.Id)>$($bp.DisplayName)</a>"
+                    BlueprintPrincipals   = $bp.BlueprintPrincipals
+                    LinkedAgentIdentities = $bp.LinkedAgentIdentities
+                    LinkedAgentUsers      = $bp.LinkedAgentUsers
+                    Impact                = $bp.Impact
+                }
+            }
+            $ReportingOwnerBlueprint = $ReportingOwnerBlueprint | Sort-Object -Property Impact -Descending
+
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine("Owner of Agent Identity Blueprint")
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine(($ReportingOwnerBlueprint | format-table -Property DisplayName,BlueprintPrincipals,LinkedAgentIdentities,LinkedAgentUsers,Impact | Out-String))
+
+            $ReportingOwnerBlueprint = foreach ($obj in $ReportingOwnerBlueprint) {
+                [pscustomobject]@{
+                    DisplayName           = $obj.DisplayNameLink
+                    BlueprintPrincipals   = $obj.BlueprintPrincipals
+                    LinkedAgentIdentities = $obj.LinkedAgentIdentities
+                    LinkedAgentUsers      = $obj.LinkedAgentUsers
+                    Impact                = $obj.Impact
+                }
+            }
+        }
+
+        # Render owned agent objects as detail-only sections to make ownership visible without changing user scoring.
+        if (@($item.AgentIdentityOwnerDetails).count -ge 1) {
+            $ReportingOwnerAgentIdentity = foreach ($agentIdentity in $item.AgentIdentityOwnerDetails) {
+                [pscustomobject]@{
+                    DisplayName     = $agentIdentity.DisplayName
+                    DisplayNameLink = "<a href=AgentIdentities_$($StartTimestamp)_$($EscapedTenantName).html#$($agentIdentity.Id)>$($agentIdentity.DisplayName)</a>"
+                }
+            }
+            $ReportingOwnerAgentIdentity = $ReportingOwnerAgentIdentity | Sort-Object -Property DisplayName
+
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine("Owner of Agent Identities")
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine(($ReportingOwnerAgentIdentity | Format-Table -Property DisplayName | Out-String -Width 512))
+
+            $ReportingOwnerAgentIdentity = foreach ($obj in $ReportingOwnerAgentIdentity) {
+                [pscustomobject]@{
+                    DisplayName = $obj.DisplayNameLink
+                }
+            }
+        }
+
+        if (@($item.BlueprintPrincipalOwnerDetails).count -ge 1) {
+            $ReportingOwnerBlueprintPrincipal = foreach ($principal in $item.BlueprintPrincipalOwnerDetails) {
+                [pscustomobject]@{
+                    DisplayName     = $principal.DisplayName
+                    DisplayNameLink = "<a href=AgentIdentityBlueprintsPrincipals_$($StartTimestamp)_$($EscapedTenantName).html#$($principal.Id)>$($principal.DisplayName)</a>"
+                }
+            }
+            $ReportingOwnerBlueprintPrincipal = $ReportingOwnerBlueprintPrincipal | Sort-Object -Property DisplayName
+
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine("Owner of Agent Identity Blueprint Principals")
+            [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
+            [void]$DetailTxtBuilder.AppendLine(($ReportingOwnerBlueprintPrincipal | Format-Table -Property DisplayName | Out-String -Width 512))
+
+            $ReportingOwnerBlueprintPrincipal = foreach ($obj in $ReportingOwnerBlueprintPrincipal) {
+                [pscustomobject]@{
+                    DisplayName = $obj.DisplayNameLink
+                }
+            }
+        }
 
         if (@($item.SPOwnerDetails).count -ge 1) {
             $ReportingOwnerSP  = foreach ($app in $($item.SPOwnerDetails)) {
@@ -1535,6 +1752,9 @@ function Invoke-CheckUsers {
             "Entra Role Assignments" = $ReportingRoles
             "Owner of Groups" = $ReportingGroupOwner
             "Owner of App Registration" = $ReportingOwnerAppRegistration
+            "Owner of Agent Identity Blueprint" = $ReportingOwnerBlueprint
+            "Owner of Agent Identities" = $ReportingOwnerAgentIdentity
+            "Owner of Agent Identity Blueprint Principals" = $ReportingOwnerBlueprintPrincipal
             "Owner of Service Principal" = $ReportingOwnerSP
             "Owner of Devices" = $ReportingOwnerDevice
             "Registered Devices" = $ReportingRegisteredDevice
@@ -1576,7 +1796,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
     write-host "[+] Writing log files"
     write-host ""
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -1596,7 +1816,7 @@ $headerHtml = @"
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | select-object UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $tableOutput | select-object UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     }
     $tableOutput | format-table -Property UPN,Enabled,UserType,Agent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,AppRegOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $DetailOutputTxt | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
@@ -1693,11 +1913,15 @@ $headerHtml = @"
             AzureRoles     = $user.AzureRoles
             AzureMaxTier   = $user.AzureMaxTier
             MfaCap         = $user.MfaCap
-            PerUserMfa    = $user.PerUserMfa
+            PerUserMfa     = $user.PerUserMfa
             Inactive       = $user.Inactive
+            CreatedDays    = $user.CreatedDays
             LastSignInDays = $user.LastSignInDays
             Impact         = $user.Impact
             Warnings       = $user.Warnings
+            ParentAgentIdentityId = $user.ParentAgentIdentityId
+            ParentAgentIdentityDisplayName = $user.ParentAgentIdentityDisplayName
+            ForeignBlueprintPrincipal = $user.ForeignBlueprintPrincipal
         }
     }
 
