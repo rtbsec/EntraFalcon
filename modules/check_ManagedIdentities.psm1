@@ -441,7 +441,7 @@ function Invoke-CheckManagedIdentities {
 
                 #Check each group
                 foreach ($Groups in $GroupMember) {
-                    # High-level: inherit group impact excluding eligible/PIM role contribution.
+                    # Inherit group impact excluding eligible/PIM role contribution.
                     $groupInheritedImpact = 0
                     [void][int]::TryParse([string]$Groups.ImpactOrgActiveOnly, [ref]$groupInheritedImpact)
                     $ImpactScore += $groupInheritedImpact
@@ -512,7 +512,7 @@ function Invoke-CheckManagedIdentities {
 
                 #Check each owned group
                 foreach ($OwnedGroup in $OwnedGroups) {
-                    # High-level: ownership inherits the group's full impact (active + eligible role paths).
+                    # Ownership inherits the group's full impact (active + eligible role paths).
                     $groupInheritedImpact = 0
                     if (-not [int]::TryParse([string]$OwnedGroup.Impact, [ref]$groupInheritedImpact)) {
                         [void][int]::TryParse([string]$OwnedGroup.ImpactOrg, [ref]$groupInheritedImpact)

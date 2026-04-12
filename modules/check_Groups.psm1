@@ -1308,7 +1308,7 @@ function Invoke-CheckGroups {
         }
 
 
-        # High-level: keep full Impact/ImpactOrg for group reporting, and expose active-only inheritance score.
+        # Keep full Impact/ImpactOrg for group reporting, and expose active-only inheritance score.
         $ImpactOrgActiveOnly = [math]::Round([math]::Max(0, $ImpactScore - $EligibleRoleImpactContribution))
 
         # Create custom object
