@@ -26,8 +26,8 @@ function Invoke-CheckUsers {
         [Parameter(Mandatory=$false)][Object[]]$TenantPimForGroupsAssignments,
         [Parameter(Mandatory=$false)][hashtable]$AgentIdentities = @{},
         [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprintsPrincipals = @{},
-        [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprints = @{},
-        [Parameter(Mandatory=$false)][switch]$Csv = $false
+        [Parameter(Mandatory=$false)][switch]$Csv = $false,
+        [Parameter(Mandatory=$true)][ref]$ReportStateOut
     )
 
     ############################## Function section ########################
@@ -38,6 +38,9 @@ function Invoke-CheckUsers {
     $PmInitTasks = [System.Diagnostics.Stopwatch]::StartNew()
 
     Write-Log -Level Verbose -Message "Start user script"
+    if ($null -eq $ReportStateOut) {
+        throw "Invoke-CheckUsers requires -ReportStateOut."
+    }
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -46,11 +49,9 @@ function Invoke-CheckUsers {
     $Title = "Users"
     $ProgressCounter = 0
     $TokenCheckLimit = 5000  # Define recheck limit for token lifetime. In large environments the access token might expire during the test.
-    $DetailOutputTxt = ""
     $PermissionUserSignInActivity = $true
     $global:GLOBALUserSignInActivityAvailable = $true
     $AllUsersDetails = [System.Collections.ArrayList]::new()
-    $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $WarningReport = [System.Collections.Generic.List[string]]::new()
     $EscapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
     if (-not $GLOBALGraphExtendedChecks) {$WarningReport.Add("Coverage gap: eligible role assignments not assessed; only active assignments are included.")}
@@ -624,31 +625,11 @@ function Invoke-CheckUsers {
             }
         }
 
-        #Get details for each Agent Identity Blueprint
-        $BlueprintOwnerDetails = foreach ($object in $UserOwnedAgentIdentityBlueprint) {
-            $MatchingBlueprint = $AgentIdentityBlueprints[$object.Id]
-            if ($MatchingBlueprint) {
-                $linkedAgentUserCount = 0
-                foreach ($linkedAgentIdentity in @($MatchingBlueprint.LinkedAgentIdentitiesDetails)) {
-                    $matchingAgentIdentity = $AgentIdentities[$linkedAgentIdentity.Id]
-                    if ($matchingAgentIdentity) {
-                        $linkedAgentUserCount += @($matchingAgentIdentity.AgentUsersDetails).Count
-                    }
-                }
-
-                [PSCustomObject]@{
-                    Id                    = $MatchingBlueprint.Id
-                    DisplayName           = $MatchingBlueprint.DisplayName
-                    BlueprintPrincipals   = $MatchingBlueprint.BlueprintPrincipals
-                    LinkedAgentIdentities = $MatchingBlueprint.LinkedAgentIdentities
-                    LinkedAgentUsers      = $linkedAgentUserCount
-                    Impact                = $MatchingBlueprint.Impact
-                }
-            }
-        }
+        # Blueprint owner impact is applied after agent finalization so it uses finalized inherited impact.
+        $BlueprintOwnerDetails = @()
 
         # Resolve owned agent objects into detail rows without feeding them into user scoring.
-        $AgentIdentityOwnerDetails = foreach ($object in $UserOwnedAgentIdentitys) {
+        $AgentIdentityOwnerDetails = @(foreach ($object in $UserOwnedAgentIdentitys) {
             $MatchingAgentIdentity = $AgentIdentities[$object.Id]
             if ($MatchingAgentIdentity) {
                 [PSCustomObject]@{
@@ -657,9 +638,9 @@ function Invoke-CheckUsers {
                     Warnings    = $MatchingAgentIdentity.Warnings
                 }
             }
-        }
+        }) | Where-Object { $null -ne $_ }
 
-        $BlueprintPrincipalOwnerDetails = foreach ($object in $UserOwnedAgentIdentityBlueprintPrincipal) {
+        $BlueprintPrincipalOwnerDetails = @(foreach ($object in $UserOwnedAgentIdentityBlueprintPrincipal) {
             $MatchingBlueprintPrincipal = $AgentIdentityBlueprintsPrincipals[$object.Id]
             if ($MatchingBlueprintPrincipal) {
                 [PSCustomObject]@{
@@ -668,7 +649,7 @@ function Invoke-CheckUsers {
                     Warnings    = $MatchingBlueprintPrincipal.Warnings
                 }
             }
-        }
+        }) | Where-Object { $null -ne $_ }
 
         #Get details for each Group
         $GroupOwnerDetails = [System.Collections.Generic.List[psobject]]::new()
@@ -798,18 +779,6 @@ function Invoke-CheckUsers {
             [void]$Warnings.Add("User is owner of $AppRegCount App Registrations")
         }
 
-
-        #Process owned Agent Identity Blueprints
-        if ($BlueprintOwnerDetails) {
-            $BlueprintCount = 0
-            $AddImpact = 0
-            foreach ($object in $BlueprintOwnerDetails) {
-                $BlueprintCount++
-                $AddImpact += $object.Impact
-            }
-            $Impact += $AddImpact
-            [void]$Warnings.Add("User is owner of $BlueprintCount Agent Identity Blueprint(s)")
-        }
 
         #Process owned groups
         if ($GroupOwnerDetails) {
@@ -1153,6 +1122,10 @@ function Invoke-CheckUsers {
             PerUserMfa = $PerUserMfa
             DeviceReg = @($DeviceRegistered).count
             RolesDetails = $UserEntraRoles
+            BaselineImpact = [math]::Round($Impact)
+            BaselineRisk = $Risk
+            BaselineWarnings = $Warnings
+            BlueprintOwnerImpact = 0
             Impact = [math]::Round($Impact)
             Likelihood = [math]::Round($Likelihood,1)
             Risk = $Risk
@@ -1167,7 +1140,266 @@ function Invoke-CheckUsers {
     #endregion
 
     $PmDataProcessing.Stop()
+
+    $UsersHT = @{}
+    foreach ($user in $AllUsersDetails) {
+        $UsersHT[$user.Id] = $user
+    }
+
+    $UserReportState = [PSCustomObject]@{
+        AllUsersDetails              = $AllUsersDetails
+        AllGroupsDetails             = $AllGroupsDetails
+        Devices                      = $Devices
+        CurrentTenant                = $CurrentTenant
+        StartTimestamp               = $StartTimestamp
+        OutputFolder                 = $OutputFolder
+        Csv                          = $Csv
+        QAMode                       = $QAMode
+        LimitResults                 = $LimitResults
+        WarningReport                = $WarningReport
+        PermissionUserSignInActivity = $PermissionUserSignInActivity
+        UsersTotalCount              = $UsersTotalCount
+        EscapedTenantName            = $EscapedTenantName
+        Title                        = $Title
+        Timers                       = [PSCustomObject]@{
+            Script         = $PmScript
+            InitTasks      = $PmInitTasks
+            DataCollection = $PmDataCollection
+            DataProcessing = $PmDataProcessing
+        }
+    }
+    $ReportStateOut.Value = $UserReportState
+
+    if ($PmScript.IsRunning) {
+        $PmScript.Stop()
+    }
+    Write-Log -Level Debug -Message "=== Performance Summary ==="
+    Write-Log -Level Debug -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Processing:      {0:N2} s" -f $PmDataProcessing.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Report Writing:       deferred")
+    Write-Log -Level Debug -Message ("-------------------------------")
+    Write-Log -Level Debug -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
+
+    Return $UsersHT
+
+}
+
+function Add-EntraFalconUserWarningText {
+    param(
+        [Parameter(Mandatory = $false)][string]$ExistingWarnings,
+        [Parameter(Mandatory = $true)][string]$NewWarning
+    )
+
+    if ([string]::IsNullOrWhiteSpace($NewWarning)) {
+        return $ExistingWarnings
+    }
+
+    $parts = @()
+    if (-not [string]::IsNullOrWhiteSpace($ExistingWarnings)) {
+        $parts = @($ExistingWarnings -split ' / ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
+    if ($parts -notcontains $NewWarning) {
+        $parts += $NewWarning
+    }
+
+    return ($parts -join ' / ')
+}
+
+function Update-EntraFalconUserBlueprintOwnershipImpact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Users,
+        [Parameter(Mandatory = $true)][hashtable]$AgentIdentityBlueprints
+    )
+
+    if ($null -eq $Users -or $Users.Count -eq 0) {
+        return
+    }
+    if ($null -eq $AgentIdentityBlueprints) {
+        $AgentIdentityBlueprints = @{}
+    }
+
+    $BlueprintDetailsByUserId = @{}
+    $blueprintsScanned = 0
+    $ownerLinksFound = 0
+    $skippedOwnersNotInUsers = 0
+    foreach ($blueprint in @($AgentIdentityBlueprints.Values)) {
+        if ($null -eq $blueprint) {
+            continue
+        }
+        $blueprintsScanned++
+
+        $blueprintId = "$($blueprint.Id)".Trim()
+        if ([string]::IsNullOrWhiteSpace($blueprintId)) {
+            continue
+        }
+
+        foreach ($owner in @($blueprint.AppOwnerUsers)) {
+            $userId = "$($owner.Id)".Trim()
+            if ([string]::IsNullOrWhiteSpace($userId)) {
+                continue
+            }
+            $ownerLinksFound++
+            if (-not $Users.ContainsKey($userId)) {
+                $skippedOwnersNotInUsers++
+                continue
+            }
+
+            if (-not $BlueprintDetailsByUserId.ContainsKey($userId)) {
+                $BlueprintDetailsByUserId[$userId] = @{}
+            }
+
+            if ($BlueprintDetailsByUserId[$userId].ContainsKey($blueprintId)) {
+                continue
+            }
+
+            $agentIdentities = if ($null -ne $blueprint.LinkedAgentIdentities) { [int]$blueprint.LinkedAgentIdentities } else { 0 }
+            $agentUsers = if ($null -ne $blueprint.AgentUsers) { [int]$blueprint.AgentUsers } else { 0 }
+            $directImpact = if ($null -ne $blueprint.DirectImpact) { [double]$blueprint.DirectImpact } else { 0 }
+            $inheritedImpact = if ($null -ne $blueprint.InheritedImpact) { [double]$blueprint.InheritedImpact } else { 0 }
+            $impact = if ($null -ne $blueprint.Impact) { [double]$blueprint.Impact } else { 0 }
+
+            $BlueprintDetailsByUserId[$userId][$blueprintId] = [PSCustomObject]@{
+                Id                    = $blueprint.Id
+                DisplayName           = $blueprint.DisplayName
+                BlueprintPrincipals   = if ($null -ne $blueprint.BlueprintPrincipals) { [int]$blueprint.BlueprintPrincipals } else { 0 }
+                AgentIdentities       = $agentIdentities
+                AgentUsers            = $agentUsers
+                LinkedAgentIdentities = $agentIdentities
+                LinkedAgentUsers      = $agentUsers
+                DirectImpact          = [math]::Round($directImpact)
+                InheritedImpact       = [math]::Round($inheritedImpact)
+                Impact                = [math]::Round($impact)
+            }
+        }
+    }
+
+    $uniqueOwnerLinks = 0
+    foreach ($blueprintDetailsByUser in $BlueprintDetailsByUserId.Values) {
+        $uniqueOwnerLinks += $blueprintDetailsByUser.Count
+    }
+    $usersUpdated = 0
+    $totalBlueprintOwnerImpact = 0
+    foreach ($entry in $Users.GetEnumerator()) {
+        $user = $entry.Value
+        if ($null -eq $user) {
+            continue
+        }
+
+        $baselineImpact = if ($user.PSObject.Properties.Name -contains 'BaselineImpact') { [double]$user.BaselineImpact } elseif ($user.PSObject.Properties.Name -contains 'Impact') { [double]$user.Impact } else { 0 }
+        $baselineRisk = if ($user.PSObject.Properties.Name -contains 'BaselineRisk') { [double]$user.BaselineRisk } elseif ($user.PSObject.Properties.Name -contains 'Risk') { [double]$user.Risk } else { 0 }
+        $baselineWarnings = if ($user.PSObject.Properties.Name -contains 'BaselineWarnings') { [string]$user.BaselineWarnings } else { [string]$user.Warnings }
+
+        $user | Add-Member -NotePropertyName BaselineImpact -NotePropertyValue ([math]::Round($baselineImpact)) -Force
+        $user | Add-Member -NotePropertyName BaselineRisk -NotePropertyValue ([math]::Round($baselineRisk)) -Force
+        $user | Add-Member -NotePropertyName BaselineWarnings -NotePropertyValue $baselineWarnings -Force
+        $user | Add-Member -NotePropertyName BlueprintOwnerImpact -NotePropertyValue 0 -Force
+        $user | Add-Member -NotePropertyName BlueprintOwnerDetails -NotePropertyValue @() -Force
+        $user | Add-Member -NotePropertyName BlueprintOwn -NotePropertyValue 0 -Force
+        $user | Add-Member -NotePropertyName Impact -NotePropertyValue ([math]::Round($baselineImpact)) -Force
+        $user | Add-Member -NotePropertyName Risk -NotePropertyValue ([math]::Round($baselineRisk)) -Force
+        $user | Add-Member -NotePropertyName Warnings -NotePropertyValue $baselineWarnings -Force
+
+        if (-not $BlueprintDetailsByUserId.ContainsKey($entry.Key)) {
+            continue
+        }
+
+        $details = @($BlueprintDetailsByUserId[$entry.Key].Values | Sort-Object -Property @(@{ Expression = 'Impact'; Descending = $true }, 'DisplayName'))
+        $blueprintOwnerImpact = [double](($details | Measure-Object -Property Impact -Sum).Sum)
+        $likelihood = if ($user.PSObject.Properties.Name -contains 'Likelihood' -and $null -ne $user.Likelihood) {
+            [double]$user.Likelihood
+        } elseif ($baselineImpact -ne 0) {
+            [double]$baselineRisk / [double]$baselineImpact
+        } else {
+            0
+        }
+
+        $user.BlueprintOwnerDetails = $details
+        $user.BlueprintOwn = @($details).Count
+        $user.BlueprintOwnerImpact = [math]::Round($blueprintOwnerImpact)
+        $finalImpact = [math]::Round($baselineImpact + $blueprintOwnerImpact)
+        $user | Add-Member -NotePropertyName Impact -NotePropertyValue $finalImpact -Force
+        $user | Add-Member -NotePropertyName Risk -NotePropertyValue ([math]::Round($finalImpact * $likelihood)) -Force
+        $user | Add-Member -NotePropertyName Warnings -NotePropertyValue (Add-EntraFalconUserWarningText -ExistingWarnings $baselineWarnings -NewWarning "User is owner of $($user.BlueprintOwn) Agent Identity Blueprint(s)") -Force
+        $usersUpdated++
+        $totalBlueprintOwnerImpact += [double]$user.BlueprintOwnerImpact
+    }
+
+    Write-Log -Level Debug -Message "User blueprint ownership impact: BlueprintsScanned=$blueprintsScanned, OwnerLinks=$ownerLinksFound, UniqueOwnerLinks=$uniqueOwnerLinks, UsersUpdated=$usersUpdated, SkippedOwnersNotInUsers=$skippedOwnersNotInUsers, TotalBlueprintOwnerImpact=$([math]::Round($totalBlueprintOwnerImpact))"
+}
+
+function Write-EntraFalconUsersReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$UserReportState,
+        [Parameter(Mandatory = $true)][hashtable]$Users
+    )
+
+    if ($null -eq $UserReportState) {
+        throw "Users report state is missing."
+    }
+    if ($null -eq $Users) {
+        throw "Users are required to write the Users report."
+    }
+
+    $requiredProperties = @(
+        'AllUsersDetails',
+        'AllGroupsDetails',
+        'Devices',
+        'CurrentTenant',
+        'StartTimestamp',
+        'OutputFolder',
+        'WarningReport',
+        'PermissionUserSignInActivity',
+        'UsersTotalCount',
+        'EscapedTenantName',
+        'Title',
+        'Timers'
+    )
+    foreach ($propertyName in $requiredProperties) {
+        if ($UserReportState.PSObject.Properties.Name -notcontains $propertyName -or $null -eq $UserReportState.$propertyName) {
+            throw "Users report state is missing required property '$propertyName'."
+        }
+    }
+
+    if ($null -ne $UserReportState.AllUsersDetails) {
+        for ($i = 0; $i -lt $UserReportState.AllUsersDetails.Count; $i++) {
+            $userId = "$($UserReportState.AllUsersDetails[$i].Id)".Trim()
+            if (-not [string]::IsNullOrWhiteSpace($userId) -and $Users.ContainsKey($userId)) {
+                $UserReportState.AllUsersDetails[$i] = $Users[$userId]
+            }
+        }
+    }
+
+    $AllUsersDetails = $UserReportState.AllUsersDetails
+    $AllGroupsDetails = $UserReportState.AllGroupsDetails
+    $Devices = $UserReportState.Devices
+    $CurrentTenant = $UserReportState.CurrentTenant
+    $StartTimestamp = $UserReportState.StartTimestamp
+    $outputFolder = $UserReportState.OutputFolder
+    $Csv = [bool]$UserReportState.Csv
+    $QAMode = [bool]$UserReportState.QAMode
+    $LimitResults = $UserReportState.LimitResults
+    $WarningReport = $UserReportState.WarningReport
+    $PermissionUserSignInActivity = [bool]$UserReportState.PermissionUserSignInActivity
+    $UsersTotalCount = $UserReportState.UsersTotalCount
+    $EscapedTenantName = $UserReportState.EscapedTenantName
+    $Title = $UserReportState.Title
+    $PmScript = $UserReportState.Timers.Script
+    $PmInitTasks = $UserReportState.Timers.InitTasks
+    $PmDataCollection = $UserReportState.Timers.DataCollection
+    $PmDataProcessing = $UserReportState.Timers.DataProcessing
+    $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
+    $UserCounter = 0
+
     $PmDataPostProcessing = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $blueprintOwnerUserCount = @($Users.Values | Where-Object { $_.PSObject.Properties.Name -contains 'BlueprintOwn' -and $null -ne $_.BlueprintOwn -and [double]$_.BlueprintOwn -gt 0 }).Count
+    $totalBlueprintOwnerImpact = ($Users.Values | Measure-Object -Property BlueprintOwnerImpact -Sum).Sum
+    if ($null -eq $totalBlueprintOwnerImpact) { $totalBlueprintOwnerImpact = 0 }
+    Write-Log -Level Debug -Message "Users report final state: Users=$($Users.Count), BlueprintOwners=$blueprintOwnerUserCount, TotalBlueprintOwnerImpact=$([math]::Round([double]$totalBlueprintOwnerImpact))"
 
     write-host "[*] Processing results"
 
@@ -1426,8 +1658,10 @@ function Invoke-CheckUsers {
                     DisplayName           = $bp.DisplayName
                     DisplayNameLink       = "<a href=AgentIdentityBlueprints_$($StartTimestamp)_$($EscapedTenantName).html#$($bp.Id)>$($bp.DisplayName)</a>"
                     BlueprintPrincipals   = $bp.BlueprintPrincipals
-                    LinkedAgentIdentities = $bp.LinkedAgentIdentities
-                    LinkedAgentUsers      = $bp.LinkedAgentUsers
+                    AgentIdentities       = $bp.AgentIdentities
+                    AgentUsers            = $bp.AgentUsers
+                    DirectImpact          = $bp.DirectImpact
+                    InheritedImpact       = $bp.InheritedImpact
                     Impact                = $bp.Impact
                 }
             }
@@ -1436,14 +1670,16 @@ function Invoke-CheckUsers {
             [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
             [void]$DetailTxtBuilder.AppendLine("Owner of Agent Identity Blueprint")
             [void]$DetailTxtBuilder.AppendLine("-----------------------------------------------------------------")
-            [void]$DetailTxtBuilder.AppendLine(($ReportingOwnerBlueprint | format-table -Property DisplayName,BlueprintPrincipals,LinkedAgentIdentities,LinkedAgentUsers,Impact | Out-String))
+            [void]$DetailTxtBuilder.AppendLine(($ReportingOwnerBlueprint | format-table -Property DisplayName,BlueprintPrincipals,AgentIdentities,AgentUsers,DirectImpact,InheritedImpact,Impact | Out-String))
 
             $ReportingOwnerBlueprint = foreach ($obj in $ReportingOwnerBlueprint) {
                 [pscustomobject]@{
                     DisplayName           = $obj.DisplayNameLink
                     BlueprintPrincipals   = $obj.BlueprintPrincipals
-                    LinkedAgentIdentities = $obj.LinkedAgentIdentities
-                    LinkedAgentUsers      = $obj.LinkedAgentUsers
+                    AgentIdentities       = $obj.AgentIdentities
+                    AgentUsers            = $obj.AgentUsers
+                    DirectImpact          = $obj.DirectImpact
+                    InheritedImpact       = $obj.InheritedImpact
                     Impact                = $obj.Impact
                 }
             }
@@ -1895,38 +2131,10 @@ $headerHtml = @"
         $AllUsersDetails | ConvertTo-Json -Depth 10 | Out-File -FilePath "$outputFolder\QA_AllUsersDetails.json" -Encoding utf8
     }
 
-    #Convert to Hashtable for faster searches
-    $UsersHT = @{}
-    foreach ($user in $AllUsersDetails) {
-        $UsersHT[$user.Id] = [PSCustomObject]@{
-            UPN            = $user.UPN
-            Enabled        = $user.Enabled
-            UserType       = $user.UserType
-            Agent          = $user.Agent
-            OnPrem         = $user.OnPrem
-            Protected      = $user.Protected
-            AppRegOwn      = $user.AppRegOwn
-            SPOwn          = $user.SPOwn
-            GrpOwn         = $user.GrpOwn
-            EntraRoles     = $user.EntraRoles
-            EntraMaxTier   = $user.EntraMaxTier
-            AzureRoles     = $user.AzureRoles
-            AzureMaxTier   = $user.AzureMaxTier
-            MfaCap         = $user.MfaCap
-            PerUserMfa     = $user.PerUserMfa
-            Inactive       = $user.Inactive
-            CreatedDays    = $user.CreatedDays
-            LastSignInDays = $user.LastSignInDays
-            Impact         = $user.Impact
-            Warnings       = $user.Warnings
-            ParentAgentIdentityId = $user.ParentAgentIdentityId
-            ParentAgentIdentityDisplayName = $user.ParentAgentIdentityDisplayName
-            ForeignBlueprintPrincipal = $user.ForeignBlueprintPrincipal
-        }
-    }
-
     $PmEndTasks.Stop()
-    $PmScript.Stop()
+    if ($PmScript.IsRunning) {
+        $PmScript.Stop()
+    }
     Write-Log -Level Debug -Message "=== Performance Summary ==="
     Write-Log -Level Debug -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
     Write-Log -Level Debug -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
@@ -1937,7 +2145,5 @@ $headerHtml = @"
     Write-Log -Level Debug -Message ("EndTasks:             {0:N2} s" -f $PmEndTasks.Elapsed.TotalSeconds)
     Write-Log -Level Debug -Message ("-------------------------------")
     Write-Log -Level Debug -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
-
-    Return $UsersHT
 
 }

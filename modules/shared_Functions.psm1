@@ -893,7 +893,7 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVAI-007",
                     group: "Lifecycle",
-                    description: "Enabled agent identities with no recent sign-in activity",
+                    description: "Enabled but no sign-on activity in the last 180 days.",
                     label: "Inactive Agent Identities",
                     filters: {
                         Inactive: "=true",
@@ -912,11 +912,178 @@ $global:GLOBALJavaScript_Table = @'
                     },
                     columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Sponsors", "Owners", "AgentUsers", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "Impact", "Likelihood", "Risk", "Warnings"]
                 }
+            ],
+            "Agent Identity Blueprint Principals": [
+                {
+                    id: "PVBPP-001",
+                    group: "Child Identities",
+                    description: "Blueprint principals with linked agent identities.",
+                    label: "With Agent Identities",
+                    filters: {
+                        AgentIdentities: ">0"
+                    },
+                    columns: ["DisplayName", "ParentBlueprintDisplayName", "Enabled", "Foreign", "AgentIdentities", "AgentUsers", "InheritedImpact", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVBPP-002",
+                    group: "Child Identities",
+                    description: "Blueprint principals with child agent users.",
+                    label: "With Agent Users",
+                    filters: {
+                        AgentUsers: ">0"
+                    },
+                    columns: ["DisplayName", "ParentBlueprintDisplayName", "Enabled", "Foreign", "AgentIdentities", "AgentUsers", "InheritedImpact", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVBPP-003",
+                    group: "Lifecycle",
+                    description: "Blueprint principals without linked agent identities.",
+                    label: "No Agent Identities",
+                    filters: {
+                        AgentIdentities: "=0"
+                    },
+                    columns: ["DisplayName", "ParentBlueprintDisplayName", "Enabled", "Foreign", "CreationInDays", "LastSignInDays", "ApiMedium", "ApiLow", "Impact", "Risk"],
+                    sort: { column: "CreationInDays", direction: "desc" }
+                },
+                {
+                    id: "PVBPP-004",
+                    group: "Tenant Boundary",
+                    description: "Blueprint principals whose parent blueprint is from another tenant.",
+                    label: "Foreign Principals",
+                    filters: {
+                        Foreign: "=True"
+                    },
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "AgentIdentities", "AgentUsers", "Impact", "Likelihood", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVBPP-005",
+                    group: "Lifecycle",
+                    description: "Enabled blueprint principals with no sign-in activity in the last 180 days.",
+                    label: "Inactive Enabled",
+                    filters: {
+                        Inactive: "=True",
+                        Enabled: "=True"
+                    },
+                    columns: ["DisplayName", "Enabled", "Inactive", "LastSignInDays", "CreationInDays", "AgentIdentities", "AgentUsers", "Impact", "Risk"],
+                    sort: { column: "LastSignInDays", direction: "desc" }
+                },
+                {
+                    id: "PVBPP-006",
+                    group: "API Permissions",
+                    description: "Blueprint principals with configured API permissions.",
+                    label: "Configured API Permissions",
+                    filters: {
+                        ApiDangerous: "or_>0",
+                        ApiHigh: "or_>0",
+                        ApiMedium: "or_>0",
+                        ApiDelegatedDangerous: "or_>0",
+                        ApiDelegatedHigh: "or_>0",
+                        ApiDelegatedMedium: "or_>0"
+                    },
+                    columns: ["DisplayName", "Enabled", "Foreign", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                }
+            ],
+            "Agent Identity Blueprints": [
+                {
+                    id: "PVB-001",
+                    group: "Child Objects",
+                    description: "Blueprints with linked blueprint principals.",
+                    label: "With Blueprints Principals",
+                    filters: {
+                        BlueprintPrincipals: ">0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "BlueprintPrincipals", "AgentIdentities", "AgentUsers", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-002",
+                    group: "Child Objects",
+                    description: "Blueprints with child agent identities.",
+                    label: "With Agent Identities",
+                    filters: {
+                        AgentIdentities: ">0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "BlueprintPrincipals", "AgentIdentities", "AgentUsers", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-003",
+                    group: "Child Objects",
+                    description: "Blueprints with child agent users.",
+                    label: "With Agent Users",
+                    filters: {
+                        AgentUsers: ">0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "BlueprintPrincipals", "AgentIdentities", "AgentUsers", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-004",
+                    group: "Permissions",
+                    description: "Blueprints that allow inherit API permissions to the Agent Identity.",
+                    label: "Inheritable Permissions",
+                    filters: {
+                        InheritableScopes: "or_>0",
+                        InheritableRoles: "or_>0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "BlueprintPrincipals", "AgentIdentities", "InheritableScopes", "InheritableRoles", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-005",
+                    group: "Credentials",
+                    description: "Blueprints with federated credentials, client secrets, or certificates configured.",
+                    label: "Credentials Present",
+                    filters: {
+                        FederatedCreds: "or_>0",
+                        SecretsCount: "or_>0",
+                        CertsCount: "or_>0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "FederatedCreds", "SecretsCount", "CertsCount", "BlueprintPrincipals", "AgentIdentities", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-006",
+                    group: "Credentials",
+                    description: "Blueprints with client secrets.",
+                    label: "Client Secrets",
+                    filters: {
+                        SecretsCount: ">0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "SecretsCount", "CertsCount", "FederatedCreds", "CreationInDays", "Impact", "Risk"],
+                    sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVB-007",
+                    group: "Lifecycle",
+                    description: "Blueprints without linked agent identities.",
+                    label: "No Agent Identities",
+                    filters: {
+                        AgentIdentities: "=0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "CreationInDays", "BlueprintPrincipals", "AgentIdentities", "InheritableScopes", "InheritableRoles", "FederatedCreds", "SecretsCount", "CertsCount", "Impact", "Risk"],
+                    sort: { column: "CreationInDays", direction: "desc" }
+                },
+                {
+                    id: "PVB-008",
+                    group: "Lifecycle",
+                    description: "Blueprints without linked blueprint principals.",
+                    label: "No Principals",
+                    filters: {
+                        BlueprintPrincipals: "=0"
+                    },
+                    columns: ["DisplayName", "SignInAudience", "CreationInDays", "BlueprintPrincipals", "AgentIdentities", "InheritableScopes", "InheritableRoles", "FederatedCreds", "SecretsCount", "CertsCount", "Impact", "Risk"],
+                    sort: { column: "CreationInDays", direction: "desc" }
+                }
             ]
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
@@ -1157,6 +1324,8 @@ $global:GLOBALJavaScript_Table = @'
             if (key === "RoleEntra") return "Role Assignments Entra ID";
             if (key === "RoleAz") return "Role Assignments Azure IAM";
             if (key === "AgentIdentities") return "Agent Identities";
+            if (key === "AgentIdentityBlueprintsPrincipals") return "Agent Identity Blueprint Principals";
+            if (key === "AgentIdentityBlueprints") return "Agent Identity Blueprints";
 
             var lower = name.toLowerCase();
             if (lower.indexOf("users") !== -1) return "User";
@@ -4499,7 +4668,7 @@ function Get-AgentObjectBasics {
         [Parameter(Mandatory = $true)][int]$ApiTop
     )
 
-    # High-level: preload the agent-specific object metadata that the generic service principal list cannot represent correctly.
+    # Preload the agent-specific object metadata that the generic service principal list cannot represent correctly.
     write-host "[*] Retrieve basic agent object list"
 
     $agentObjectBasics = @{
@@ -4571,7 +4740,7 @@ function Resolve-DirectoryObjectReference {
         [Parameter(Mandatory = $false)][hashtable]$AgentObjectBasics = @{}
     )
 
-    # High-level: resolve mixed directory object references through the typed lookup that owns the source-of-truth metadata.
+    # Resolve mixed directory object references through the typed lookup that owns the source-of-truth metadata.
     $normalizedId = "$ObjectId".Trim()
     if ([string]::IsNullOrWhiteSpace($normalizedId)) {
         return $null
@@ -4972,6 +5141,7 @@ $global:GLOBALApiPermissionCategorizationList= @{
     "b8bb2037-6e08-44ac-a4ea-4674e010e2a4" = "Medium" #OnlineMeetings.ReadWrite.All  
     "de89b5e4-5b8f-48eb-8925-29c2b33bd8bd" = "Medium" #CustomSecAttributeAssignment.ReadWrite.All
     "89c8469c-83ad-45f7-8ff2-6e3d4285709e" = "Medium" #ServicePrincipalEndpoint.ReadWrite.All (Still an issue?)
+    "4aa6e624-eee0-40ab-bdd8-f9639038a614" = "Medium" #AgentIdUser.ReadWrite.IdentityParentedBy
     "4c390976-b2b7-42e0-9187-c6be3bead001" = "Low" #AgentIdentity.CreateAsManager
 }
 
@@ -6274,10 +6444,11 @@ function New-AppRoleReferenceCache {
     )
 
     $cache = @{
-        ByAppId            = @{}
-        ByResourceId       = @{}
-        ApiNamesByAppId    = @{}
+        ByAppId             = @{}
+        ByResourceId        = @{}
+        ApiNamesByAppId     = @{}
         ApiNamesByResourceId = @{}
+        AppIdsByResourceId  = @{}
     }
 
     foreach ($item in @($ServicePrincipals)) {
@@ -6289,6 +6460,7 @@ function New-AppRoleReferenceCache {
 
         if ($resourceId) {
             $cache.ApiNamesByResourceId[$resourceId] = $apiName
+            $cache.AppIdsByResourceId[$resourceId] = $resourceAppId
             if (-not $cache.ByResourceId.ContainsKey($resourceId)) {
                 $cache.ByResourceId[$resourceId] = @{}
             }
@@ -6326,6 +6498,32 @@ function New-AppRoleReferenceCache {
     }
 
     return $cache
+}
+
+# Resolve a resource service principal ID to its backing app ID from the shared cache.
+function Get-AppRoleReferenceResourceAppId {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory = $true)][hashtable]$AppRoleReferenceCache,
+        [Parameter(Mandatory = $false)][string]$ResourceId,
+        [Parameter(Mandatory = $false)][string]$ResourceAppId
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ResourceAppId)) {
+        return $ResourceAppId
+    }
+
+    if (-not $AppRoleReferenceCache) {
+        return $null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ResourceId) -and
+        $AppRoleReferenceCache.ContainsKey('AppIdsByResourceId') -and
+        $AppRoleReferenceCache.AppIdsByResourceId.ContainsKey($ResourceId)) {
+        return $AppRoleReferenceCache.AppIdsByResourceId[$ResourceId]
+    }
+
+    return $null
 }
 
 # Resolve a single application permission ID from the shared cache.
@@ -6406,24 +6604,138 @@ function Resolve-AppRoleAssignmentRecord {
         return $null
     }
 
-    $resolved = Resolve-AppRoleReference -AppRoleReferenceCache $AppRoleReferenceCache -PermissionId $PermissionId -ResourceId $ResourceId -ResourceAppId $ResourceAppId
+    $resolvedResourceAppId = Get-AppRoleReferenceResourceAppId -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $ResourceId -ResourceAppId $ResourceAppId
+    $resolved = Resolve-AppRoleReference -AppRoleReferenceCache $AppRoleReferenceCache -PermissionId $PermissionId -ResourceId $ResourceId -ResourceAppId $resolvedResourceAppId
     $apiName =
         if (-not [string]::IsNullOrWhiteSpace($ApiNameOverride)) {
             $ApiNameOverride
         } elseif ($resolved -and -not [string]::IsNullOrWhiteSpace($resolved.ApiName)) {
             $resolved.ApiName
         } else {
-            Get-AppRoleReferenceApiName -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $ResourceId -ResourceAppId $ResourceAppId
+            Get-AppRoleReferenceApiName -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $ResourceId -ResourceAppId $resolvedResourceAppId
         }
 
     [pscustomobject]@{
         Type                         = "Permission"
         PermissionId                 = $PermissionId
+        ResourceId                   = $ResourceId
+        ResourceAppId                = $resolvedResourceAppId
         ApiPermission                = if ($resolved) { $resolved.ApiPermission } else { $PermissionId }
         ApiName                      = if ([string]::IsNullOrWhiteSpace($apiName)) { "-" } else { $apiName }
         ApiPermissionDisplayname     = if ($resolved) { $resolved.ApiPermissionDisplayName } else { "-" }
         ApiPermissionDescription     = if ($resolved) { $resolved.ApiPermissionDescription } else { "-" }
         ApiPermissionCategorization  = if ($resolved) { $resolved.ApiPermissionCategorization } else { Get-APIPermissionCategory -InputPermission $PermissionId -PermissionType "application" }
+    }
+}
+
+# Summarize API-permission counts and impact using the shared scoring model.
+function Get-ApiPermissionImpactSummary {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory = $false)][object[]]$ApplicationPermissions = @(),
+        [Parameter(Mandatory = $false)][object[]]$DelegatedPermissions = @(),
+        [Parameter(Mandatory = $false)][switch]$DeduplicateApplication,
+        [Parameter(Mandatory = $false)][switch]$DeduplicateDelegated
+    )
+
+    $scoreMap = @{
+        Dangerous     = 800
+        High          = 400
+        Medium        = 100
+        Low           = 50
+        Uncategorized = 20
+    }
+    $delegatedScoreMap = @{
+        Dangerous     = 200
+        High          = 100
+        Medium        = 60
+        Low           = 20
+        Uncategorized = 20
+    }
+    $categories = @('Dangerous', 'High', 'Medium', 'Low', 'Uncategorized')
+
+    $dedupByKey = {
+        param(
+            [object[]]$Rows,
+            [scriptblock]$KeySelector
+        )
+
+        $result = [System.Collections.ArrayList]::new()
+        $seen = @{}
+        foreach ($row in @($Rows)) {
+            if ($null -eq $row) { continue }
+            $key = & $KeySelector $row
+            if ([string]::IsNullOrWhiteSpace([string]$key)) {
+                $key = [guid]::NewGuid().Guid
+            }
+            if ($seen.ContainsKey($key)) {
+                continue
+            }
+            $seen[$key] = $true
+            [void]$result.Add($row)
+        }
+        return @($result)
+    }
+
+    $applicationRows = @($ApplicationPermissions)
+    if ($DeduplicateApplication) {
+        $applicationRows = & $dedupByKey $applicationRows {
+            param($row)
+            $resourceAppId = if ($row.PSObject.Properties['ResourceAppId']) { [string]$row.ResourceAppId } else { '' }
+            $permissionId = if ($row.PSObject.Properties['PermissionId']) { [string]$row.PermissionId } else { [string]$row.ApiPermission }
+            "APP|$resourceAppId|$permissionId"
+        }
+    }
+
+    $delegatedRows = @($DelegatedPermissions)
+    if ($DeduplicateDelegated) {
+        $delegatedRows = & $dedupByKey $delegatedRows {
+            param($row)
+            $resourceAppId = if ($row.PSObject.Properties['ResourceAppId']) { [string]$row.ResourceAppId } else { '' }
+            $scope = if ($row.PSObject.Properties['Scope']) { [string]$row.Scope } else { [string]$row.Permission }
+            "DEL|$resourceAppId|$scope"
+        }
+    }
+
+    $applicationCounts = @{}
+    $delegatedCounts = @{}
+    foreach ($category in $categories) {
+        $applicationCounts[$category] = 0
+        $delegatedCounts[$category] = 0
+    }
+
+    $impact = 0
+    foreach ($row in $applicationRows) {
+        $category = if ($row.PSObject.Properties['ApiPermissionCategorization']) { [string]$row.ApiPermissionCategorization } else { 'Uncategorized' }
+        if (-not $applicationCounts.ContainsKey($category)) {
+            $category = 'Uncategorized'
+        }
+        $applicationCounts[$category]++
+        $impact += $scoreMap[$category]
+    }
+
+    foreach ($row in $delegatedRows) {
+        $category = if ($row.PSObject.Properties['ApiPermissionCategorization']) { [string]$row.ApiPermissionCategorization } else { 'Uncategorized' }
+        if (-not $delegatedCounts.ContainsKey($category)) {
+            $category = 'Uncategorized'
+        }
+        $delegatedCounts[$category]++
+    }
+
+    foreach ($category in $categories) {
+        if ($delegatedCounts[$category] -gt 0) {
+            $impact += $delegatedScoreMap[$category]
+        }
+    }
+
+    [pscustomobject]@{
+        ApplicationPermissions = @($applicationRows)
+        DelegatedPermissions   = @($delegatedRows)
+        ApplicationCounts      = $applicationCounts
+        DelegatedCounts        = $delegatedCounts
+        ApplicationCount       = @($applicationRows).Count
+        DelegatedCount         = @($delegatedRows).Count
+        Impact                 = $impact
     }
 }
 
@@ -6618,7 +6930,7 @@ function start-InitTasks {
         AppRegistrations       = @{ Count = 0; AppLock = 0; Credentials = @{ 'AppsSecrets' = 0; 'AppsCerts' = 0; 'AppsFederatedCreds' = 0; 'AppsNoCreds' = 0}; Audience = @{ 'SingleTenant' = 0; 'MultiTenant' = 0; 'MultiTenantPersonal' = 0} }
         EnterpriseApps         = @{ Count = 0; Foreign = 0; IncludeMsApps = $false; Credentials = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0}; SignInActivity = @{ '0-1 month' = 0; '1-2 months' = 0; '2-3 months' = 0; '3-4 months' = 0; '4-5 months' = 0; '5-6 months' = 0; '6+ months' = 0; 'Never' = 0 }}
         ManagedIdentities      = @{ Count = 0; IsExplicit = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0} }
-        AgentIdentities        = @{ Count = 0; Foreign = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0 } }
+        AgentIdentities        = @{ Count = 0; Foreign = 0; Inactive = 0; TotalAgentUsers = 0; ApiCategorization = @{ 'Dangerous' = 0; 'High' = 0; 'Medium' = 0; 'Low' = 0; 'Misc' = 0 } }
         AgentIdentityBlueprintsPrincipals = @{ Count = 0; Foreign = 0 }
         AgentIdentityBlueprints = @{ Count = 0; Credentials = @{ 'Secrets' = 0; 'Certificates' = 0; 'Federated Credentials' = 0; 'None' = 0 } }
         AdministrativeUnits    = @{ Count = 0 }
@@ -7294,4 +7606,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Resolve-DirectoryObjectReference,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Resolve-AppRoleAssignmentRecord,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Resolve-DirectoryObjectReference,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-AppRoleAssignmentRecord,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
