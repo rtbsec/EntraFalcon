@@ -44,7 +44,6 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     $SPLikelihoodScore = @{
         "ForeignApp"                = 30
         "InternApp"                 = 5
-        "Owners"          	        = 5
     }
 
     ########################################## SECTION: DATACOLLECTION ##########################################
@@ -762,9 +761,6 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
 
         $OwnersCount = $OwnerUserDetails.count + $OwnerSPDetails.count
 
-        #Increase likelihood for each owner (user) SP ownership is calculated in the post-processing part
-        $LikelihoodScore += $OwnerUserDetails.count * $SPLikelihoodScore["Owners"]
-
         # App role assignments are inventory-only for blueprint principals.
         $AppRolesCount = ($MatchingAppRoles | Measure-Object).count
 
@@ -793,10 +789,8 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
             $LikelihoodScore += $SPLikelihoodScore["InternApp"]
         }
 
-
         $Warnings = ''
 
-        # if
         if ($AppsignInData.lastSignInDays) {
             $LastSignInDays = $AppsignInData.lastSignInDays
         } else {

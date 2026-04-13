@@ -54,7 +54,7 @@ function Invoke-AgentIdentities {
     }
 
     $SPLikelihoodScore = @{
-        "Owners"          	        = 5
+        "ForeignApp"                = 30
     }
 
     # Resolve sponsor objects into a stable reporting shape.
@@ -191,7 +191,7 @@ function Invoke-AgentIdentities {
     # Get Agent Identities
     write-host "[*] Get Agent Identities"
     $QueryParameters = @{
-        '$select' = "Id,AppId,DisplayName,appRoles,accountEnabled,servicePrincipalType,createdDateTime,AppRoleAssignmentRequired,agentIdentityBlueprintId,createdByAppId,tags"
+        '$select' = "Id,AppId,DisplayName,appRoles,accountEnabled,servicePrincipalType,createdDateTime,AppRoleAssignmentRequired,agentIdentityBlueprintId,createdByAppId,tags,AppOwnerOrganizationId"
         '$top' = $ApiTop
     }
     $AgentIdentities = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals/Microsoft.Graph.AgentIdentity' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -829,6 +829,7 @@ function Invoke-AgentIdentities {
         }
 
         $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
+        $ForeignTenant = ($appOwnerOrganizationId -ne "" -and $appOwnerOrganizationId -ne $CurrentTenant.id)
 
         if ($AzureRoleCount -ge 1) {
             #Use function to get the impact score and warning message for assigned Azure roles
@@ -949,8 +950,9 @@ function Invoke-AgentIdentities {
         }
         $AssignedAgentUsersCount = ($AssignedAgentUsers | Measure-Object).Count
 
-        #Increase likelihood for each owner (user) SP ownership is calculated in the post-processing part
-        $LikelihoodScore += $OwnerUserDetails.count * $SPLikelihoodScore["Owners"]
+        if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
+            $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
+        }
 
         #Increase impact for each App role
         $AppRolesCount = ($MatchingAppRoles | Measure-Object).count
@@ -1252,7 +1254,7 @@ function Invoke-AgentIdentities {
             EntraRoleDetails = $AppEntraRoles
             GroupOwner = $OwnedGroups
             AppPermission = $AppAssignments
-            Foreign = $false
+            Foreign = $ForeignTenant
             DefaultMS = $DefaultMS
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
@@ -1270,7 +1272,6 @@ function Invoke-AgentIdentities {
             AppSponsorsDetails = $AppSponsorsDetails
             AgentUsersDetails = $AssignedAgentUsers
             AppRoleRequired = $item.AppRoleAssignmentRequired
-            SAML = ($item.preferredSingleSignOnMode -eq "saml")
             AppApiPermission = $AppApiPermission
             AppRoles = ($MatchingAppRoles | Measure-Object).count
             AppRolesDetails = $MatchingAppRoles
