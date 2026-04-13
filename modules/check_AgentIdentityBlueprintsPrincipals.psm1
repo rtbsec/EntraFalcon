@@ -22,6 +22,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
         [Parameter(Mandatory=$false)][hashtable]$AppRoleReferenceCache = @{},
         [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments,
         [Parameter(Mandatory = $true)][int]$ApiTop,
+        [Parameter(Mandatory=$true)][hashtable]$ServicePrincipalSignInActivityLookup,
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp
     )
 
@@ -34,7 +35,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     $ProgressCounter = 0
     $Inactive = $false
     $ApiAppDisplayNameCache = @{}
-    $AppLastSignIns = @{}
+    $AppLastSignIns = $ServicePrincipalSignInActivityLookup
     $AllServicePrincipal = [System.Collections.ArrayList]::new()
     if ($null -eq $global:GLOBALUserAppRoles) { $global:GLOBALUserAppRoles = @{} }
     $SPImpactScore = @{
@@ -66,28 +67,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
         Return $AllServicePrincipalHT
     }
 
-    write-host "[*] Get last blueprint principal sign-in dates"
-    $AppLastSignInsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/reports/servicePrincipalSignInActivities" -BetaAPI -QueryParameters @{ '$top' = $ApiTop } -UserAgent $($GlobalAuditSummary.UserAgent.Name)
-    foreach ($app in $AppLastSignInsRaw) {
-        $AppLastSignIns[$app.appId] = @{
-            id = $app.appId
-            lastSignIn = if ($app.lastSignInActivity.lastSignInDateTime) {$app.lastSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDays = if ($app.lastSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.lastSignInActivity.lastSignInDateTime).Days } else { "-" }
-
-            lastSignInAppAsClient = if ($app.applicationAuthenticationClientSignInActivity.lastSignInDateTime) {$app.applicationAuthenticationClientSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInAppAsClientDays = if ($app.applicationAuthenticationClientSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.applicationAuthenticationClientSignInActivity.lastSignInDateTime).Days } else { "-" }
-
-            lastSignInAppAsResource = if ($app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime) {$app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInAppAsResourceDays = if ($app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime).Days } else { "-" }
-
-            lastSignInDelegatedAsClient = if ($app.delegatedClientSignInActivity.lastSignInDateTime) {$app.delegatedClientSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDelegatedAsClientDays = if ($app.delegatedClientSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.delegatedClientSignInActivity.lastSignInDateTime).Days } else { "-" }
-
-            lastSignInDelegatedAsResource = if ($app.delegatedResourceSignInActivity.lastSignInDateTime) {$app.delegatedResourceSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDelegatedAsResourceDays = if ($app.delegatedResourceSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.delegatedResourceSignInActivity.lastSignInDateTime).Days } else { "-" }
-        }
-    }
-    Write-Log -Level Debug -Message "Got $($AppLastSignInsRaw.Count) app last sign-in dates"
+    Write-Log -Level Debug -Message "Using $($AppLastSignIns.Count) cached app last sign-in dates"
 
     Write-Host "[*] Get all blueprint principal API permissions assignments"
     $Requests = @()
