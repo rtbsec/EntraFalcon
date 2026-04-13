@@ -16,7 +16,7 @@ function Invoke-AgentIdentityBlueprints {
         [Parameter(Mandatory=$false)][hashtable]$AppRoleReferenceCache = @{},
         [Parameter(Mandatory=$true)][hashtable]$EnterpriseApps,
         [Parameter(Mandatory=$true)][String[]]$StartTimestamp,
-        [Parameter(Mandatory=$true)][Alias("AgentIdentityBlueprintsPrincipals")][hashtable]$AgentIdentityBlueprints
+        [Parameter(Mandatory=$true)][hashtable]$AgentIdentityBlueprintsPrincipals
     )
 
     ############################## Function section ########################
@@ -94,7 +94,7 @@ function Invoke-AgentIdentityBlueprints {
         }
 
         if ($type -eq "unknown" -or $type -eq "agentIdentityBlueprintPrincipal") {
-            $MatchingBlueprintPrincipal = $AgentIdentityBlueprints[$($Object)]
+            $MatchingBlueprintPrincipal = $AgentIdentityBlueprintsPrincipals[$($Object)]
 
             if (($MatchingBlueprintPrincipal | Measure-Object).Count -ge 1) {
                 [PSCustomObject]@{
@@ -709,7 +709,7 @@ function Invoke-AgentIdentityBlueprints {
             $LikelihoodScore += $AppLikelihoodScore["GuestAsOwner"]
         }
 
-        $BlueprintPrincipals = @($AgentIdentityBlueprints.Values | Where-Object { $_.AppId -eq $item.AppId } | Sort-Object Risk -Descending)
+        $BlueprintPrincipals = @($AgentIdentityBlueprintsPrincipals.Values | Where-Object { $_.AppId -eq $item.AppId } | Sort-Object Risk -Descending)
         $BlueprintLinkedAgentIdentities = @()
 
         if (($BlueprintPrincipals | Measure-Object).Count -ge 1) {
