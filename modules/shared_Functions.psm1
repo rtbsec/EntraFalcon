@@ -1130,7 +1130,10 @@ $global:GLOBALJavaScript_Table = @'
             "Activated": "Number of currently active role assignments activated via PIM",
             "AssignmentType": "Activated eligible assignments also appear as active",
             "Conditions": "Has additional conditions",
-            "UserCoverage": "Percentage of tenant users covered by the policy after exclusions. External users are only approximated for b2bCollaborationGuest and do not include all types or tenant-specific selections."
+            "UserCoverage": "Percentage of tenant users covered by the policy after exclusions. External users are only approximated for b2bCollaborationGuest and do not include all types or tenant-specific selections.",
+            "InheritableScopes": "Number of APIs for which the blueprint permits child agent identities to inherit delegated permission scopes",
+            "InheritableRoles": "Number of APIs for which the blueprint permits child agent identities to inherit application role permissions",
+            "Agent": "User object parented to an agent identity (agent user)"
         };
     
         (function () {    
