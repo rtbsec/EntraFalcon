@@ -4940,26 +4940,70 @@ function Get-ServicePrincipalSignInActivityLookup {
 
     $AppLastSignIns = @{}
     $AppLastSignInsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/reports/servicePrincipalSignInActivities" -BetaAPI -QueryParameters @{ '$top' = $ApiTop } -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $nowUtc = (Get-Date).ToUniversalTime()
+
+    $getSignInDateInfo = {
+        param([object]$Value)
+
+        $emptyValue = [pscustomobject]@{
+            Display = "-"
+            Days    = "-"
+        }
+
+        if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+            return $emptyValue
+        }
+
+        try {
+            if ($Value -is [datetime]) {
+                $dateTime = [datetime]$Value
+                if ($dateTime.Kind -eq [DateTimeKind]::Unspecified) {
+                    $dateTime = [datetime]::SpecifyKind($dateTime, [DateTimeKind]::Utc)
+                }
+                $utcDateTime = $dateTime.ToUniversalTime()
+            } else {
+                $dateTimeOffset = [datetimeoffset]::Parse(
+                    [string]$Value,
+                    [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+                )
+                $utcDateTime = $dateTimeOffset.UtcDateTime
+            }
+
+            return [pscustomobject]@{
+                Display = $utcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", [Globalization.CultureInfo]::InvariantCulture)
+                Days    = (New-TimeSpan -Start $utcDateTime -End $nowUtc).Days
+            }
+        } catch {
+            return $emptyValue
+        }
+    }
 
     foreach ($app in @($AppLastSignInsRaw)) {
         if ([string]::IsNullOrWhiteSpace($app.appId)) { continue }
 
+        $lastSignInInfo = & $getSignInDateInfo $app.lastSignInActivity.lastSignInDateTime
+        $lastSignInAppAsClientInfo = & $getSignInDateInfo $app.applicationAuthenticationClientSignInActivity.lastSignInDateTime
+        $lastSignInAppAsResourceInfo = & $getSignInDateInfo $app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime
+        $lastSignInDelegatedAsClientInfo = & $getSignInDateInfo $app.delegatedClientSignInActivity.lastSignInDateTime
+        $lastSignInDelegatedAsResourceInfo = & $getSignInDateInfo $app.delegatedResourceSignInActivity.lastSignInDateTime
+
         $AppLastSignIns[$app.appId] = @{
             id = $app.appId
-            lastSignIn = if ($app.lastSignInActivity.lastSignInDateTime) {$app.lastSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDays = if ($app.lastSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.lastSignInActivity.lastSignInDateTime).Days } else { "-" }
+            lastSignIn = $lastSignInInfo.Display
+            lastSignInDays = $lastSignInInfo.Days
 
-            lastSignInAppAsClient = if ($app.applicationAuthenticationClientSignInActivity.lastSignInDateTime) {$app.applicationAuthenticationClientSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInAppAsClientDays = if ($app.applicationAuthenticationClientSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.applicationAuthenticationClientSignInActivity.lastSignInDateTime).Days } else { "-" }
+            lastSignInAppAsClient = $lastSignInAppAsClientInfo.Display
+            lastSignInAppAsClientDays = $lastSignInAppAsClientInfo.Days
 
-            lastSignInAppAsResource = if ($app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime) {$app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInAppAsResourceDays = if ($app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.applicationAuthenticationResourceSignInActivity.lastSignInDateTime).Days } else { "-" }
+            lastSignInAppAsResource = $lastSignInAppAsResourceInfo.Display
+            lastSignInAppAsResourceDays = $lastSignInAppAsResourceInfo.Days
 
-            lastSignInDelegatedAsClient = if ($app.delegatedClientSignInActivity.lastSignInDateTime) {$app.delegatedClientSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDelegatedAsClientDays = if ($app.delegatedClientSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.delegatedClientSignInActivity.lastSignInDateTime).Days } else { "-" }
+            lastSignInDelegatedAsClient = $lastSignInDelegatedAsClientInfo.Display
+            lastSignInDelegatedAsClientDays = $lastSignInDelegatedAsClientInfo.Days
 
-            lastSignInDelegatedAsResource = if ($app.delegatedResourceSignInActivity.lastSignInDateTime) {$app.delegatedResourceSignInActivity.lastSignInDateTime} else { "-" }
-            lastSignInDelegatedAsResourceDays = if ($app.delegatedResourceSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.delegatedResourceSignInActivity.lastSignInDateTime).Days } else { "-" }
+            lastSignInDelegatedAsResource = $lastSignInDelegatedAsResourceInfo.Display
+            lastSignInDelegatedAsResourceDays = $lastSignInDelegatedAsResourceInfo.Days
         }
     }
 
