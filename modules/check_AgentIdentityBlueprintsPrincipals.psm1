@@ -741,10 +741,6 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
 
         $OwnersCount = $OwnerUserDetails.count + $OwnerSPDetails.count
 
-        # App role assignments are inventory-only for blueprint principals.
-        $AppRolesCount = ($MatchingAppRoles | Measure-Object).count
-
-
         #Check if it is one of the MS default SPs
         if ($GLOBALMsTenantIds -contains $item.AppOwnerOrganizationId -or $item.DisplayName -eq "O365 LinkedIn Connection" -and $item.DisplayName -ne "P2P Server") {
             $DefaultMS = $true

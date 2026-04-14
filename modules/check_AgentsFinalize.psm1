@@ -245,33 +245,6 @@ function Invoke-CheckAgentsFinalize {
         }
     }
 
-    function Get-EffectivePermissionOriginDisplay {
-        param(
-            $PermissionSource,
-            [string]$StartTimestamp,
-            [string]$EscapedTenantName
-        )
-
-        if ($null -eq $PermissionSource -or
-            [string]::IsNullOrWhiteSpace([string]$PermissionSource.OriginObjectDisplayName)) {
-            return "-"
-        }
-
-        if ([string]::IsNullOrWhiteSpace([string]$PermissionSource.OriginObjectId) -or
-            [string]::IsNullOrWhiteSpace([string]$PermissionSource.OriginReport) -or
-            [string]$PermissionSource.OriginReport -eq '-') {
-            return [string]$PermissionSource.OriginObjectDisplayName
-        }
-
-        $resolvedOwner = [pscustomobject]@{
-            TargetReport = [string]$PermissionSource.OriginReport
-            Id           = [string]$PermissionSource.OriginObjectId
-            DisplayName  = [string]$PermissionSource.OriginObjectDisplayName
-        }
-
-        return Get-AgentOwnerLink -ResolvedOwner $resolvedOwner -StartTimestamp $StartTimestamp -EscapedTenantName $EscapedTenantName
-    }
-
     function Normalize-AgentOwnerWarnings {
         param([string]$Warnings)
 
@@ -312,23 +285,6 @@ function Invoke-CheckAgentsFinalize {
         return @($warningList | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
     }
 
-    function Remove-AgentApiWarningText {
-        param([string]$Warnings)
-
-        if ([string]::IsNullOrWhiteSpace($Warnings)) {
-            return $Warnings
-        }
-
-        $parts = @($Warnings -split ' / ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $filtered = foreach ($part in $parts) {
-            if ($part -match '^Known .+ API permission(s)?!$') { continue }
-            if ($part -match '^Known .+ delegated API permission(s)?!$') { continue }
-            $part
-        }
-
-        return ($filtered | Select-Object -Unique) -join ' / '
-    }
-
     function Get-ApiSeverityWarningText {
         param(
             [hashtable]$Counts,
@@ -352,6 +308,40 @@ function Invoke-CheckAgentsFinalize {
         }
 
         return "Known $($severityParts[0]) $Suffix!"
+    }
+
+    function Get-AgentInheritanceWarningText {
+        param(
+            [hashtable]$Counts,
+            [string]$PermissionTypeLabel,
+            [switch]$Assumed,
+            [switch]$IncludeMedium
+        )
+
+        if ([string]::IsNullOrWhiteSpace($PermissionTypeLabel)) {
+            return $null
+        }
+
+        $severities = [System.Collections.ArrayList]::new()
+        if (($Counts['Dangerous'] | ForEach-Object { [int]$_ }) -gt 0) { [void]$severities.Add('dangerous') }
+        if (($Counts['High'] | ForEach-Object { [int]$_ }) -gt 0) { [void]$severities.Add('high') }
+        if ($IncludeMedium -and (($Counts['Medium'] | ForEach-Object { [int]$_ }) -gt 0)) { [void]$severities.Add('medium') }
+
+        $severityParts = @($severities | Select-Object -Unique)
+        if ($severityParts.Count -eq 0) {
+            return $null
+        }
+
+        if ($severityParts.Count -gt 1) {
+            $joined = (($severityParts[0..($severityParts.Count - 2)] -join ", ") + " and " + $severityParts[-1])
+        } else {
+            $joined = $severityParts[0]
+        }
+
+        $permissionText = if ($severityParts.Count -gt 1) { "API permissions ($PermissionTypeLabel)" } else { "API permission ($PermissionTypeLabel)" }
+        $inheritanceText = if ($Assumed) { 'may be inherited by child Agent Identities' } else { 'inherited by child Agent Identities' }
+
+        return "Known $joined $permissionText $inheritanceText!"
     }
 
     function Get-BlueprintInheritablePermissionLookup {
@@ -1044,7 +1034,9 @@ Execution Warnings = $($WarningList -join ' / ')
                 $agentIdentity.Likelihood += $AgentIdentityLikelihoodAdjustments["InternApp"]
             }
         }
-        $agentIdentity.Warnings = Remove-AgentApiWarningText -Warnings $agentIdentity.Warnings
+        if ($null -eq $agentIdentity.Warnings) {
+            $agentIdentity.Warnings = ''
+        }
         if ($agentIdentity.ForeignBlueprintPrincipal) {
             $agentIdentity.Warnings = Add-UniqueWarningText -ExistingWarnings $agentIdentity.Warnings -NewWarning "Child of foreign blueprint principal"
         }
@@ -1092,6 +1084,7 @@ Execution Warnings = $($WarningList -join ' / ')
 
         $parentBlueprintId = $null
         $parentBlueprintDisplayName = $null
+        $parentBlueprint = $null
         if (-not [string]::IsNullOrWhiteSpace("$($principal.AppId)") -and $BlueprintLookupByAppId.ContainsKey("$($principal.AppId)")) {
             $parentBlueprint = $BlueprintLookupByAppId["$($principal.AppId)"]
             $parentBlueprintId = $parentBlueprint.Id
@@ -1125,6 +1118,68 @@ Execution Warnings = $($WarningList -join ' / ')
         $effectiveBlueprintPrincipalApiSummary = Get-ApiPermissionImpactSummary -ApplicationPermissions @($effectiveBlueprintPrincipalAppPermissions) -DeduplicateApplication
         $inheritedImpact = [double](($linkedAgentIdentities | Measure-Object -Property Impact -Sum).Sum)
         $principal.Warnings = ''
+
+        $confirmedChildInheritedAppPermissions = [System.Collections.ArrayList]::new()
+        $confirmedChildInheritedDelegatedPermissions = [System.Collections.ArrayList]::new()
+        $assumedChildInheritedAppPermissions = [System.Collections.ArrayList]::new()
+        $assumedChildInheritedDelegatedPermissions = [System.Collections.ArrayList]::new()
+        if ($null -ne $parentBlueprint) {
+            $blueprintRuleLookup = Get-BlueprintInheritablePermissionLookup -Blueprint $parentBlueprint
+            foreach ($permission in @($principal.AppApiPermission)) {
+                if (-not (Test-AgentInheritableApplicationPermission -Permission $permission)) {
+                    continue
+                }
+
+                $resourceAppId = if ($permission.PSObject.Properties['ResourceAppId']) { [string]$permission.ResourceAppId } else { '' }
+                $permissionId = if ($permission.PSObject.Properties['PermissionId']) { [string]$permission.PermissionId } else { '' }
+                $decision = Test-BlueprintPermissionInheritance -BlueprintRuleLookup $blueprintRuleLookup -PermissionType 'Application' -ResourceAppId $resourceAppId -PermissionValue $permissionId
+                if ($decision.Allowed) {
+                    [void]$confirmedChildInheritedAppPermissions.Add($permission)
+                }
+            }
+
+            foreach ($permission in @($principal.ApiDelegatedDetails)) {
+                $resourceAppId = if ($permission.PSObject.Properties['ResourceAppId']) { [string]$permission.ResourceAppId } else { '' }
+                $scope = if ($permission.PSObject.Properties['Scope']) { [string]$permission.Scope } else { '' }
+                $decision = Test-BlueprintPermissionInheritance -BlueprintRuleLookup $blueprintRuleLookup -PermissionType 'Delegated' -ResourceAppId $resourceAppId -PermissionValue $scope
+                if ($decision.Allowed) {
+                    [void]$confirmedChildInheritedDelegatedPermissions.Add($permission)
+                }
+            }
+        } elseif ([bool]$principal.Foreign) {
+            foreach ($permission in @($principal.AppApiPermission)) {
+                if (-not (Test-AgentInheritableApplicationPermission -Permission $permission)) {
+                    continue
+                }
+
+                [void]$assumedChildInheritedAppPermissions.Add($permission)
+            }
+
+            foreach ($permission in @($principal.ApiDelegatedDetails)) {
+                [void]$assumedChildInheritedDelegatedPermissions.Add($permission)
+            }
+        }
+
+        $confirmedChildInheritedSummary = Get-ApiPermissionImpactSummary -ApplicationPermissions @($confirmedChildInheritedAppPermissions) -DelegatedPermissions @($confirmedChildInheritedDelegatedPermissions) -DeduplicateApplication -DeduplicateDelegated
+        $confirmedAppInheritanceWarning = Get-AgentInheritanceWarningText -Counts $confirmedChildInheritedSummary.ApplicationCounts -PermissionTypeLabel 'Application'
+        if (-not [string]::IsNullOrWhiteSpace($confirmedAppInheritanceWarning)) {
+            $principal.Warnings = Add-UniqueWarningText -ExistingWarnings $principal.Warnings -NewWarning $confirmedAppInheritanceWarning
+        }
+        $confirmedDelegatedInheritanceWarning = Get-AgentInheritanceWarningText -Counts $confirmedChildInheritedSummary.DelegatedCounts -PermissionTypeLabel 'Delegated'
+        if (-not [string]::IsNullOrWhiteSpace($confirmedDelegatedInheritanceWarning)) {
+            $principal.Warnings = Add-UniqueWarningText -ExistingWarnings $principal.Warnings -NewWarning $confirmedDelegatedInheritanceWarning
+        }
+
+        $assumedChildInheritedSummary = Get-ApiPermissionImpactSummary -ApplicationPermissions @($assumedChildInheritedAppPermissions) -DelegatedPermissions @($assumedChildInheritedDelegatedPermissions) -DeduplicateApplication -DeduplicateDelegated
+        $assumedAppInheritanceWarning = Get-AgentInheritanceWarningText -Counts $assumedChildInheritedSummary.ApplicationCounts -PermissionTypeLabel 'Application' -Assumed -IncludeMedium
+        if (-not [string]::IsNullOrWhiteSpace($assumedAppInheritanceWarning)) {
+            $principal.Warnings = Add-UniqueWarningText -ExistingWarnings $principal.Warnings -NewWarning $assumedAppInheritanceWarning
+        }
+        $assumedDelegatedInheritanceWarning = Get-AgentInheritanceWarningText -Counts $assumedChildInheritedSummary.DelegatedCounts -PermissionTypeLabel 'Delegated' -Assumed -IncludeMedium
+        if (-not [string]::IsNullOrWhiteSpace($assumedDelegatedInheritanceWarning)) {
+            $principal.Warnings = Add-UniqueWarningText -ExistingWarnings $principal.Warnings -NewWarning $assumedDelegatedInheritanceWarning
+        }
+
         $principal | Add-Member -NotePropertyName BlueprintPrincipalEffectiveAppApiPermission -NotePropertyValue @($effectiveBlueprintPrincipalAppPermissions) -Force
         $principal | Add-Member -NotePropertyName DirectImpact -NotePropertyValue ([math]::Round($baseDirectImpact + [double]$effectiveBlueprintPrincipalApiSummary.Impact)) -Force
         $principal | Add-Member -NotePropertyName InheritedImpact -NotePropertyValue ([math]::Round($inheritedImpact)) -Force
