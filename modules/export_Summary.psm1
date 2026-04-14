@@ -1590,8 +1590,8 @@ Enumeration Results:
   
     #Write HTML
     $PostContentCombined =  $Chartsection + "`n" + $domainsSectionHtml + "`n" + $GLOBALJavaScript
-    $CssCombined = $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
-    $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
+    $CssCombined = "<title>EF - Summary</title>`n" + $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
+    $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Head $CssCombined -PostContent $PostContentCombined
     $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
     $summaryTxtPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
     $Report | Out-File $summaryHtmlPath

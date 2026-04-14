@@ -593,7 +593,7 @@ $headerHtml = @"
 
     #Generate and write HTML Entra role report
     Set-GlobalReportManifest -CurrentReportKey 'RoleEntra' -CurrentReportName 'Role Assignments Entra ID' -Warnings $WarningReport
-    $Report = ConvertTo-HTML -Body "$headerHtml $mainEntraTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
+    $Report = ConvertTo-HTML -Body "$headerHtml $mainEntraTableHTML" -Head ("<title>EF - Role Assignments (Entra)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
     $Report | Out-File "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     #Write TXT and CSV files
@@ -670,7 +670,7 @@ $headerHtml = @"
 
     if ($SortedAzureRoles.count -ge 1) {
         Set-GlobalReportManifest -CurrentReportKey 'RoleAz' -CurrentReportName 'Role Assignments Azure IAM'
-        $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
+        $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Head ("<title>EF - Role Assignments (Azure)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $SortedAzureRoles | format-table Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append

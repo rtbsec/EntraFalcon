@@ -9661,7 +9661,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "<head>" +
                     '<meta charset="utf-8">' +
                     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-                    "<title>EntraFalcon Security Findings</title>" +
+                    "<title>EF - Security Findings</title>" +
                     "<style>" +
                         "body{font-family:Segoe UI,Arial,sans-serif;color:#111;margin:0;padding:20px;line-height:1.4;background:#fff;}" +
                         "h1{margin:0 0 6px;font-size:22px;}" +
@@ -12158,7 +12158,7 @@ $FindingsJson
 "@
 
     Set-GlobalReportManifest -CurrentReportKey $ReportKey -CurrentReportName $ReportName
-    $HeadCombined = $global:GLOBALReportManifestScript + $global:GLOBALCss + $extraCss
+    $HeadCombined = "<title>EF - Security Findings</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss + $extraCss
     $PostContentCombined = $global:GLOBALJavaScript_Nav + "`n" + $chartJsEmbedded + "`n" + $customScript
 
     $statusCounts = @{
@@ -12188,7 +12188,7 @@ $FindingsJson
     $reportPath = Join-Path $OutputFolder "$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
     Write-Log -Level Debug -Message "Writing report file: $reportPath"
 
-    $Report = ConvertTo-HTML -Body $headerHtml -Title $ReportName -Head $HeadCombined -PostContent $PostContentCombined
+    $Report = ConvertTo-HTML -Body $headerHtml -Head $HeadCombined -PostContent $PostContentCombined
     $Report | Out-File $reportPath
     return $Findings
     #endregion

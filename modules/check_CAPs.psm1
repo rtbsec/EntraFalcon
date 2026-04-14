@@ -2993,7 +2993,7 @@ $headerHtml = @"
 
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixNetworkLocations
     #Write HTML
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Title "$Title enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
+    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Head ("<title>EF - Conditional Access</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
