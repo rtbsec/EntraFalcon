@@ -1786,6 +1786,8 @@ Appendix: Used API Permission Reference
                 "Child Blueprint Principals" = $item.BlueprintPrincipals
                 "Child Agent Identities" = $item.LinkedAgentIdentities
                 "Child Agent Users" = $item.AgentUsers
+                "Impact" = $item.Impact
+                "Likelihood" = $item.Likelihood
                 "RiskScore" = $item.Risk
                 "Warnings" = $item.Warnings
             }
