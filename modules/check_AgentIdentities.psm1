@@ -1205,43 +1205,45 @@ function Invoke-AgentIdentities {
         }
     }
 
+    $AllServicePrincipalHT = @{}
+    foreach ($item in $AllServicePrincipal) {
+        $AllServicePrincipalHT[$item.Id] = $item
+    }
+
     #Process direct App ownerships (SP->SP) (take over Impact, inherit likelihood)
     $SPOwningSPs = $AllServicePrincipal | Where-Object { $_.SpOwn -ge 1 }
-    Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningApps.count)"
+    Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningSPs.count)"
     #For each object which owns an App registration
     foreach ($SpOwnerObject in $SPOwningSPs) {
 
         # For each owned App Registration
         foreach ($OwnedSPObject in $SpOwnerObject.OwnedSPDetails) {
 
-            # Get the details of the owned SP by looping over matching objects
-            foreach ($OwnedSPObjectDetails in $AllServicePrincipal | Where-Object { $_.id -eq $OwnedSPObject.id }) {
-
-                # Increment/Recalculate RiskScore of the SP objects which is indirectly owned (SP->SP*)
-                $OwnedSPObjectDetails.Likelihood += [math]::Round($SpOwnerObject.Likelihood)
-                $OwnedSPObjectDetails.Risk = [math]::Round(($OwnedSPObjectDetails.Impact * $OwnedSPObjectDetails.Likelihood))
-
-                # Append the Message to Warnings of the SP objects which is indirectly owned (SP->SP*)
-                $warningMessage = "SP owned by another SP"
-                if ($OwnedSPObjectDetails.Warnings -and $OwnedSPObjectDetails.Warnings -notmatch $warningMessage) {
-                    $OwnedSPObjectDetails.Warnings += " / $warningMessage"
-                } else {
-                    $OwnedSPObjectDetails.Warnings = $warningMessage
-                }
-
-                # Increment/Recalculate Impactscore of the SP which owns the other SP with it's impact score (SP*->SP)
-                $SpOwnerObject.Impact += [math]::Round($OwnedSPObjectDetails.Impact)
-                $SpOwnerObject.Risk = [math]::Round(($SpOwnerObject.Impact * $SpOwnerObject.Likelihood))
-                $OwnedSPObject | Add-Member -NotePropertyName Impact -NotePropertyValue $OwnedSPObjectDetails.Impact
-                $OwnedSPObject | Add-Member -NotePropertyName Foreign -NotePropertyValue $OwnedSPObjectDetails.Foreign
+            $OwnedSPObjectDetails = $AllServicePrincipalHT[$OwnedSPObject.Id]
+            if ($null -eq $OwnedSPObjectDetails) {
+                continue
             }
+
+            # Increment/Recalculate RiskScore of the SP objects which is indirectly owned (SP->SP*)
+            $OwnedSPObjectDetails.Likelihood += [math]::Round($SpOwnerObject.Likelihood)
+            $OwnedSPObjectDetails.Risk = [math]::Round(($OwnedSPObjectDetails.Impact * $OwnedSPObjectDetails.Likelihood))
+
+            # Append the Message to Warnings of the SP objects which is indirectly owned (SP->SP*)
+            $warningMessage = "SP owned by another SP"
+            if ($OwnedSPObjectDetails.Warnings -and $OwnedSPObjectDetails.Warnings -notmatch $warningMessage) {
+                $OwnedSPObjectDetails.Warnings += " / $warningMessage"
+            } else {
+                $OwnedSPObjectDetails.Warnings = $warningMessage
+            }
+
+            # Increment/Recalculate Impactscore of the SP which owns the other SP with it's impact score (SP*->SP)
+            $SpOwnerObject.Impact += [math]::Round($OwnedSPObjectDetails.Impact)
+            $SpOwnerObject.Risk = [math]::Round(($SpOwnerObject.Impact * $SpOwnerObject.Likelihood))
+            $OwnedSPObject | Add-Member -NotePropertyName Impact -NotePropertyValue $OwnedSPObjectDetails.Impact
+            $OwnedSPObject | Add-Member -NotePropertyName Foreign -NotePropertyValue $OwnedSPObjectDetails.Foreign
         }
     }
 
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
-    $AllServicePrincipalHT = @{}
-    foreach ($item in $AllServicePrincipal) {
-        $AllServicePrincipalHT[$item.Id] = $item
-    }
     return $AllServicePrincipalHT
 }

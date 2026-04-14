@@ -810,23 +810,27 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     $SPOwningApps = $AllServicePrincipal | Where-Object { $_.AppOwn -ge 1 }
     Write-Log -Level Debug -Message "Number of ownerships SP->AppReg: $($SPOwningApps.count)"
 
+    $AllServicePrincipalHT = @{}
+    foreach ($item in $AllServicePrincipal) {
+        $AllServicePrincipalHT[$item.Id] = $item
+    }
+
     $SPOwningSPs = $AllServicePrincipal | Where-Object { $_.SpOwn -ge 1 }
     Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningSPs.count)"
     foreach ($SpOwnerObject in $SPOwningSPs) {
 
         foreach ($OwnedSPObject in $SpOwnerObject.OwnedSPDetails) {
 
-            foreach ($OwnedSPObjectDetails in $AllServicePrincipal | Where-Object { $_.id -eq $OwnedSPObject.id }) {
-                $OwnedSPObject | Add-Member -NotePropertyName Impact -NotePropertyValue $OwnedSPObjectDetails.Impact -Force
-                $OwnedSPObject | Add-Member -NotePropertyName Foreign -NotePropertyValue $OwnedSPObjectDetails.Foreign -Force
+            $OwnedSPObjectDetails = $AllServicePrincipalHT[$OwnedSPObject.Id]
+            if ($null -eq $OwnedSPObjectDetails) {
+                continue
             }
+
+            $OwnedSPObject | Add-Member -NotePropertyName Impact -NotePropertyValue $OwnedSPObjectDetails.Impact -Force
+            $OwnedSPObject | Add-Member -NotePropertyName Foreign -NotePropertyValue $OwnedSPObjectDetails.Foreign -Force
         }
     }
 
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
-    $AllServicePrincipalHT = @{}
-    foreach ($item in $AllServicePrincipal) {
-        $AllServicePrincipalHT[$item.Id] = $item
-    }
     return $AllServicePrincipalHT
 }
