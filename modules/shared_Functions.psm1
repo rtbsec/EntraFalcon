@@ -3250,6 +3250,7 @@ $global:GLOBALJavaScript_Nav = @'
 
 # CSS for formating the table
 $global:GLOBALCss = @"
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦅</text></svg>">
 <style>
     /* ======== Shared Styles ======== */
     html {
