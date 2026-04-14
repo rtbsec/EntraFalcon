@@ -458,10 +458,6 @@ function Invoke-AgentIdentities {
         $ImpactScore = $SPImpactScore["Base"]
         $LikelihoodScore = 0
         $warnings = @()
-        $WarningsHighPermission = $null
-        $WarningsDangerousPermission = $null
-        $WarningsMediumPermission = $null
-        $Owners = $null
         $OwnerUserDetails = @()
         $OwnerSPDetails = @()
         # Display status based on the objects numbers (slightly improves performance)
@@ -800,14 +796,6 @@ function Invoke-AgentIdentities {
     ########################################## SECTION: RISK RATING AND WARNINGS ##########################################
 
 
-        # Check if it the Entra Connect Sync App
-        if ($item.DisplayName -match "ConnectSyncProvisioning_") {
-            $EntraConnectApp = $true
-            $Warnings += "Entra Connect Sync Application!"
-        } else {
-            $EntraConnectApp = $false
-        }
-
         $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
         $ForeignTenant = ($appOwnerOrganizationId -ne "" -and $appOwnerOrganizationId -ne $CurrentTenant.id)
 
@@ -1096,39 +1084,13 @@ function Invoke-AgentIdentities {
         if (($AppApiPermission | Measure-Object).Count -ge 1) {
             foreach ($object in $AppApiPermission) {
                 switch($object.ApiPermissionCategorization) {
-                    "Dangerous" {$ImpactScore += $SPImpactScore["APIDangerous"]; $WarningsDangerousPermission = $true ; Break}
-                    "High" {$ImpactScore += $SPImpactScore["APIHigh"]; $WarningsHighPermission = $true; Break}
+                    "Dangerous" {$ImpactScore += $SPImpactScore["APIDangerous"]; Break}
+                    "High" {$ImpactScore += $SPImpactScore["APIHigh"]; Break}
                     "Medium" {$ImpactScore += $SPImpactScore["APIMedium"]; Break}
                     "Low" {$ImpactScore += $SPImpactScore["APILow"]; Break}
                     "Uncategorized" {$ImpactScore += $SPImpactScore["ApiMisc"]; Break}
                 }
             }
-        }
-
-        # Build the warning parts dynamically
-        [string[]]$severities = @()
-        if ($WarningsDangerousPermission) { $severities += "dangerous" }
-        if ($WarningsHighPermission)      { $severities += "high" }
-        if ($WarningsMediumPermission)    { $severities += "medium" }
-
-        $severities = $severities | Select-Object -Unique
-
-        # Generate joined warning
-        if ($severities.Count -gt 0) {
-            $lastIndex = $severities.Count - 1
-            $last = $severities[$lastIndex]
-
-            if ($severities.Count -gt 1) {
-                $first = $severities[0..($lastIndex - 1)] -join ", "
-                $joined = "$first and $last"
-            } else {
-                $joined = "$last"
-            }
-
-            $plural = ""
-            if ($severities.Count -gt 1) { $plural = "s" }
-
-            $Warnings += "Known $joined API permission$plural!"
         }
 
         #Check if app is inactive
@@ -1143,23 +1105,14 @@ function Invoke-AgentIdentities {
 
             if ($DelegateApiPermssionCount.Dangerous -ge 1) {
                 $ImpactScore += $SPImpactScore["APIDelegatedDangerous"]
-                $WarningsDangerousDelegatedPermission = $true
-            } else {
-                $WarningsDangerousDelegatedPermission = $false
             }
 
             if ($DelegateApiPermssionCount.High -ge 1) {
                 $ImpactScore += $SPImpactScore["APIDelegatedHigh"]
-                $WarningsHighDelegatedPermission = $true
-            } else {
-                $WarningsHighDelegatedPermission = $false
             }
 
             if ($DelegateApiPermssionCount.Medium -ge 1) {
                 $ImpactScore += $SPImpactScore["APIDelegatedMedium"]
-                $WarningsMediumDelegatedPermission = $false
-            } else {
-                $WarningsMediumDelegatedPermission = $false
             }
 
             if ($DelegateApiPermssionCount.Low -ge 1) {
@@ -1167,29 +1120,6 @@ function Invoke-AgentIdentities {
             }
             if ($DelegateApiPermssionCount.Uncategorized -ge 1) {
                 $ImpactScore += $SPImpactScore["ApiDelegatedMisc"]
-            }
-
-            # Build the warning parts dynamically
-            [string[]]$severities = @()
-            if ($WarningsDangerousDelegatedPermission) { $severities += "dangerous" }
-            if ($WarningsHighDelegatedPermission)      { $severities += "high" }
-            if ($WarningsMediumDelegatedPermission)    { $severities += "medium" }
-            $severities = $severities | Select-Object -Unique
-
-            # Generate joined warning for delegate permissions
-            if ($severities.Count -gt 0) {
-                $lastIndex = $severities.Count - 1
-                $last = $severities[$lastIndex]
-
-                if ($severities.Count -gt 1) {
-                    $first = $severities[0..($lastIndex - 1)] -join ", "
-                    $joined = "$first and $last"
-                } else {
-                    $joined = "$last"
-                }
-                $plural = ""
-                if ($severities.Count -gt 1) { $plural = "s" }
-                $Warnings += "Known $joined delegated API permission$plural!"
             }
         }
 
