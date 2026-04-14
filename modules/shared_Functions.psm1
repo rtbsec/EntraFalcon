@@ -4489,6 +4489,204 @@ function Test-NonWindowsAuthFlowCompatibility {
     return $false
 }
 
+function Export-EntraFalconDebugObjectDump {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OutputFolder,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StartTimestamp,
+
+        [Parameter(Mandatory = $true)]
+        [object]$CurrentTenant,
+
+        [Parameter(Mandatory = $false)]
+        [string]$EntraFalconVersion,
+
+        [Parameter(Mandatory = $false)]
+        [object]$TenantDomains,
+
+        [Parameter(Mandatory = $false)]
+        [object]$GlobalAuditSummary,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AllUsersBasicHT,
+
+        [Parameter(Mandatory = $false)]
+        [object]$UserReportState,
+
+        [Parameter(Mandatory = $false)]
+        [object]$Users,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AllGroupsDetails,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AgentObjectBasics,
+
+        [Parameter(Mandatory = $false)]
+        [object]$ServicePrincipalSignInActivityLookup,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AppRoleReferenceCache,
+
+        [Parameter(Mandatory = $false)]
+        [object]$TenantPimForGroupsAssignments,
+
+        [Parameter(Mandatory = $false)]
+        [object]$TenantPimRoleAssignments,
+
+        [Parameter(Mandatory = $false)]
+        [object]$TenantRoleAssignments,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AzureIAMAssignments,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AllCaps,
+
+        [Parameter(Mandatory = $false)]
+        [object]$Devices,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AdminUnitWithMembers,
+
+        [Parameter(Mandatory = $false)]
+        [object]$PimforEntraRoles,
+
+        [Parameter(Mandatory = $false)]
+        [object]$EnterpriseApps,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AppRegistrations,
+
+        [Parameter(Mandatory = $false)]
+        [object]$ManagedIdentities,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AgentIdentities,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AgentIdentityBlueprintsPrincipals,
+
+        [Parameter(Mandatory = $false)]
+        [object]$AgentIdentityBlueprints,
+
+        [Parameter(Mandatory = $false)]
+        [object]$SecurityFindings
+    )
+
+    function Get-DebugObjectCount {
+        param([object]$Object)
+
+        if ($null -eq $Object) { return 0 }
+        if ($Object -is [System.Collections.IDictionary]) { return $Object.Count }
+        if ($Object -is [System.Collections.ICollection]) { return $Object.Count }
+        if ($Object -is [System.Collections.IEnumerable] -and -not ($Object -is [string])) { return @($Object).Count }
+        return 1
+    }
+
+    function Get-DebugNestedEntryCount {
+        param([object]$Object)
+
+        if ($null -eq $Object) { return 0 }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            $count = 0
+            foreach ($value in $Object.Values) {
+                $count += Get-DebugObjectCount -Object $value
+            }
+            return $count
+        }
+
+        return Get-DebugObjectCount -Object $Object
+    }
+
+    function Get-DebugObjectNameFromFileName {
+        param([string]$FileName)
+
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+        return ($name -replace '^\d+_', '')
+    }
+
+    try {
+        $debugDumpFolder = Join-Path $OutputFolder "Debug_ObjectDump"
+        if (-not (Test-Path -LiteralPath $debugDumpFolder)) {
+            $null = New-Item -Path $debugDumpFolder -ItemType Directory -Force
+        }
+
+        $debugObjects = [ordered]@{
+            "01_CurrentTenant.clixml"                     = $CurrentTenant
+            "02_TenantDomains.clixml"                     = $TenantDomains
+            "03_GlobalAuditSummary.clixml"                = $GlobalAuditSummary
+            "04_AllUsersBasicHT.clixml"                   = $AllUsersBasicHT
+            "05_UserReportState.clixml"                   = $UserReportState
+            "06_Users.clixml"                             = $Users
+            "07_AllGroupsDetails.clixml"                  = $AllGroupsDetails
+            "08_AgentObjectBasics.clixml"                 = $AgentObjectBasics
+            "09_ServicePrincipalSignInActivityLookup.clixml" = $ServicePrincipalSignInActivityLookup
+            "10_AppRoleReferenceCache.clixml"             = $AppRoleReferenceCache
+            "11_TenantPimForGroupsAssignments.clixml"     = $TenantPimForGroupsAssignments
+            "12_TenantPimRoleAssignments.clixml"          = $TenantPimRoleAssignments
+            "13_TenantRoleAssignments.clixml"             = $TenantRoleAssignments
+            "14_AzureIAMAssignments.clixml"               = $AzureIAMAssignments
+            "15_AllCaps.clixml"                           = $AllCaps
+            "16_Devices.clixml"                           = $Devices
+            "17_AdminUnitWithMembers.clixml"              = $AdminUnitWithMembers
+            "18_PimforEntraRoles.clixml"                  = $PimforEntraRoles
+            "19_EnterpriseApps.clixml"                    = $EnterpriseApps
+            "20_AppRegistrations.clixml"                  = $AppRegistrations
+            "21_ManagedIdentities.clixml"                 = $ManagedIdentities
+            "22_AgentIdentities.clixml"                   = $AgentIdentities
+            "23_AgentIdentityBlueprintsPrincipals.clixml" = $AgentIdentityBlueprintsPrincipals
+            "24_AgentIdentityBlueprints.clixml"           = $AgentIdentityBlueprints
+            "25_SecurityFindings.clixml"                  = $SecurityFindings
+        }
+
+        $summaryProperties = [ordered]@{
+            ExportedAt         = (Get-Date).ToString("s")
+            EntraFalconVersion = $EntraFalconVersion
+            PowerShellVersion  = $PSVersionTable.PSVersion.ToString()
+            HostOS             = Get-EntraFalconHostOs
+            StartTimestamp     = $StartTimestamp
+            TenantDisplayName  = $CurrentTenant.DisplayName
+            TenantId           = $CurrentTenant.Id
+            OutputFolder       = $OutputFolder
+            DumpFolder         = $debugDumpFolder
+            DumpFormat         = "CLIXML"
+        }
+
+        foreach ($export in $debugObjects.GetEnumerator()) {
+            $objectName = Get-DebugObjectNameFromFileName -FileName $export.Key
+            $summaryProperties["$($objectName)_Count"] = Get-DebugObjectCount -Object $export.Value
+            if ($export.Value -is [System.Collections.IDictionary]) {
+                $summaryProperties["$($objectName)_NestedCount"] = Get-DebugNestedEntryCount -Object $export.Value
+            }
+        }
+
+        $summary = [pscustomobject]$summaryProperties
+        Export-Clixml -InputObject $summary -Path (Join-Path $debugDumpFolder "00_Summary.clixml")
+        $summary | ConvertTo-Json -Depth 6 | Out-File -FilePath (Join-Path $debugDumpFolder "00_Summary.json") -Encoding utf8
+
+        foreach ($export in $debugObjects.GetEnumerator()) {
+            if ($null -eq $export.Value) {
+                continue
+            }
+
+            try {
+                Export-Clixml -InputObject $export.Value -Path (Join-Path $debugDumpFolder $export.Key)
+            } catch {
+                Write-Host "[!] Failed to export debug object '$($export.Key)': $($_.Exception.Message)"
+            }
+        }
+
+        Write-Host "[+] Debug object dump written to $debugDumpFolder"
+    } catch {
+        Write-Host "[!] Failed to export debug object dump: $($_.Exception.Message)"
+    }
+}
+
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
 function EnsureAuthMsGraph {
     $result = $false
@@ -7687,4 +7885,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Resolve-DirectoryObjectReference,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility

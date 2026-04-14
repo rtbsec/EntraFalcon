@@ -12190,6 +12190,7 @@ $FindingsJson
 
     $Report = ConvertTo-HTML -Body $headerHtml -Title $ReportName -Head $HeadCombined -PostContent $PostContentCombined
     $Report | Out-File $reportPath
+    return $Findings
     #endregion
 }
 

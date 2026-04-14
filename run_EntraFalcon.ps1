@@ -64,6 +64,9 @@
     .PARAMETER QAMode
     Dumps the AllGroups and AllUsers objects as JSON for internal QA tests.
 
+    .PARAMETER DebugObjectDump
+    Exports a CLIXML debug snapshot of final in-memory report objects to Debug_ObjectDump under the output folder.
+
     .PARAMETER Csv
     Enables CSV report generation for enumeration modules.
     By default, reports are written as HTML and TXT only.
@@ -111,6 +114,9 @@ Param (
 
     [Parameter(Mandatory=$false)]
     [switch]$QAMode = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DebugObjectDump = $false,
 
     [Parameter(Mandatory=$false)]
     [switch]$Csv = $false,
@@ -429,11 +435,46 @@ if ($GLOBALPIMForEntraRolesChecked) {
 }
 
 write-host "`n********************************** [14/15] Enumerating Security Findings **********************************"
-Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments
+$SecurityFindings = Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments
 
 write-host "`n********************************** [15/15] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
 Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TenantDomains $TenantDomains -Users $Users
+
+if ($DebugObjectDump) {
+    $debugContext = @{
+        OutputFolder                           = $OutputFolder
+        StartTimestamp                        = $StartTimestamp
+        CurrentTenant                         = $CurrentTenant
+        EntraFalconVersion                    = $EntraFalconVersion
+        TenantDomains                         = $TenantDomains
+        GlobalAuditSummary                    = $GlobalAuditSummary
+        AllUsersBasicHT                       = $AllUsersBasicHT
+        UserReportState                       = $UserReportState
+        Users                                 = $Users
+        AllGroupsDetails                      = $AllGroupsDetails
+        AgentObjectBasics                     = $AgentObjectBasics
+        ServicePrincipalSignInActivityLookup = $ServicePrincipalSignInActivityLookup
+        AppRoleReferenceCache                 = $AppRoleReferenceCache
+        TenantPimForGroupsAssignments         = $TenantPimForGroupsAssignments
+        TenantPimRoleAssignments              = $TenantPimRoleAssignments
+        TenantRoleAssignments                 = $TenantRoleAssignments
+        AzureIAMAssignments                   = $AzureIAMAssignments
+        AllCaps                               = $AllCaps
+        Devices                               = $Devices
+        AdminUnitWithMembers                  = $AdminUnitWithMembers
+        PimforEntraRoles                      = $PimforEntraRoles
+        EnterpriseApps                        = $EnterpriseApps
+        AppRegistrations                      = $AppRegistrations
+        ManagedIdentities                     = $ManagedIdentities
+        AgentIdentities                       = $AgentIdentities
+        AgentIdentityBlueprintsPrincipals     = $AgentIdentityBlueprintsPrincipals
+        AgentIdentityBlueprints               = $AgentIdentityBlueprints
+        SecurityFindings                      = $SecurityFindings
+    }
+
+    Export-EntraFalconDebugObjectDump @debugContext
+}
 
 # Remove global variables
 Start-CleanUp
