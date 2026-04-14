@@ -1599,7 +1599,6 @@ Appendix: Used API Permission Reference
                 "MS Default" = $item.DefaultMS
                 "Foreign" = $item.Foreign
                 "Require AppRole" = $item.AppRoleRequired
-                "SAML" = $item.SAML
                 "Child Agent Identities" = $item.LinkedAgentIdentities
                 "Child Agent Users" = $item.AgentUsers
                 "DirectImpact" = $item.DirectImpact
@@ -1756,7 +1755,7 @@ Appendix: Used API Permission Reference
     $BlueprintItems = @($AgentIdentityBlueprints.Values | Sort-Object Risk -Descending)
     foreach ($item in $BlueprintItems) {
         [void]$BlueprintTxt.AppendLine("############################################################################################################################################")
-        [void]$BlueprintTxt.AppendLine(($item | Select-Object DisplayName,AppId,@{Name = 'Child Blueprint Principals'; Expression = { $_.BlueprintPrincipals }},@{Name = 'Child Agent Identities'; Expression = { $_.LinkedAgentIdentities }},@{Name = 'Child Agent Users'; Expression = { $_.AgentUsers }},InhScopes,InhRoles,DirectImpact,InheritedImpact,Impact,Likelihood,Risk,Warnings | Out-String))
+        [void]$BlueprintTxt.AppendLine(($item | Select-Object DisplayName,AppId,@{Name = 'Child Blueprint Principals'; Expression = { $_.BlueprintPrincipals }},@{Name = 'Child Agent Identities'; Expression = { $_.LinkedAgentIdentities }},@{Name = 'Child Agent Users'; Expression = { $_.AgentUsers }},Impact,Likelihood,Risk,Warnings | Out-String))
         if (($item.BlueprintPrincipalsDetails | Measure-Object).Count -ge 1) {
             [void]$BlueprintTxt.AppendLine("Child Blueprint Principals")
             [void]$BlueprintTxt.AppendLine(($item.BlueprintPrincipalsDetails | Select-Object DisplayName,@{Name = 'Child Agent Identities'; Expression = { $_.LinkedAgentIdentities }},@{Name = 'Child Agent Users'; Expression = { $_.AgentUsers }},Impact,Warnings | Format-Table | Out-String))
@@ -1787,15 +1786,6 @@ Appendix: Used API Permission Reference
                 "Child Blueprint Principals" = $item.BlueprintPrincipals
                 "Child Agent Identities" = $item.LinkedAgentIdentities
                 "Child Agent Users" = $item.AgentUsers
-                "Sponsors" = $item.Sponsors
-                "InhScopes" = $item.InhScopes
-                "InhRoles" = $item.InhRoles
-                "FederatedCreds" = $item.FederatedCreds
-                "Oauth2PermissionScopes" = $item.Oauth2PermissionScopes
-                "SecretsCount" = $item.SecretsCount
-                "CertsCount" = $item.CertsCount
-                "DirectImpact" = $item.DirectImpact
-                "InheritedImpact" = $item.InheritedImpact
                 "RiskScore" = $item.Risk
                 "Warnings" = $item.Warnings
             }

@@ -51,7 +51,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     write-host "[*] Get Agent Identity Blueprint Principals"
     $QueryParameters = @{
         '$filter' = "ServicePrincipalType eq 'Application'"
-        '$select' = "Id,DisplayName,PublisherName,appRoles,accountEnabled,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,AppRoleAssignmentRequired,preferredSingleSignOnMode"
+        '$select' = "Id,DisplayName,PublisherName,appRoles,accountEnabled,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,AppRoleAssignmentRequired"
         '$top' = $ApiTop
     }
     $AgentIdentityBlueprintPrincipals = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals/graph.agentIdentityBlueprintPrincipal' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -775,7 +775,6 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
             LinkedAgentIdentities = ($LinkedAgentIdentities | Measure-Object).Count
             LinkedAgentIdentitiesDetails = $LinkedAgentIdentities
             AppRoleRequired = $item.AppRoleAssignmentRequired
-            SAML = ($item.preferredSingleSignOnMode -eq "saml")
             AppApiPermission = $AppApiPermission
             AppRoles = ($MatchingAppRoles | Measure-Object).count
             AppRolesDetails = $MatchingAppRoles
