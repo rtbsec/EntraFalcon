@@ -188,7 +188,7 @@ function Invoke-CheckAppRegistrations {
     $AppRegistrations = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
     $AppsTotalCount = $($AppRegistrations.count)
 
-    # Filter out Agent Identitiey Blueprints
+    # Filter out Agent Identity Blueprints
     $AppRegistrations = @($AppRegistrations | Where-Object {$_.'@odata.type' -ne '#microsoft.graph.agentIdentityBlueprint'})
     $AgentIdentityBlueprintCount = $AppsTotalCount - $($AppRegistrations).count
     if ($AgentIdentityBlueprintCount -gt 0) {

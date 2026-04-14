@@ -237,7 +237,7 @@ function Invoke-CheckUsers {
     $UsersTotalCount = @($AllUsers).count
     write-host "[+] Got $($UsersTotalCount) users"
 
-    # Get all transitve memberships (expensive!)
+    # Get all transitive memberships (expensive!)
     Write-Host "[*] Collecting user memberships"
 
     $UserMemberOfRaw = @{}

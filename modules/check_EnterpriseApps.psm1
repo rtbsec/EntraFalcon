@@ -154,7 +154,7 @@ function Invoke-CheckEnterpriseApps {
         $GlobalAuditSummary.EnterpriseApps.IncludeMsApps = $true
     }
 
-    # Filter out Agent Identitiey Blueprint Principals (Agent Identites are already excluded trough the filter "ServicePrincipalType eq 'Application'")
+    # Filter out Agent Identity Blueprint Principals (Agent Identities are already excluded through the filter "ServicePrincipalType eq 'Application'")
     $EnterpriseApps = @($EnterpriseApps | Where-Object {$_.'@odata.type' -ne '#microsoft.graph.agentIdentityBlueprintPrincipal'})
     $FilteredAgentIdentityBlueprintPrincipalsCount = $EnterpriseAppsCount - $EnterpriseApps.count
         if ($FilteredAgentIdentityBlueprintPrincipalsCount -gt 0) {
