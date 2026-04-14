@@ -183,6 +183,7 @@ This skips the additional authentication needed to access PIM for Groups data.
 | **BroCiToken**         | Azure Portal **refresh token** for `AuthFlow BroCiToken`.                                                                          | -                                                 |
 | **Csv**                | Enables writing CSV report files in addition to TXT/HTML report files.                                                             | `false`                                           |
 | **ExportCapUncoveredUsers** | For each enabled Conditional Access policy with user targeting, exports a CSV listing users **not** covered by that policy. Files are written to a `ConditionalAccessPolicies_UncoveredUsers` subfolder in the output directory. | `false` |
+| **DebugObjectDump**    | Exports final in-memory report objects as CLIXML to `Debug_ObjectDump` for troubleshooting and testing. | `false`                                      |
 
 
 ## 📊 Some Example Reports
