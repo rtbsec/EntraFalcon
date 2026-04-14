@@ -6628,6 +6628,48 @@ function Get-AppRoleReferenceApiName {
     return "-"
 }
 
+# Build normalized delegated permission rows using the shared app-role reference cache.
+function Resolve-DelegatedPermissionGrantDetails {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory = $true)][hashtable]$AppRoleReferenceCache,
+        [Parameter(Mandatory = $false)][object[]]$DelegatedPermissions = @()
+    )
+
+    $rows = [System.Collections.ArrayList]::new()
+    foreach ($permission in @($DelegatedPermissions)) {
+        if ($null -eq $permission) { continue }
+
+        $resourceId = if ($permission.PSObject.Properties['ResourceId']) { [string]$permission.ResourceId } else { '' }
+        $resourceAppId = Get-AppRoleReferenceResourceAppId -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $resourceId
+        $apiName = Get-AppRoleReferenceApiName -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $resourceId -ResourceAppId $resourceAppId
+        $scopeText = if ($permission.PSObject.Properties['Scope']) { [string]$permission.Scope } else { '' }
+        $scopes = @($scopeText.Trim() -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($scopes.Count -eq 0) { continue }
+
+        $consentType = if ($permission.PSObject.Properties['ConsentType']) { [string]$permission.ConsentType } else { '' }
+        $principal = if ($consentType -eq "Principal" -and $permission.PSObject.Properties['PrincipalId']) {
+            [string]$permission.PrincipalId
+        } else {
+            "-"
+        }
+
+        foreach ($scope in $scopes) {
+            [void]$rows.Add([pscustomobject]@{
+                ResourceId                  = $resourceId
+                ResourceAppId               = $resourceAppId
+                ConsentType                 = $consentType
+                Scope                       = $scope
+                APIName                     = $apiName
+                Principal                   = $principal
+                ApiPermissionCategorization = Get-APIPermissionCategory -InputPermission $scope -PermissionType "delegated"
+            })
+        }
+    }
+
+    return @($rows)
+}
+
 # Build the normalized permission object used by report modules from a cached app-role lookup.
 function Resolve-AppRoleAssignmentRecord {
     [CmdletBinding()]
@@ -7645,4 +7687,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Resolve-DirectoryObjectReference,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-AppRoleAssignmentRecord,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Resolve-DirectoryObjectReference,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility

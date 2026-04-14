@@ -33,7 +33,6 @@ function Invoke-AgentIdentities {
     #Define basic variables
     $ProgressCounter = 0
     $Inactive = $false
-    $ApiAppDisplayNameCache = @{}
     $SponsorResolutionCache = @{}
     $AppLastSignIns = $ServicePrincipalSignInActivityLookup
     $AllServicePrincipal = [System.Collections.ArrayList]::new()
@@ -612,44 +611,7 @@ function Invoke-AgentIdentities {
             }
         }
 
-        $DelegatedPermissionDetails = foreach ($permission in $DelegatedPermission) {
-
-            # Check if DisplayName for the ResourceId is already cached
-            if (-not $ApiAppDisplayNameCache.ContainsKey($permission.ResourceId)) {
-
-                # Retrieve and cache the DisplayName if not cached
-                $QueryParameters = @{
-                    '$select' = "DisplayName"
-                }
-                #Set odata.metadata=none to avoid having metadata in the response
-                $headers = @{
-                    'Accept' = 'application/json;odata.metadata=none'
-                }
-                $ApiAppDisplayNameCache[$permission.ResourceId] = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/servicePrincipals/$($permission.ResourceId)" -QueryParameters $QueryParameters -AdditionalHeaders $headers -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
-            }
-
-            # Split the Scope field by spaces to get individual permissions. Ignores whitespece at the start of the string
-            $scopes = $permission.Scope.Trim() -split " "
-
-            if ($permission.ConsentType -eq "Principal") {
-                $principal = $permission.PrincipalId
-            } else {
-                $principal = "-"
-            }
-            # Create a custom object for each scope with ResourceId, ConsentType, Scope, and DisplayName
-            foreach ($scope in $scopes) {
-                $resourceAppId = Get-AppRoleReferenceResourceAppId -AppRoleReferenceCache $AppRoleReferenceCache -ResourceId $permission.ResourceId
-                [pscustomobject]@{
-                    ResourceId                  = $permission.ResourceId
-                    ResourceAppId               = $resourceAppId
-                    ConsentType                 = $permission.ConsentType
-                    Scope                       = $scope
-                    APIName                     = $ApiAppDisplayNameCache[$permission.ResourceId].displayname  # Get the cached DisplayName
-                    Principal                   = $principal
-                    ApiPermissionCategorization = Get-APIPermissionCategory -InputPermission $scope -PermissionType "delegated"
-                }
-            }
-        }
+        $DelegatedPermissionDetails = Resolve-DelegatedPermissionGrantDetails -AppRoleReferenceCache $AppRoleReferenceCache -DelegatedPermissions @($DelegatedPermission)
 
 
         #Store unique permission to show in table
