@@ -115,12 +115,15 @@ Param (
     [Parameter(Mandatory=$false)]
     [switch]$Csv = $false,
 
+    [Parameter(Mandatory=$false)]
+    [switch]$ExportCapUncoveredUsers = $false,
+
     [Parameter(Mandatory = $false)]
     [string]$BroCiToken
 )
 
 #Constants
-$EntraFalconVersion = "V20260327"
+$EntraFalconVersion = "V20260414"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -205,6 +208,10 @@ if ($QAMode) {
 $optionalParamsOutput = @{}
 if ($Csv) {
     $optionalParamsOutput['Csv'] = $true
+}
+$optionalParamsCap = @{}
+if ($ExportCapUncoveredUsers) {
+    $optionalParamsCap['ExportCapUncoveredUsers'] = $true
 }
 
 #Define summary array and show banner
@@ -321,6 +328,9 @@ $Devices = Get-Devices -ApiTop $ApiTop
 # Get Basic User info
 $AllUsersBasicHT = Get-UsersBasic -ApiTop $ApiTop
 
+# Preload agent-specific basics so early reports can resolve mixed owner/member objects correctly.
+$AgentObjectBasics = Get-AgentObjectBasics -CurrentTenant $CurrentTenant -ApiTop $ApiTop
+
 
 # Determine which reports will be generated
 $TenantReports = [pscustomobject]@{
@@ -367,37 +377,50 @@ Initialize-TenantReportTabs -StartTimestamp $global:ReportContext.StartTimestamp
 $TenantReportsText = ($TenantReports.PSObject.Properties | Sort-Object Name | ForEach-Object { "{0} = {1}" -f $_.Name, $_.Value }) -join " | "
 Write-Log -Level Debug -Message ("Reports:{0}" -f $TenantReportsText)
 
+$ServicePrincipalSignInActivityLookup = Get-ServicePrincipalSignInActivityLookup -ApiTop $ApiTop
+
 # Main enumeration
-write-host "`n********************************** [1/12] Enumerating Groups **********************************"
-$AllGroupsDetails = Invoke-CheckGroups -AdminUnitWithMembers $AdminUnitWithMembers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -OutputFolder $OutputFolder -Devices $Devices -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsUserandGroup @optionalParamsOutput
+write-host "`n********************************** [1/15] Enumerating Groups **********************************"
+$AllGroupsDetails = Invoke-CheckGroups -AdminUnitWithMembers $AdminUnitWithMembers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -OutputFolder $OutputFolder -Devices $Devices -AllUsersBasicHT $AllUsersBasicHT -AgentObjectBasics $AgentObjectBasics -ApiTop $ApiTop @optionalParamsUserandGroup @optionalParamsOutput
 
-write-host "`n********************************** [2/12] Enumerating Enterprise Apps **********************************"
-$EnterpriseApps = Invoke-CheckEnterpriseApps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsET @optionalParamsOutput
+write-host "`n********************************** [2/15] Enumerating Enterprise Apps **********************************"
+$AppRoleReferenceCache = @{}
+$EnterpriseApps = Invoke-CheckEnterpriseApps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -AgentObjectBasics $AgentObjectBasics -ApiTop $ApiTop -ServicePrincipalSignInActivityLookup $ServicePrincipalSignInActivityLookup -AppRoleReferenceCacheOut ([ref]$AppRoleReferenceCache) @optionalParamsET @optionalParamsOutput
 
-write-host "`n********************************** [3/12] Enumerating Managed Identities **********************************"
-$ManagedIdentities = Invoke-CheckManagedIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsOutput
+write-host "`n********************************** [3/15] Enumerating Managed Identities **********************************"
+$ManagedIdentities = Invoke-CheckManagedIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -AppRoleReferenceCache $AppRoleReferenceCache -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsOutput
 
-write-host "`n********************************** [4/12] Enumerating App Registrations **********************************"
-$AppRegistrations = Invoke-CheckAppRegistrations -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -TenantRoleAssignments $TenantRoleAssignments -OutputFolder $OutputFolder @optionalParamsOutput
+write-host "`n********************************** [4/15] Enumerating App Registrations **********************************"
+$AppRegistrations = Invoke-CheckAppRegistrations -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AgentObjectBasics $AgentObjectBasics -TenantRoleAssignments $TenantRoleAssignments -OutputFolder $OutputFolder @optionalParamsOutput
 
-write-host "`n********************************** [5/12] Enumerating Agent Identities **********************************"
-$AgentIdentities = Invoke-AgentIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsET @optionalParamsOutput
-$AgentIdentityBlueprintsPrincipals = Invoke-AgentIdentityBlueprintsPrincipals -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AgentIdentities $AgentIdentities -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop @optionalParamsET @optionalParamsOutput
-$AgentIdentityBlueprints = Invoke-AgentIdentityBlueprints -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -OutputFolder $OutputFolder -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals @optionalParamsOutput
+write-host "`n********************************** [5/15] Enumerating Agent Identities **********************************"
+$AgentIdentities = Invoke-AgentIdentities -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -AppRoleReferenceCache $AppRoleReferenceCache -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop -ServicePrincipalSignInActivityLookup $ServicePrincipalSignInActivityLookup @optionalParamsET
 
-write-host "`n********************************** [6/12] Enumerating Users **********************************"
-$Users = Invoke-CheckUsers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -UserAuthMethodsTable $UserAuthMethodsTable -Devices $Devices -OutputFolder $OutputFolder -ApiTop $ApiTop @optionalParamsUserandGroup @optionalParamsOutput
+write-host "`n********************************** [6/15] Enumerating Agent Identity Blueprint Principals **********************************"
+$AgentIdentityBlueprintsPrincipals = Invoke-AgentIdentityBlueprintsPrincipals -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AzureIAMAssignments $AzureIAMAssignments -AppRoleReferenceCache $AppRoleReferenceCache -TenantRoleAssignments $TenantRoleAssignments -AllGroupsDetails $AllGroupsDetails -AgentIdentities $AgentIdentities -AllUsersBasicHT $AllUsersBasicHT -ApiTop $ApiTop -ServicePrincipalSignInActivityLookup $ServicePrincipalSignInActivityLookup @optionalParamsET
 
-write-host "`n********************************** [7/12] Finalizing Agent Objects **********************************"
+write-host "`n********************************** [7/15] Enumerating Agent Identity Blueprints **********************************"
+$AgentIdentityBlueprints = Invoke-AgentIdentityBlueprints -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AppRoleReferenceCache $AppRoleReferenceCache -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals
+
+write-host "`n********************************** [8/15] Enumerating Users **********************************"
+$UserReportState = $null
+$Users = Invoke-CheckUsers -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -ConditionalAccessPolicies $Caps -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -UserAuthMethodsTable $UserAuthMethodsTable -Devices $Devices -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -OutputFolder $OutputFolder -ApiTop $ApiTop -ReportStateOut ([ref]$UserReportState) @optionalParamsUserandGroup @optionalParamsOutput
+
+write-host "`n********************************** [9/15] Finalizing Agent Objects **********************************"
 Invoke-CheckAgentsFinalize -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -AllUsersBasicHT $AllUsersBasicHT -Users $Users -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -AgentIdentityBlueprints $AgentIdentityBlueprints @optionalParamsOutput
 
-write-host "`n********************************** [8/12] Generating Role Assignments **********************************"
-Invoke-CheckRoles -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -Users $Users -ManagedIdentities $ManagedIdentities -OutputFolder $OutputFolder @optionalParamsOutput
+write-host "`n********************************** [10/15] Finalizing Users Report **********************************"
+Write-Host "[*] Applying finalized Agent Identity Blueprint ownership impact to Users"
+Update-EntraFalconUserBlueprintOwnershipImpact -Users $Users -AgentIdentityBlueprints $AgentIdentityBlueprints
+Write-EntraFalconUsersReport -UserReportState $UserReportState -Users $Users
 
-write-host "`n********************************** [9/12] Enumerating Conditional Access Policies **********************************"
-$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments @optionalParamsOutput
+write-host "`n********************************** [11/15] Generating Role Assignments **********************************"
+Invoke-CheckRoles -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -Users $Users -ManagedIdentities $ManagedIdentities -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -OutputFolder $OutputFolder @optionalParamsOutput
 
-write-host "`n********************************** [10/12] Enumerating PIM Role Settings **********************************"
+write-host "`n********************************** [12/15] Enumerating Conditional Access Policies **********************************"
+$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments @optionalParamsOutput @optionalParamsCap
+
+write-host "`n********************************** [13/15] Enumerating PIM Role Settings **********************************"
 if ($GLOBALPIMForEntraRolesChecked) {
     $PimforEntraRoles = Invoke-CheckPIM -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -AllGroupsDetails $AllGroupsDetails -Users $Users -TenantRoleAssignments $TenantRoleAssignments -AllCaps $AllCaps @optionalParamsOutput
 } else {
@@ -405,10 +428,10 @@ if ($GLOBALPIMForEntraRolesChecked) {
     $PimforEntraRoles = @{}
 }
 
-write-host "`n********************************** [11/12] Enumerating Security Findings **********************************"
+write-host "`n********************************** [14/15] Enumerating Security Findings **********************************"
 Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments
 
-write-host "`n********************************** [12/12] Generating Summary Report **********************************"
+write-host "`n********************************** [15/15] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
 Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TenantDomains $TenantDomains -Users $Users
 
