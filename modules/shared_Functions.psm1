@@ -2653,6 +2653,203 @@ $global:GLOBALJavaScript_Table = @'
             if (toggleExpandBtn) {
                 toggleExpandBtn.addEventListener('click', toggleAll);
             }
+
+            // Detail full-text search
+            const searchInput    = document.getElementById('details-search');
+            const searchClearBtn = document.getElementById('details-search-clear');
+            const scopeBtns      = document.querySelectorAll('.detail-scope-toggle .scope-btn');
+
+            if (searchInput && searchClearBtn && scopeBtns.length &&
+                typeof window.__syncDetailsForCurrentPage === "function") {
+
+                window.__detailSearchMode = "current";
+
+                // Capture IDs already rendered by the pre-DOMContentLoaded __pendingDetailIds call,
+                // which ran before the wrapper was installed and couldn't update lastSyncedDetailIds.
+                const _objectContainer = document.getElementById('object-container');
+                window.__lastSyncedDetailIds = _objectContainer
+                    ? Array.from(_objectContainer.querySelectorAll('details'))
+                          .map(d => d.id).filter(Boolean)
+                    : [];
+
+                const _origSync = window.__syncDetailsForCurrentPage;
+
+                // Reusable detached element for HTML stripping — created once, shared across all calls.
+                const _stripEl = document.createElement('div');
+
+                // Recursively collect all primitive values from an object as lowercase strings.
+                // Used so that ^, $, = operators match against individual field values
+                // rather than the full JSON blob. HTML is stripped so that link-wrapped
+                // values (e.g. <a href="...">GlobalAdministrator</a>) match correctly.
+                function extractDetailValues(obj) {
+                    function stripHtml(str) {
+                        _stripEl.innerHTML = str;
+                        return _stripEl.textContent || _stripEl.innerText || '';
+                    }
+                    const values = [];
+                    function walk(val) {
+                        if (val === null || val === undefined) return;
+                        if (typeof val === 'string') {
+                            const text = val.includes('<') ? stripHtml(val) : val;
+                            values.push(text.toLowerCase());
+                            return;
+                        }
+                        if (typeof val === 'number' || typeof val === 'boolean') {
+                            values.push(String(val).toLowerCase());
+                            return;
+                        }
+                        if (Array.isArray(val)) { val.forEach(walk); return; }
+                        if (typeof val === 'object') { Object.values(val).forEach(walk); }
+                    }
+                    walk(obj);
+                    return values;
+                }
+
+                // Match a single object against a query using the same operator syntax
+                // as the main table column filters:
+                //   ||   OR between terms
+                //   &&   AND between terms
+                //   !    negation prefix (e.g. !disabled, !^svc)
+                //   =    exact value match against any field
+                //   ^    starts-with match against any field
+                //   $    ends-with match against any field
+                //   (plain text)  substring match anywhere in the JSON
+                function matchesDetailSearch(obj, query) {
+                    const q = query.trim();
+                    if (!q) return true;
+
+                    if (q.includes('||')) {
+                        return q.split('||').some(part => matchesDetailSearch(obj, part.trim()));
+                    }
+                    if (q.includes('&&')) {
+                        return q.split('&&').map(p => p.trim()).filter(Boolean)
+                                .every(part => matchesDetailSearch(obj, part));
+                    }
+
+                    const lower = q.toLowerCase();
+                    const jsonStr = JSON.stringify(obj).toLowerCase();
+
+                    // Operators that are meaningful per-field: =, ^, $  (with optional ! prefix)
+                    const opMatch = lower.match(/^(!?)([=\^$])\s*(.+)$/);
+                    if (opMatch) {
+                        const [, negate, op, filterStr] = opMatch;
+                        const vals = extractDetailValues(obj);
+                        let result = false;
+                        if (op === '=') result = vals.some(v => v === filterStr);
+                        if (op === '^') result = vals.some(v => v.startsWith(filterStr));
+                        if (op === '$') result = vals.some(v => v.endsWith(filterStr));
+                        return negate ? !result : result;
+                    }
+
+                    // ! without a positional operator: must not contain anywhere in JSON
+                    if (lower.startsWith('!') && lower.length > 1) {
+                        return !jsonStr.includes(lower.slice(1));
+                    }
+
+                    // Default: substring anywhere in the full JSON
+                    return jsonStr.includes(lower);
+                }
+
+                function filterIds(pool, query) {
+                    return pool.filter(id => {
+                        const obj = window.__objectsById && window.__objectsById.get(id);
+                        return obj && matchesDetailSearch(obj, query);
+                    });
+                }
+
+                function updateSearchClear() {
+                    searchClearBtn.style.display = searchInput.value.trim() ? "inline-block" : "none";
+                }
+
+                function updateSearchModeBtn() {
+                    scopeBtns.forEach(btn => {
+                        btn.classList.toggle("active", btn.dataset.scope === window.__detailSearchMode);
+                    });
+                }
+
+                function runDetailSearch() {
+                    const query  = searchInput.value.trim();
+                    const infoEl = document.getElementById('details-info');
+                    updateSearchClear();
+
+                    if (!query) {
+                        _origSync(window.__lastSyncedDetailIds);
+                        return;
+                    }
+
+                    const pool = window.__detailSearchMode === "global"
+                        ? (window.__objectsById ? Array.from(window.__objectsById.keys()) : [])
+                        : window.__lastSyncedDetailIds;
+
+                    const matchingIds = filterIds(pool, query);
+                    _origSync(matchingIds);
+
+                    if (infoEl) {
+                        infoEl.textContent = matchingIds.length + " of " + pool.length + " match";
+                    }
+                }
+
+                // Intercept table-driven sync to track current IDs and handle active searches
+                window.__syncDetailsForCurrentPage = (ids) => {
+                    const uniqueIds = Array.isArray(ids) ? Array.from(new Set(ids.map(String))) : [];
+                    window.__lastSyncedDetailIds = uniqueIds;
+
+                    // Table navigation while global search is active: clear search, revert to current view
+                    if (searchInput.value.trim() && window.__detailSearchMode === "global") {
+                        searchInput.value = "";
+                        window.__detailSearchMode = "current";
+                        updateSearchModeBtn();
+                        updateSearchClear();
+                        _origSync(uniqueIds);
+                        return;
+                    }
+
+                    // Re-apply current-mode search against the updated id set
+                    if (searchInput.value.trim() && window.__detailSearchMode === "current") {
+                        const matchingIds = filterIds(uniqueIds, searchInput.value.trim());
+                        _origSync(matchingIds);
+                        const infoEl = document.getElementById('details-info');
+                        if (infoEl) infoEl.textContent = matchingIds.length + " of " + uniqueIds.length + " match";
+                        return;
+                    }
+
+                    _origSync(uniqueIds);
+                };
+
+                let searchDebounce = null;
+                searchInput.addEventListener("input", () => {
+                    clearTimeout(searchDebounce);
+                    searchDebounce = setTimeout(runDetailSearch, 300);
+                });
+
+                searchClearBtn.addEventListener("click", () => {
+                    searchInput.value = "";
+                    window.__detailSearchMode = "current";
+                    updateSearchModeBtn();
+                    runDetailSearch();
+                });
+
+                scopeBtns.forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        window.__detailSearchMode = btn.dataset.scope;
+                        updateSearchModeBtn();
+                        runDetailSearch();
+                    });
+                });
+
+                // Help popover toggle
+                const helpBtn     = document.querySelector('.details-search-help-btn');
+                const helpPopover = document.querySelector('.details-search-help-popover');
+                if (helpBtn && helpPopover) {
+                    helpBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        helpPopover.classList.toggle('hidden');
+                    });
+                    document.addEventListener('click', () => {
+                        helpPopover.classList.add('hidden');
+                    });
+                }
+            }
         });
 
         //Toast displayed when copy the current view
@@ -3619,14 +3816,16 @@ $global:GLOBALCss = @"
     .details-toolbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin: 10px 0;
-        gap: 12px;
+        margin: 12px 0;
+        gap: 10px;
+        padding: 0 0 8px 0;
+        border-bottom: 1px solid;
     }
 
     .details-info {
-        font-size: 14px;
+        font-size: 13px;
         white-space: nowrap;
+        margin-left: auto;
     }
     .column-toggle-wrapper {
         position: relative;
@@ -3720,10 +3919,110 @@ $global:GLOBALCss = @"
 
     #toggle-expand {
         border-radius: 4px;
-        padding: 6px 12px;
-        margin: 10px 0;
+        padding: 5px 10px;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .details-search-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 600px;
+        min-width: 280px;
+    }
+
+    .details-search-box {
+        position: relative;
+        display: flex;
+        flex: 1;
+        min-width: 0;
+    }
+
+    #details-search {
+        flex: 1;
+        padding: 4px 28px 4px 8px;
+        font-size: 13px;
+        border-radius: 4px;
+        border: 1px solid;
+        min-width: 0;
+    }
+
+    .details-search-help-btn {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .details-search-help-popover {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 6px);
+        width: min(400px, 90vw);
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid;
+        z-index: 100;
+        font-size: 12px;
+    }
+
+    .details-search-help-popover.hidden {
+        display: none;
+    }
+
+    .details-search-help-popover .search-help-title {
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .details-search-help-popover .search-help-list {
+        margin: 0;
+        padding-left: 18px;
+    }
+
+    .details-search-help-popover .search-help-list li {
+        margin: 2px 0;
+    }
+
+    #details-search-clear {
+        padding: 4px 8px;
+        font-size: 13px;
+        border-radius: 4px;
+        border: 1px solid;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .detail-scope-toggle {
+        display: flex;
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+    .detail-scope-toggle .scope-btn {
+        padding: 4px 10px;
+        font-size: 13px;
+        border: none;
+        border-radius: 0;
+        cursor: pointer;
+    }
+
+    .detail-scope-toggle .scope-btn + .scope-btn {
+        border-left: 1px solid;
     }
 
     code {
@@ -3932,6 +4231,10 @@ $global:GLOBALCss = @"
         border: 1px solid #444;
     }
 
+    body.dark-mode .details-toolbar {
+        border-color: #2a2a2a;
+    }
+
     body.dark-mode #toggle-expand {
         background-color: #333;
         color: #E0E0E0;
@@ -3941,6 +4244,63 @@ $global:GLOBALCss = @"
     body.dark-mode #toggle-expand:hover {
         background-color: #444;
         border-color: #888;
+    }
+
+    body.dark-mode #details-search {
+        background: #2a2a2a;
+        color: #e0e0e0;
+        border-color: #555;
+    }
+
+    body.dark-mode #details-search::placeholder {
+        color: #666;
+    }
+
+    body.dark-mode #details-search-clear {
+        background: #2a2a2a;
+        color: #e0e0e0;
+        border-color: #555;
+    }
+
+    body.dark-mode #details-search-clear:hover {
+        background: #3a3a3a;
+    }
+
+    body.dark-mode .details-search-help-btn {
+        border-color: rgba(255,255,255,0.28);
+        color: #aaa;
+    }
+
+    body.dark-mode .details-search-help-btn:hover {
+        background: rgba(255,255,255,0.1);
+        color: #e0e0e0;
+    }
+
+    body.dark-mode .details-search-help-popover {
+        background: #1e1e1e;
+        border-color: #444;
+        color: #e0e0e0;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    }
+
+    body.dark-mode .detail-scope-toggle {
+        border-color: #555;
+    }
+
+    body.dark-mode .detail-scope-toggle .scope-btn {
+        background: #2a2a2a;
+        color: #999;
+        border-color: #555;
+    }
+
+    body.dark-mode .detail-scope-toggle .scope-btn:hover:not(.active) {
+        background: #333;
+        color: #ccc;
+    }
+
+    body.dark-mode .detail-scope-toggle .scope-btn.active {
+        background: #1e3448;
+        color: #8ab8e0;
     }
 
     body.dark-mode {
@@ -4059,6 +4419,10 @@ $global:GLOBALCss = @"
         color: #000;
     }
 
+    body.light-mode .details-toolbar {
+        border-color: #ddd;
+    }
+
     body.light-mode #toggle-expand {
         background-color: rgb(231, 229, 229);
         color: #000;
@@ -4068,6 +4432,63 @@ $global:GLOBALCss = @"
     body.light-mode #toggle-expand:hover {
         background-color: #e0e0e0;
         border-color: #888;
+    }
+
+    body.light-mode #details-search {
+        background: #f4f4f4;
+        color: #000;
+        border-color: #ccc;
+    }
+
+    body.light-mode #details-search::placeholder {
+        color: #999;
+    }
+
+    body.light-mode #details-search-clear {
+        background: #f4f4f4;
+        color: #000;
+        border-color: #ccc;
+    }
+
+    body.light-mode #details-search-clear:hover {
+        background: #e0e0e0;
+    }
+
+    body.light-mode .details-search-help-btn {
+        border-color: rgba(0,0,0,0.25);
+        color: #888;
+    }
+
+    body.light-mode .details-search-help-btn:hover {
+        background: rgba(0,0,0,0.07);
+        color: #444;
+    }
+
+    body.light-mode .details-search-help-popover {
+        background: #fff;
+        border-color: #ccc;
+        color: #222;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    }
+
+    body.light-mode .detail-scope-toggle {
+        border-color: #ccc;
+    }
+
+    body.light-mode .detail-scope-toggle .scope-btn {
+        background: #f4f4f4;
+        color: #888;
+        border-color: #ccc;
+    }
+
+    body.light-mode .detail-scope-toggle .scope-btn:hover:not(.active) {
+        background: #e8e8e8;
+        color: #444;
+    }
+
+    body.light-mode .detail-scope-toggle .scope-btn.active {
+        background: #ddeeff;
+        color: #1a4a7a;
     }
 
     body.light-mode {
