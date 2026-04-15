@@ -3287,6 +3287,14 @@ $global:GLOBALJavaScript_Nav = @'
                 a.href = "#" + h2.id;
                 a.textContent = (h2.textContent || "").replace(/\s+/g, " ").trim();
 
+                // Immediately mark the clicked link active so the indicator
+                // updates on click rather than waiting for the scroll event.
+                a.addEventListener("click", function () {
+                    var all = document.querySelectorAll("#sectionStripInner .section-link");
+                    for (var k = 0; k < all.length; k++) all[k].classList.remove("active");
+                    this.classList.add("active");
+                });
+
                 inner.appendChild(a);
                 added++;
             }
@@ -3491,7 +3499,7 @@ $global:GLOBALJavaScript_Nav = @'
             } catch (e) {
                 raw = "";
             }
-            var n = parseInt(String(raw).trim(), 10);
+            var n = parseFloat(String(raw).trim());
             return isNaN(n) ? 120 : n;
         }
 
@@ -3501,9 +3509,18 @@ $global:GLOBALJavaScript_Nav = @'
 
             var activeId = "";
             var headings = document.querySelectorAll("h2[id]");
-            for (var i = 0; i < headings.length; i++) {
-            var rect = headings[i].getBoundingClientRect();
-            if (rect.top <= getNavOffset()) activeId = headings[i].id;
+
+            // At the bottom of the page the last section can be too short to ever
+            // cross the threshold — in that case force it active.
+            var atBottom = (window.innerHeight + Math.round(window.scrollY))
+                           >= document.documentElement.scrollHeight - 4;
+            if (atBottom && headings.length) {
+                activeId = headings[headings.length - 1].id;
+            } else {
+                for (var i = 0; i < headings.length; i++) {
+                    var rect = headings[i].getBoundingClientRect();
+                    if (rect.top <= getNavOffset() + 2) activeId = headings[i].id;
+                }
             }
 
             for (var j = 0; j < links.length; j++) {
