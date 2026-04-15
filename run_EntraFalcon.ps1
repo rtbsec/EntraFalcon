@@ -478,3 +478,4 @@ if ($DebugObjectDump) {
 
 # Remove global variables
 Start-CleanUp
+write-host "[+] Run completed"

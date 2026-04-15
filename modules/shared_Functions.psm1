@@ -4616,6 +4616,7 @@ function Export-EntraFalconDebugObjectDump {
         if (-not (Test-Path -LiteralPath $debugDumpFolder)) {
             $null = New-Item -Path $debugDumpFolder -ItemType Directory -Force
         }
+        $debugDumpFolderFullPath = (Resolve-Path -LiteralPath $debugDumpFolder).Path
 
         $debugObjects = [ordered]@{
             "01_CurrentTenant.clixml"                     = $CurrentTenant
@@ -4654,7 +4655,7 @@ function Export-EntraFalconDebugObjectDump {
             TenantDisplayName  = $CurrentTenant.DisplayName
             TenantId           = $CurrentTenant.Id
             OutputFolder       = $OutputFolder
-            DumpFolder         = $debugDumpFolder
+            DumpFolder         = $debugDumpFolderFullPath
             DumpFormat         = "CLIXML"
         }
 
@@ -4682,7 +4683,7 @@ function Export-EntraFalconDebugObjectDump {
             }
         }
 
-        Write-Host "[+] Debug object dump written to $debugDumpFolder"
+        Write-Host "[+] Debug object dump written to $debugDumpFolderFullPath"
     } catch {
         Write-Host "[!] Failed to export debug object dump: $($_.Exception.Message)"
     }

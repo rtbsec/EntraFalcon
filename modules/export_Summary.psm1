@@ -1603,6 +1603,5 @@ Enumeration Results:
     Write-Host "===========================================================================================" -ForegroundColor Cyan
     write-host "[+] Enumeration summary stored at: $summaryHtmlPath"
     write-host "[+] Enumeration summary (txt) stored at: $summaryTxtPath"
-    write-host "[+] Run completed successfully"
 }
 
