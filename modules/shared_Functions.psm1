@@ -1085,6 +1085,207 @@ $global:GLOBALJavaScript_Table = @'
         //Define columns which are hidden by default
         const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
+        // Responsive column profiles keyed by currentReportKey from the report manifest.
+        // Profiles define which columns are VISIBLE; all unlisted columns are hidden.
+        // Applied once at page load — not re-evaluated on resize.
+        // Skipped when ?columns= or ?view= is present in the URL.
+        // Reset View always returns to full defaults, ignoring this profile.
+        // When adding a new column to a report module, add it to the relevant profile(s) here too.
+        const responsiveColumnProfiles = {
+            // Reports with both laptop (<= 1600px) and compact (<= 1200px) tiers
+            "EA": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive",
+                        "Owners", "Credentials", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiMedium", "ApiDelegated",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "Owners", "Credentials", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiDelegated",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "Users": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "UPN", "Enabled", "UserType", "Agent", "OnPrem", "Protected",
+                        "GrpMem", "GrpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "AppRoles", "AppRegOwn", "BlueprintOwn", "SPOwn",
+                        "Inactive", "MfaCap",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "UPN", "Enabled", "UserType", "OnPrem",
+                        "GrpMem", "GrpOwn", "EntraMaxTier",  "AzureMaxTier", "AppRegOwn", "BlueprintOwn", "SPOwn",
+                        "Inactive", "MfaCap",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "Groups": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "DisplayName", "Type", "OnPrem", "Dynamic",
+                        "Visibility", "Protected", "PIM", "AuUnits", "DirectOwners",
+                        "Users", "SPCount","NestedGroups",
+                        "AppRoles", "CAPs",  "EntraMaxTier", "AzureMaxTier",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "Type", "OnPrem", "Dynamic",
+                        "Visibility", "Protected", "PIM", "DirectOwners",
+                        "Users", "SPCount", "CAPs", "EntraMaxTier", "AzureMaxTier",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "CAP": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "DisplayName", "UserCoverage", "State", "IncResources", "ExcResources",
+                        "IncPlatforms", "ExcPlatforms",
+                        "SignInRisk", "UserRisk", "IncNw", "ExcNw", "AuthFlow", "UserActions",
+                        "GrantControls", "AuthStrength", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "UserCoverage", "State", "IncResources", "ExcResources",
+                        "SignInRisk", "UserRisk", "IncNw", "ExcNw", "AuthFlow", "UserActions",
+                        "GrantControls", "AuthStrength", "Warnings"
+                    ]
+                }
+            },
+            "AgentIdentities": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive",
+                        "AgentUsers", "Owners",
+                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiMedium", "ApiMisc", "ApiDelegated",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "Foreign", "Enabled", "Inactive",
+                        "AgentUsers",
+                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiDelegated",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "MI": {
+                laptop: {
+                    maxWidth: 1600,
+                    columns: [
+                        "DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership",
+                        "AppOwnership", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiMedium", "ApiMisc",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                },
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "GroupMembership", "GroupOwnership",
+                        "AppOwnership", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "ApiDangerous", "ApiHigh", "ApiMedium",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            // Reports with compact (<= 1200px) tier only — full defaults apply between 1200px and 1600px
+            "AR": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "Enabled", "AppLock",
+                        "AppRoles", "Owners", "CloudAppAdmins", "AppAdmins",
+                        "SecretsCount", "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "AgentIdentityBlueprints": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "BlueprintPrincipals", "AgentIdentities",
+                        "AgentUsers", "Owners", "InheritableScopes", "InheritableRoles",
+                        "FederatedCreds", "SecretsCount", "CertsCount", "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "AgentIdentityBlueprintsPrincipals": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive",
+                        "AgentIdentities", "AgentUsers", "AppRoles",
+                        "ApiDangerous", "ApiHigh", "ApiMedium", "ApiDelegated",
+                        "Impact", "Likelihood", "Risk", "Warnings"
+                    ]
+                }
+            },
+            "RoleEntra": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "Role", "RoleTier", "AssignmentType", "ActivatedViaPIM", "Expires", "Principal", "PrincipalType", "Scope"
+                    ]
+                }
+            },
+            "RoleAz": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "Scope", "Role", "RoleTier", "Conditions", "AssignmentType", "ActivatedViaPIM", "Expires", "PrincipalType", "Principal"
+                    ]
+                }
+            },
+            "PIM": {
+                compact: {
+                    maxWidth: 1200,
+                    columns: [
+                        "Role", "Tier", "Eligible", "Direct",
+                        "ActivationAuthContext", "ActivationMFA",
+                        "ActivationDuration", "ActivationApproval",
+                        "ActiveExpiration", "ActiveAssignMFA", "Warnings"
+                    ]
+                }
+            }
+        };
+
+        // Returns the matching responsive column list for the given report key, or null if no tier applies.
+        function getResponsiveProfile(reportKey) {
+            const profile = responsiveColumnProfiles[reportKey];
+            if (!profile) return null;
+            const vw = window.innerWidth || document.documentElement.clientWidth || 9999;
+            if (profile.compact && vw <= profile.compact.maxWidth) return profile.compact.columns;
+            if (profile.laptop && vw <= profile.laptop.maxWidth) return profile.laptop.columns;
+            return null;
+        }
+
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
             const params = new URLSearchParams(window.location.search);
@@ -1177,6 +1378,7 @@ $global:GLOBALJavaScript_Table = @'
             let currentSort = { column: null, asc: true };
             let columnFilters = {};
             let hiddenColumns = new Set();
+            let responsiveProfileApplied = false;
             let filterDebounceTimer = null;
 
             container.addEventListener("input", (e) => {
@@ -1399,7 +1601,7 @@ $global:GLOBALJavaScript_Table = @'
                 currentSort = { column: "Risk", asc: false };
                 filterData();
                 createColumnSelector();
-                history.replaceState(null, "", window.location.pathname);
+                if (window.location.protocol !== "file:") history.replaceState(null, "", window.location.pathname);
             });
 
             // Build grouped items HTML
@@ -1446,7 +1648,7 @@ $global:GLOBALJavaScript_Table = @'
                     const view = views.find(v => v.id ? v.id === btn.dataset.id : v.label === btn.dataset.label);
                     if (view) {
                         applyPredefinedView(view);
-                        if (view.id) history.replaceState(null, "", "?view=" + view.id);
+                        if (view.id && window.location.protocol !== "file:") history.replaceState(null, "", "?view=" + view.id);
                     }
                     modal.classList.add("hidden");
                 });
@@ -1995,6 +2197,18 @@ $global:GLOBALJavaScript_Table = @'
                     hiddenColumns.add(col);
                 }
             });
+        }
+
+        // Apply responsive column profile when no explicit column or view override is present.
+        // Evaluated once at load time — not re-evaluated on resize.
+        if (!urlParams.columns && !urlParams.view) {
+            const profileColumns = getResponsiveProfile(manifest && manifest.currentReportKey);
+            if (profileColumns && profileColumns.length > 0) {
+                const visibleSet = new Set(profileColumns.map(v => v.toLowerCase()));
+                hiddenColumns = new Set(columns.filter(col => !visibleSet.has(col.toLowerCase())));
+                defaultHidden.forEach(col => hiddenColumns.add(col)); // ensure defaultHidden columns stay hidden regardless of profile content
+                responsiveProfileApplied = true;
+            }
         }
 
         //Apply filters based on GET parameters
