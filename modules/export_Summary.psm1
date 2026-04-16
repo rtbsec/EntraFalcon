@@ -228,7 +228,7 @@ return @"
 
         $displayDomains = @(
             @($Domains | Where-Object { $_.IsDefault }) +
-            @($Domains | Where-Object { -not $_.IsDefault })
+            @($Domains | Where-Object { -not $_.IsDefault } | Sort-Object { $domainUserCount[$_.Id.ToLower()] } -Descending)
         )
 
         $rowsHtml = foreach ($domain in $displayDomains) {
