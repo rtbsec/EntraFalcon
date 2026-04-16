@@ -9192,7 +9192,62 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     }
                     if (key === "AffectedObjects") {
                         var objects = Array.isArray(item.AffectedObjects) ? item.AffectedObjects : [];
-                        clean.AffectedObjects = objects.map(sanitizeAffectedObject);
+
+                        // Resolve sort key from AffectedSortKey, mirroring the HTML panel logic.
+                        var allCols = [];
+                        var seenCols = {};
+                        objects.forEach(function (obj) {
+                            if (!obj) return;
+                            Object.keys(obj).forEach(function (k) {
+                                if (!k || seenCols[k]) return;
+                                seenCols[k] = true;
+                                allCols.push(k);
+                            });
+                        });
+                        var visCols = allCols.filter(function (k) { return k.charAt(0) !== "_"; });
+                        var affSortKey = "";
+                        if (item.AffectedSortKey) {
+                            var desired = String(item.AffectedSortKey).toLowerCase();
+                            affSortKey = allCols.find(function (k) { return String(k).toLowerCase() === desired; }) || "";
+                            if (!affSortKey) {
+                                affSortKey = allCols.find(function (k) { return String(k).toLowerCase().indexOf(desired) !== -1; }) || "";
+                            }
+                        }
+                        if (!affSortKey) affSortKey = visCols[0] || "";
+
+                        // Resolve sort direction.
+                        var affSortDir = 1;
+                        if (typeof item.AffectedSortDir === "string") {
+                            if (item.AffectedSortDir.toLowerCase() === "desc") affSortDir = -1;
+                        } else if (item.AffectedSortDir === -1) {
+                            affSortDir = -1;
+                        }
+
+                        // Sort a copy using the same comparator as getSortedObjects().
+                        var sorted = objects.slice().sort(function (a, b) {
+                            var avRaw = toText(a[affSortKey], "");
+                            var bvRaw = toText(b[affSortKey], "");
+                            var av = stripHtml(avRaw).trim();
+                            var bv = stripHtml(bvRaw).trim();
+                            var aMissing = av === "" || av === "?";
+                            var bMissing = bv === "" || bv === "?";
+                            if (aMissing && !bMissing) return 1;
+                            if (!aMissing && bMissing) return -1;
+                            var aNum = /^-?\d+(\.\d+)?$/.test(av) ? Number(av) : null;
+                            var bNum = /^-?\d+(\.\d+)?$/.test(bv) ? Number(bv) : null;
+                            if (aNum !== null && bNum !== null) {
+                                if (aNum < bNum) return -1 * affSortDir;
+                                if (aNum > bNum) return 1 * affSortDir;
+                                return 0;
+                            }
+                            av = av.toLowerCase();
+                            bv = bv.toLowerCase();
+                            if (av < bv) return -1 * affSortDir;
+                            if (av > bv) return 1 * affSortDir;
+                            return 0;
+                        });
+
+                        clean.AffectedObjects = sorted.map(sanitizeAffectedObject);
                         return;
                     }
                     clean[key] = item[key];
