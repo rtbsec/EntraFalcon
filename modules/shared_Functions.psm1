@@ -1781,7 +1781,16 @@ $global:GLOBALJavaScript_Table = @'
                 const sortIcon = isSorted
                     ? `<span style="font-size: 12px;"> ${currentSort.asc ? "\u{25B2}" : "\u{25BC}"}</span>`
                     : "";
-                html += `<th data-col="${col}" title="${tooltip}">${col}${sortIcon}</th>`;
+                const colLower = col.toLowerCase();
+                const isCopyable = colLower.includes("displayname") || colLower.includes("warnings") ||
+                    colLower === "role" || colLower === "principal" || colLower === "scope" ||
+                    colLower === "namelink" || colLower === "apipermissiondescription" ||
+                    colLower.startsWith("upn") || colLower.includes("scoperesolved") ||
+                    colLower === "name" || colLower.endsWith("name");
+                const copyBtn = isCopyable
+                    ? `<span class="copy-col-btn" data-copy-col="${col}" title="Copy column values">\u{1F4CB}</span>`
+                    : "";
+                html += `<th data-col="${col}" title="${tooltip}">${col}${sortIcon}${copyBtn}</th>`;
             });
             html += '</tr><tr>';
             visibleCols.forEach(col => {
@@ -1831,6 +1840,21 @@ $global:GLOBALJavaScript_Table = @'
                     sortData();
                     renderTable();
                 };
+            });
+
+            // Copy column buttons
+            container.querySelectorAll("thead tr:first-child th .copy-col-btn").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const col = btn.getAttribute("data-copy-col");
+                    const values = filteredData
+                        .map(row => stripHtmlToText(String(row[col] ?? "")))
+                        .filter(v => v !== "");
+                    navigator.clipboard.writeText(values.join("\n")).then(() => {
+                        btn.textContent = "\u2713";
+                        setTimeout(() => { btn.textContent = "\u{1F4CB}"; }, 1500);
+                    });
+                });
             });
 
             renderPagination();
@@ -3750,6 +3774,27 @@ $global:GLOBALCss = @"
         position: sticky;
         top: 50px;
         z-index: 2;
+    }
+
+    .copy-col-btn {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        opacity: 0;
+        font-size: 9px;
+        cursor: pointer;
+        padding: 1px 2px;
+        border-radius: 2px;
+        transition: opacity 0.15s;
+        user-select: none;
+    }
+
+    thead tr:first-child th:hover .copy-col-btn {
+        opacity: 0.65;
+    }
+
+    .copy-col-btn:hover {
+        opacity: 1 !important;
     }
 
     #mainTableContainer {
