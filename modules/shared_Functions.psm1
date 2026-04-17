@@ -6475,6 +6475,7 @@ function Get-AllAzureIAMAssignmentsNative {
         }
         Write-Log -Level Debug -Message "Subscription $($sub.DisplayName) $($sub.Id) | ManagedByTenants: $managedTenantCount"
     }
+    $global:GLOBALAzureSubscriptionScopeMap = $subscriptionScopeMap
 
     $managementGroupScopeMap = @{}
     try {
@@ -8613,6 +8614,7 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALPimForGroupsChecked -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALUserSignInActivityAvailable -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzurePsChecks -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureSubscriptionScopeMap -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureIamWarningText -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuthParameters -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALEntraRoleRating -ErrorAction SilentlyContinue

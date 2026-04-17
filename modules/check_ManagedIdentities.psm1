@@ -173,6 +173,14 @@ function Invoke-CheckManagedIdentities {
             if (-not [string]::IsNullOrWhiteSpace($pathEntry)) {
                 $MiPath = $pathEntry.Trim()
             }
+
+            # Substitute subscription ID with display name when available
+            if ($global:GLOBALAzureSubscriptionScopeMap -and $MiPath -imatch '^/subscriptions/([^/]+)(/.*)$') {
+                $subName = $global:GLOBALAzureSubscriptionScopeMap[$Matches[1].ToLowerInvariant()]
+                if (-not [string]::IsNullOrWhiteSpace($subName)) {
+                    $MiPath = "/subscriptions/$subName$($Matches[2])"
+                }
+            }
         }
 
         if (-not $item.AlternativeNames) {
