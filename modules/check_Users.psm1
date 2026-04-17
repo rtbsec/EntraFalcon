@@ -289,7 +289,6 @@ function Invoke-CheckUsers {
         $TotalTransitiveMemberRelations += $members.Count
     }
 
-    Write-Log -Level Verbose -Message "Got transitive member relationships: $TotalTransitiveMemberRelations"
     #Show warning in large tenants
     if (-not $LimitResults) {
         if ($TotalTransitiveMemberRelations -ge 1500000 -or $UsersTotalCount -ge 100000) {
@@ -1422,6 +1421,7 @@ function Write-EntraFalconUsersReport {
 
     # Get the total count of group memberships. If this is to high the amount groups in the HTML report will be limited
     $TotalMemberGroups = $($AllUsersDetails.UserMemberGroups).count
+    Write-Log -Level Debug -Message "Total transitive group memberships across all users: $TotalMemberGroups"
     if ($TotalMemberGroups -ge 50000) {
         $LimitGroupMembers = $true
         $WarningReport.Add("GroupMembership: Only 10 groups are displayed to ensure HTML performance.")
