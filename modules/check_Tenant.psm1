@@ -2797,8 +2797,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                         break
                     }
                 }
-                if (-not $hasGrantControl) {
-                    $hardIssues.Add("missing required grant control (mfa, domainJoinedDevice, compliantDevice, or block)")
+                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim()) -and [bool]$policy.AuthStrengthMfaCombinationsOnly
+                if (-not ($hasGrantControl -or $hasAuthStrength)) {
+                    $hardIssues.Add("missing required grant control (mfa, domainJoinedDevice, compliantDevice, or block) or MFA-enforcing authentication strength")
                 }
                 $hasIncludedTargets = $false
                 $incUsersText = "$($policy.IncUsers)".Trim().ToLowerInvariant()
@@ -2966,10 +2967,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
                 $hasBlockGrant = Test-ContainsToken -Value $policy.GrantControls -Token "block"
                 $hasMfaGrant = Test-ContainsToken -Value $policy.GrantControls -Token "mfa"
-                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim())
+                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim()) -and [bool]$policy.AuthStrengthMfaCombinationsOnly
                 $hasGrantOrAuthStrength = $hasBlockGrant -or $hasMfaGrant -or $hasAuthStrength
                 if (-not $hasGrantOrAuthStrength) {
-                    $hardIssues.Add("missing block/mfa grant control or authentication strength")
+                    $hardIssues.Add("missing block/mfa grant control or MFA-enforcing authentication strength")
                 }
                 if (-not $hasBlockGrant -and "$($policy.SignInFrequencyInterval)".Trim().ToLowerInvariant() -ne "everytime") {
                     $hardIssues.Add("sign-in frequency interval not set to EveryTime")
@@ -3002,10 +3003,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $hasMfaGrant = Test-ContainsToken -Value $policy.GrantControls -Token "mfa"
                 $hasPasswordChangeGrant = Test-ContainsToken -Value $policy.GrantControls -Token "passwordChange"
                 $hasRiskRemediationGrant = Test-ContainsToken -Value $policy.GrantControls -Token "riskRemediation"
-                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim())
+                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim()) -and [bool]$policy.AuthStrengthMfaCombinationsOnly
                 $hasGrantOrAuthStrength = $hasBlockGrant -or $hasMfaGrant -or $hasPasswordChangeGrant -or $hasRiskRemediationGrant -or $hasAuthStrength
                 if (-not $hasGrantOrAuthStrength) {
-                    $hardIssues.Add("missing block/mfa/passwordChange/riskRemediation grant control or authentication strength")
+                    $hardIssues.Add("missing block/mfa/passwordChange/riskRemediation grant control or MFA-enforcing authentication strength")
                 }
                 if (-not $hasBlockGrant -and "$($policy.SignInFrequencyInterval)".Trim().ToLowerInvariant() -ne "everytime") {
                     $hardIssues.Add("sign-in frequency interval not set to EveryTime")
