@@ -310,6 +310,54 @@ return @"
 "@
     }
 
+    function New-SubscriptionsSection {
+        param([object[]]$Subscriptions)
+
+        if (-not $Subscriptions -or $Subscriptions.Count -eq 0) { return "" }
+
+        $rowsHtml = foreach ($sub in ($Subscriptions | Sort-Object @{ Expression = { if ($_.State -eq 'Enabled') { 0 } else { 1 } } }, @{ Expression = { if ($_.Resources -match '^\d+$') { [int]$_.Resources } else { -1 } }; Descending = $true })) {
+            $stateHtml = if ($sub.State -eq 'Enabled') {
+                New-GeneralStatusBadge -Text $sub.State -Tone "success"
+            } else {
+                New-GeneralStatusBadge -Text (ConvertTo-SummaryHtmlText $sub.State) -Tone "warning"
+            }
+@"
+<tr>
+    <td>$(ConvertTo-SummaryHtmlText $sub.DisplayName)</td>
+    <td class='summary-domain-name'>$(ConvertTo-SummaryHtmlText $sub.Id)</td>
+    <td>$stateHtml</td>
+    <td>$(ConvertTo-SummaryHtmlText $sub.ManagedByTenants)</td>
+    <td>$(ConvertTo-SummaryHtmlText $sub.Resources)</td>
+</tr>
+"@
+        }
+
+return @"
+<section class='summary-panel summary-domains-panel'>
+    <div class='summary-chart-panel-header'>
+        <h2>Subscriptions</h2>
+        <div class='summary-chart-panel-meta'>$($Subscriptions.Count) subscriptions</div>
+    </div>
+    <div class='summary-domain-table-wrap'>
+        <table class='summary-domain-table'>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>ID</th>
+                    <th>State</th>
+                    <th>External Managing Tenants</th>
+                    <th>Resources</th>
+                </tr>
+            </thead>
+            <tbody>
+                $($rowsHtml -join "`n")
+            </tbody>
+        </table>
+    </div>
+</section>
+"@
+    }
+
     ############################## Script section ########################
 
     #Define basic variables
@@ -370,6 +418,7 @@ return @"
     }
 
     $domainsSectionHtml = New-DomainsSection -Domains $TenantDomains -Users $Users -StartTimestamp $StartTimestamp -CurrentTenant $CurrentTenant
+    $subscriptionsSectionHtml = New-SubscriptionsSection -Subscriptions $GlobalAuditSummary.Subscriptions.Details
 
     $generalSectionHtml = New-GeneralSection `
         -TenantName $GlobalAuditSummary.Tenant.Name `
@@ -1589,7 +1638,7 @@ Enumeration Results:
     $headerHTML = "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div>$generalSectionHtml"
   
     #Write HTML
-    $PostContentCombined =  $Chartsection + "`n" + $domainsSectionHtml + "`n" + $GLOBALJavaScript
+    $PostContentCombined =  $Chartsection + "`n" + $domainsSectionHtml + "`n" + $subscriptionsSectionHtml + "`n" + $GLOBALJavaScript
     $CssCombined = "<title>EF - Summary</title>`n" + $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Head $CssCombined -PostContent $PostContentCombined
     $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"

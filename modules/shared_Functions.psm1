@@ -6455,9 +6455,10 @@ function Get-AllAzureIAMAssignmentsNative {
     $url = 'https://management.azure.com/subscriptions?api-version=2022-12-01'
     $subscriptions = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop) | ForEach-Object {
         [PSCustomObject]@{
-            Id          = $_.subscriptionId
-            displayName  = $_.displayName
-            managedByTenants  = $_.managedByTenants
+            Id               = $_.subscriptionId
+            DisplayName      = $_.displayName
+            State            = $_.state
+            ManagedByTenants = $_.managedByTenants
         }
     }
 
@@ -6520,6 +6521,45 @@ function Get-AllAzureIAMAssignmentsNative {
     } catch {
         Write-Log -Level Debug -Message "Management group scope resolution via Resource Graph unavailable. Using scope IDs. Error: $($_.Exception.Message)"
     }
+
+    $subscriptionResourceCounts = @{}
+    try {
+        $body = @{
+            query   = "Resources | summarize Count=count() by subscriptionId"
+            options = @{ resultFormat = "objectArray" }
+        }
+        $resourceCountResponse = Send-ApiRequest -Method POST -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Body $body -Silent -ErrorAction Stop
+        $resourceCountRows = @()
+        if ($resourceCountResponse -is [System.Collections.IEnumerable] -and -not ($resourceCountResponse -is [string])) {
+            foreach ($entry in $resourceCountResponse) {
+                if ($entry -and $entry.PSObject.Properties.Name -contains 'data' -and $entry.data) { $resourceCountRows += @($entry.data) }
+                else { $resourceCountRows += @($entry) }
+            }
+        } elseif ($resourceCountResponse -and $resourceCountResponse.PSObject.Properties.Name -contains 'data' -and $resourceCountResponse.data) {
+            $resourceCountRows = @($resourceCountResponse.data)
+        } elseif ($resourceCountResponse) {
+            $resourceCountRows = @($resourceCountResponse)
+        }
+        foreach ($row in $resourceCountRows) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$row.subscriptionId)) {
+                $subscriptionResourceCounts[[string]$row.subscriptionId.ToLowerInvariant()] = [int]$row.Count
+            }
+        }
+        Write-Log -Level Debug -Message "Got resource counts for $($subscriptionResourceCounts.Count) subscriptions"
+    } catch {
+        Write-Log -Level Debug -Message "Resource count query unavailable: $($_.Exception.Message)"
+    }
+
+    $GlobalAuditSummary.Subscriptions.Details = @($subscriptions | ForEach-Object {
+        $resourceCount = $subscriptionResourceCounts[$_.Id.ToLowerInvariant()]
+        [PSCustomObject]@{
+            Id               = $_.Id
+            DisplayName      = $_.DisplayName
+            State            = $_.State
+            ManagedByTenants = if ($null -ne $_.ManagedByTenants) { @($_.ManagedByTenants).Count } else { 0 }
+            Resources        = if ($null -ne $resourceCount) { $resourceCount } else { "-" }
+        }
+    })
 
     # Resolve known scope IDs in ARM paths and keep the original path when no mapping exists.
     function Resolve-AzureIamScopePath {
@@ -8020,7 +8060,7 @@ function start-InitTasks {
         Tenant                 = @{ Name = ""; Id = "" }
         EntraFalcon            = @{ Version = "$EntraFalconVersion"; Source = "https://github.com/CompassSecurity/EntraFalcon" }
         TenantLicense          = @{ Name = ""; Level = 0}
-        Subscriptions          = @{ Count = 0 }
+        Subscriptions          = @{ Count = 0; Details = @() }
         UserAgent              = @{ Name = $UserAgent}
         Users                  = @{ Count = 0; Guests = 0; Inactive = 0; Enabled=0; OnPrem=0; MfaCapable=0; SignInActivity = @{ '0-1 month' = 0; '1-2 months' = 0; '2-3 months' = 0; '3-4 months' = 0; '4-5 months' = 0; '5-6 months' = 0; '6+ months' = 0; 'Never' = 0 }}
         Groups                 = @{ Count = 0; M365 = 0; PublicM365 = 0; PimOnboarded = 0; OnPrem = 0}
