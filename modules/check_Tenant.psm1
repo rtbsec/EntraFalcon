@@ -2872,6 +2872,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 if ("$($policy.State)".Trim().ToLowerInvariant() -ne "enabled") {
                     $hardIssues.Add("not enabled")
                 }
+                $hasMfaGrant = Test-ContainsToken -Value $policy.GrantControls -Token "mfa"
+                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace("$($policy.AuthStrength)".Trim()) -and [bool]$policy.AuthStrengthMfaCombinationsOnly
+                if (-not ($hasMfaGrant -or $hasAuthStrength)) {
+                    $hardIssues.Add("missing mfa grant control or MFA-enforcing authentication strength")
+                }
                 if ($hardIssues.Count -eq 0) {
                     $cap004HardPass.Add($policy)
                 } else {
