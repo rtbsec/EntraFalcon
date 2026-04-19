@@ -19,7 +19,8 @@ function Invoke-CheckTenant {
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$false)][hashtable]$Devices,
         [Parameter(Mandatory=$true)][hashtable]$Users,
-        [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments
+        [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments,
+        [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprints
     )
     #endregion
 
@@ -344,8 +345,8 @@ function Invoke-CheckTenant {
     if ($GLOBALAuthMethods -and $GLOBALAuthMethods.ContainsKey("AuthFlow")) {
         $authFlowForLog = [string]$GLOBALAuthMethods.AuthFlow
     }
-    Write-Log -Level Debug -Message ("[Invoke-CheckTenant] Input snapshot: AuthFlow={0}; AllCaps={1}; EnterpriseApps={2}; AppRegistrations={3}; ManagedIdentities={4}; PimforEntraRoles={5}; AllGroupsDetails={6}; Users={7}" -f `
-        $authFlowForLog, $AllCaps.Count, $EnterpriseApps.Count, $AppRegistrations.Count, $ManagedIdentities.Count, $PimforEntraRoles.Count, $AllGroupsDetails.Count, $Users.Count)
+    Write-Log -Level Debug -Message ("[Invoke-CheckTenant] Input snapshot: AuthFlow={0}; AllCaps={1}; EnterpriseApps={2}; AppRegistrations={3}; ManagedIdentities={4}; PimforEntraRoles={5}; AllGroupsDetails={6}; Users={7}; AgentIdentityBlueprints={8}" -f `
+        $authFlowForLog, $AllCaps.Count, $EnterpriseApps.Count, $AppRegistrations.Count, $ManagedIdentities.Count, $PimforEntraRoles.Count, $AllGroupsDetails.Count, $Users.Count, $AgentIdentityBlueprints.Count)
 
     # Collect all Graph API data up-front so enumeration logic only evaluates data.
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -1076,6 +1077,18 @@ function Invoke-CheckTenant {
     "Status": "NotVulnerable",
     "Remediation": "",
     "Confidence": "Requires Verification",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-001",
+    "Title": "Blueprints With Client Secrets",
+    "Category": "Agent Identity",
+    "Severity": 1,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
     "AffectedObjects": []
   },
   {
@@ -1953,6 +1966,25 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
     }
     #endregion
+    #region AGT VariantProps
+    $AGT001VariantProps = @{
+        Default = @{
+            Threat = "<p>Client secrets are prone to accidental exposure through configuration files, scripts, or log files.</p><p>If attackers obtains a client secret, they may be able to authenticate as a child identity (Agent Identity, or Agent User) and perform any actions for which that identity is authorized.</p>"
+            Remediation = '<p>Replace client secrets with certificate-based authentication where possible. Microsoft recommends using federated identity credentials (managed identities) or certificates in production.</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#manage-credentials-securely" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#manage-credentials-securely</a></li></ul>'
+        }
+        Vulnerable = @{ Status = "Vulnerable" }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No agent identity blueprints with client secrets were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identity blueprints were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
         Default = @{
@@ -2101,6 +2133,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "APP-001" = $APP001VariantProps.Default
         "APP-002" = $APP002VariantProps.Default
         "APP-003" = $APP003VariantProps.Default
+        "AGT-001" = $AGT001VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2249,6 +2282,26 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $appImpactValue = Get-IntSafe $app.Impact
             if ($app.Owners -gt 0 -and $appImpactValue -ge $ownerFindingMinImpact) {
                 $appRegsWithOwners.Add($app)
+            }
+        }
+    }
+
+    #endregion
+
+    #region Enumeration: Agent Identity Blueprints
+    # AGT-001: Reuse the blueprint enumeration output to identify blueprints with client secrets.
+    $agentBlueprintsWithSecrets = [System.Collections.Generic.List[object]]::new()
+    $agentBlueprintCount = 0
+    if ($AgentIdentityBlueprints) {
+        $agentBlueprintCount = $AgentIdentityBlueprints.Count
+        if ($agentBlueprintCount -gt 0) {
+            write-host "[*] Analyzing Agent Identity Blueprints"
+            foreach ($entry in $AgentIdentityBlueprints.GetEnumerator()) {
+                $blueprint = $entry.Value
+                if (-not $blueprint) { continue }
+                if ((Get-IntSafe $blueprint.SecretsCount) -gt 0) {
+                    $agentBlueprintsWithSecrets.Add($blueprint)
+                }
             }
         }
     }
@@ -5132,6 +5185,93 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Description = "<p>Check skipped because no managed identities were identified.</p>"
         AffectedObjects = @()
         RelatedReportUrl = ""
+    }
+
+    #endregion
+
+    #region AGT Evaluation
+    # AGT-001: Apply result for agent identity blueprints with client secrets.
+    if ($agentBlueprintCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-001] Skipped because no agent identity blueprints were found."
+        Set-FindingOverride -FindingId "AGT-001" -Props $AGT001VariantProps.Skipped
+    } elseif ($agentBlueprintsWithSecrets.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-001] Found $($agentBlueprintsWithSecrets.Count) agent identity blueprints with client secrets."
+        Set-FindingOverride -FindingId "AGT-001" -Props $AGT001VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-001" -Props @{
+            RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SecretsCount=%3E0&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agtAffected = [System.Collections.Generic.List[object]]::new()
+        foreach ($blueprint in $agentBlueprintsWithSecrets) {
+            $secretLines = [System.Collections.Generic.List[string]]::new()
+            $credentialDetails = @()
+            if ($blueprint.AppCredentialsDetails) {
+                if ($blueprint.AppCredentialsDetails -is [System.Collections.IEnumerable] -and -not ($blueprint.AppCredentialsDetails -is [string])) {
+                    $credentialDetails = @($blueprint.AppCredentialsDetails)
+                } else {
+                    $credentialDetails = @($blueprint.AppCredentialsDetails)
+                }
+            }
+            foreach ($cred in $credentialDetails) {
+                if ($cred.Type -ne "Secret") { continue }
+                $name = $cred.DisplayName
+                if (-not $name) { $name = "-" }
+                $start = $cred.StartDateTime
+                $end = $cred.EndDateTime
+                if ($start) {
+                    if ($start -is [datetime]) {
+                        $start = $start.ToString("yyyy-MM-dd HH:mm:ss")
+                    } else {
+                        $startText = "$start"
+                        if ($startText -match "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}") {
+                            $start = $startText.Substring(0, 19).Replace("T", " ")
+                        } elseif ($startText -match "^\d{4}-\d{2}-\d{2}") {
+                            $start = $startText.Substring(0, 10)
+                        } else {
+                            try { $start = ([datetime]$startText).ToString("yyyy-MM-dd HH:mm:ss") } catch {}
+                        }
+                    }
+                }
+                if ($end) {
+                    if ($end -is [datetime]) {
+                        $end = $end.ToString("yyyy-MM-dd HH:mm:ss")
+                    } else {
+                        $endText = "$end"
+                        if ($endText -match "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}") {
+                            $end = $endText.Substring(0, 19).Replace("T", " ")
+                        } elseif ($endText -match "^\d{4}-\d{2}-\d{2}") {
+                            $end = $endText.Substring(0, 10)
+                        } else {
+                            try { $end = ([datetime]$endText).ToString("yyyy-MM-dd HH:mm:ss") } catch {}
+                        }
+                    }
+                }
+                $dateSuffix = ""
+                if ($start -and $end) {
+                    $dateSuffix = " ($start - $end)"
+                } elseif ($start) {
+                    $dateSuffix = " (from $start)"
+                } elseif ($end) {
+                    $dateSuffix = " (until $end)"
+                }
+                $secretLines.Add("Secret: $name$dateSuffix")
+            }
+            $secretDisplay = if ($secretLines.Count -gt 0) { $secretLines -join "<br>" } else { "" }
+            $agtAffected.Add([pscustomobject]@{
+                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
+                "Secrets" = $blueprint.SecretsCount
+                "Secret Details" = $secretDisplay
+                "_SortRisk" = $blueprint.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-001" -Props @{
+            Description = "<p>$($agentBlueprintsWithSecrets.Count) agent identity blueprints have client secrets configured.</p>"
+            AffectedObjects = $agtAffected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-001] No agent identity blueprints with client secrets found."
+        Set-FindingOverride -FindingId "AGT-001" -Props $AGT001VariantProps.Secure
     }
 
     #endregion
