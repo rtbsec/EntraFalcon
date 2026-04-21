@@ -400,7 +400,8 @@ function Invoke-CheckManagedIdentities {
         $AppCredentialsSecrets = foreach ($creds in $item.PasswordCredentials) {
             [pscustomobject]@{
                 Type = "Secret"
-                DisplayName = $creds.DisplayName
+                DisplayName = if ([string]::IsNullOrWhiteSpace($creds.DisplayName)) { "-" } else { $creds.DisplayName }
+                Id = $creds.KeyId
                 EndDateTime = $creds.EndDateTime
                 StartDateTime = $creds.StartDateTime
             }
@@ -408,7 +409,8 @@ function Invoke-CheckManagedIdentities {
         $AppCredentialsCertificates = foreach ($creds in $item.KeyCredentials) {
             [pscustomobject]@{
                 Type = "Certificate"
-                DisplayName = $creds.DisplayName
+                DisplayName = if ([string]::IsNullOrWhiteSpace($creds.DisplayName)) { "-" } else { $creds.DisplayName }
+                Id = $creds.KeyId
                 EndDateTime = $creds.EndDateTime
                 StartDateTime = $creds.StartDateTime
             }

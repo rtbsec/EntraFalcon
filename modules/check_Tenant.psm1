@@ -48,6 +48,28 @@ function Invoke-CheckTenant {
         return $n
     }
 
+    function Get-CredentialDisplayName {
+        param(
+            $Credential,
+            [string]$FallbackLabel = "-"
+        )
+
+        if ($null -eq $Credential) {
+            return $FallbackLabel
+        }
+
+        foreach ($propertyName in @("DisplayName", "Name", "Hint")) {
+            if ($Credential.PSObject.Properties[$propertyName]) {
+                $value = "$($Credential.$propertyName)".Trim()
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $value -ne "-") {
+                    return $value
+                }
+            }
+        }
+
+        return $FallbackLabel
+    }
+
     function Get-NormalizedRoleTierLabel {
         param($RoleTier)
         $tierRaw = "$RoleTier".Trim().ToLowerInvariant()
@@ -668,7 +690,7 @@ function Invoke-CheckTenant {
     "Threat": "",
     "Status": "NotVulnerable",
     "Remediation": "",
-    "Confidence": "Requires Verification",
+    "Confidence": "Sure",
     "AffectedObjects": []
   },
   {
@@ -1114,6 +1136,18 @@ function Invoke-CheckTenant {
     "Status": "NotVulnerable",
     "Remediation": "",
     "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-004",
+    "Title": "Foreign Agent Identities with Privileged Entra ID Roles",
+    "Category": "Agent Identity",
+    "Severity": 3,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Requires Verification",
     "AffectedObjects": []
   },
   {
@@ -1798,7 +1832,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Vulnerable = @{
             Status = "Vulnerable"
-            Confidence = "Requires Verification"
         }
         Secure = @{
             Status = "NotVulnerable"
@@ -2028,13 +2061,33 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     }
     $AGT003VariantProps = @{
         Default = @{
-            Threat = "<p>The parent blueprint of this agent identity is registered in an external organization's tenant.</p><p>If the external organization acts maliciously, or if its tenant or blueprint credentials are compromised by a third party, attackers may be able to abuse the delegated permissions associated with this agent identity on behalf of the affected user(s), without requiring any breach of the local tenant.</p>"
+            Threat = "<p>The parent blueprint of this agent identity is registered in an external organization's tenant.</p><p>If the external organization acts maliciously, or if its tenant or blueprint credentials are compromised by a third party, attackers may be able to abuse the delegated permissions associated with this agent identity on behalf of the affected user(s).</p>"
             Remediation = "<p>Privileged foreign agent identity should be reviewed regularly and removed if not clearly required for the intended functionality.</p><p>If it is unclear whether assigned privileges are required, contact the publisher to validate the permission model and confirm the expected usage of the agent.</p>"
         }
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
             Description = "<p>No enabled foreign agent identities with extensive delegated API privileges were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT004VariantProps = @{
+        Default = @{
+            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Entra ID role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged tenant resources.</p>"
+            Remediation = "<p>Restrict foreign agent identities to the minimum privileges required for their intended functionality. Regularly review assigned Entra ID roles and remove any assignments that are not strictly necessary. Assess whether highly privileged foreign access to the tenant is justified, and remove such access where it is not.</p><p>If the justification is unclear, contact the publisher to validate the required role assignments and confirm the expected use of the agent.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+            Confidence = "Requires Verification"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled foreign agent identities were identified that have privileged Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2195,6 +2248,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-001" = $AGT001VariantProps.Default
         "AGT-002" = $AGT002VariantProps.Default
         "AGT-003" = $AGT003VariantProps.Default
+        "AGT-004" = $AGT004VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2370,9 +2424,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identities
-    # AGT-002/AGT-003: Identify enabled foreign agent identities with extensive application or delegated API permissions.
+    # AGT-002/AGT-003/AGT-004: Identify enabled foreign agent identities with extensive API permissions or privileged Entra ID roles.
     $foreignAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
+    $foreignAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
     $agentIdentityCount = 0
     if ($AgentIdentities) {
         $agentIdentityCount = $AgentIdentities.Count
@@ -2393,6 +2448,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $apiDelegatedHigh = Get-IntSafe $agentIdentity.ApiDelegatedHigh
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
                     $foreignAgentIdentitiesWithDelegatedExtensiveApi.Add($agentIdentity)
+                }
+
+                $entraMaxTier = "$($agentIdentity.EntraMaxTier)"
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+                    $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
             }
         }
@@ -3971,8 +4031,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             foreach ($credType in @("Secret", "Certificate")) {
                 foreach ($cred in $credentialDetails) {
                     if ($cred.Type -ne $credType) { continue }
-                    $name = $cred.DisplayName
-                    if (-not $name) { $name = $cred.Id }
+                    $name = Get-CredentialDisplayName -Credential $cred -FallbackLabel "-"
                     $start = $cred.StartDateTime
                     $end = $cred.EndDateTime
                     if ($start) {
@@ -5082,8 +5141,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             foreach ($cred in $credentialDetails) {
                 if ($cred.Type -ne "Secret") { continue }
-                $name = $cred.DisplayName
-                if (-not $name) { $name = $cred.Id }
+                $name = Get-CredentialDisplayName -Credential $cred -FallbackLabel "-"
                 $start = $cred.StartDateTime
                 $end = $cred.EndDateTime
                 if ($start) {
@@ -5649,12 +5707,121 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             # Escalate severity and threat when dangerous delegated permissions exist.
             Set-FindingOverride -FindingId "AGT-003" -Props @{
                 Severity = 3
-                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers gain access to a user's access token as soon as the user authenticates with the compromised agent.</p><p>Since at least one foreign agent identity has highly dangerous delegated privileges, attackers may be able to compromise the tenant if a highly privileged user authenticates to the agent.</p>"
+                Threat = "<p>The parent blueprint of this agent identity is registered in an external organization's tenant.</p><p>If the external organization acts maliciously, or if its tenant or blueprint credentials are compromised by a third party, attackers may be able to abuse the delegated permissions associated with this agent identity on behalf of the affected user(s).</p><p>Since at least one foreign agent identity has highly dangerous delegated privileges, attackers may be able to compromise the tenant if a highly privileged user authenticates to the agent.</p>"
             }
         }
     } else {
         Write-Log -Level Verbose -Message "[AGT-003] No enabled foreign agent identities with extensive delegated API privileges found."
         Set-FindingOverride -FindingId "AGT-003" -Props $AGT003VariantProps.Secure
+    }
+
+    # AGT-004: Apply result for enabled foreign agent identities with privileged Entra ID roles.
+    if ($agentIdentityCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-004] Skipped because no agent identities were found."
+        Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Skipped
+    } elseif ($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with privileged Entra ID roles."
+        Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-004" -Props @{
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+
+        $agt004Tier0 = 0
+        $agt004Tier1 = 0
+        $agt004Tier2 = 0
+        $agt004TierUncat = 0
+        $agt004Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($agentIdentity in $foreignAgentIdentitiesWithPrivilegedEntraRoles) {
+            $entraRoleEntries = [System.Collections.Generic.List[object]]::new()
+            foreach ($role in @($agentIdentity.EntraRoleDetails)) {
+                if ($role) {
+                    $entraRoleEntries.Add([pscustomobject]@{
+                        Source = "Direct"
+                        GroupDisplayName = $null
+                        Role = $role
+                    })
+                }
+            }
+
+            $tier0Count = 0
+            $tier1Count = 0
+            $tier2Count = 0
+            $tierUncatCount = 0
+            foreach ($entry in $entraRoleEntries) {
+                $tierLabel = Get-NormalizedRoleTierLabel $entry.Role.RoleTier
+                switch ($tierLabel) {
+                    "0" { $tier0Count += 1; $agt004Tier0 += 1 }
+                    "1" { $tier1Count += 1; $agt004Tier1 += 1 }
+                    "2" { $tier2Count += 1; $agt004Tier2 += 1 }
+                    default { $tierUncatCount += 1; $agt004TierUncat += 1 }
+                }
+            }
+
+            $roleLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "0" })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleTemplateId }
+                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
+                if ($roleName) {
+                    $roleLines.Add("Tier 0 Entra Role: $roleName scoped to $scope")
+                }
+            }
+            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "1" })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleTemplateId }
+                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
+                if ($roleName) {
+                    $roleLines.Add("Tier 1 Entra Role: $roleName scoped to $scope")
+                }
+            }
+            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "2" })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleTemplateId }
+                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
+                if ($roleName) {
+                    $roleLines.Add("Tier 2 Entra Role: $roleName scoped to $scope")
+                }
+            }
+            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "Uncategorized" })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleTemplateId }
+                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
+                if ($roleName) {
+                    $roleLines.Add("Uncategorized Entra Role: $roleName scoped to $scope")
+                }
+            }
+
+            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $parentPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
+                $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
+                if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+            }
+
+            $agt004Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "Publisher Name" = $agentIdentity.PublisherName
+                "Parent Blueprint Principal" = $parentPrincipal
+                "Tier 0 Entra Roles" = $tier0Count
+                "Tier 1 Entra Roles" = $tier1Count
+                "Entra Roles" = $roleDisplay
+                "_SortRisk" = $agentIdentity.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-004" -Props @{
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities have privileged Entra ID roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt004Tier0</li><li>Tier 1: $agt004Tier1</li><li>Tier 2: $agt004Tier2</li><li>Uncategorized tier: $agt004TierUncat</li></ul>"
+            AffectedObjects = $agt004Affected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-004] No enabled foreign agent identities with privileged Entra ID roles found."
+        Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Secure
     }
 
     #endregion
