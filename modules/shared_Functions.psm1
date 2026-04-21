@@ -161,7 +161,7 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         Agent: "=True"
                     },
-                    columns: ["UPN", "Enabled", "Agent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "Agent", "ForeignAgent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVU-012",
@@ -1083,7 +1083,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Responsive column profiles keyed by currentReportKey from the report manifest.
         // Profiles define which columns are VISIBLE; all unlisted columns are hidden.
@@ -1334,7 +1334,8 @@ $global:GLOBALJavaScript_Table = @'
             "UserCoverage": "Percentage of tenant users covered by the policy after exclusions. External users are only approximated for b2bCollaborationGuest and do not include all types or tenant-specific selections.",
             "InheritableScopes": "Number of APIs for which the blueprint permits child agent identities to inherit delegated permission scopes",
             "InheritableRoles": "Number of APIs for which the blueprint permits child agent identities to inherit application role permissions",
-            "Agent": "User object parented to an agent identity (agent user)"
+            "Agent": "User object parented to an agent identity (agent user)",
+            "ForeignAgent": "Agent user whose parent blueprint principal is foreign"
         };
     
         (function () {    
@@ -2909,7 +2910,7 @@ $global:GLOBALJavaScript_Table = @'
 
             const isDark = document.body.classList.contains("dark-mode");
 
-            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML', 'Agent', 'ActivatedViaPIM']);
+            const redIfTrueHeaders = new Set(['Foreign', 'ForeignAgent', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML', 'Agent', 'ActivatedViaPIM']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
             const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2']);
             const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier', 'PerUserMfa']);
