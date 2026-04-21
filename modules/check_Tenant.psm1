@@ -1151,6 +1151,18 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "AGT-005",
+    "Title": "Foreign Agent Identities with Privileged Azure Roles",
+    "Category": "Agent Identity",
+    "Severity": 3,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "MAI-001",
     "Title": "Managed Identities with API Privileges",
     "Category": "Managed Identities",
@@ -2096,6 +2108,25 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             RelatedReportUrl = ""
         }
     }
+    $AGT005VariantProps = @{
+        Default = @{
+            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p>"
+            Remediation = "<p>Restrict foreign agent identities to the minimum privileges required for their intended functionality. Regularly review assigned permissions and remove any that are not strictly necessary. Assess whether highly privileged foreign access to the tenant is justified and remove such access where it is not.</p><p>If the justification is unclear, contact the publisher to validate the required permissions and confirm the expected usage of the application.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled foreign agent identities were identified that have privileged Azure roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
@@ -2249,6 +2280,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-002" = $AGT002VariantProps.Default
         "AGT-003" = $AGT003VariantProps.Default
         "AGT-004" = $AGT004VariantProps.Default
+        "AGT-005" = $AGT005VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2424,10 +2456,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identities
-    # AGT-002/AGT-003/AGT-004: Identify enabled foreign agent identities with extensive API permissions or privileged Entra ID roles.
+    # AGT-002/AGT-003/AGT-004/AGT-005: Identify enabled foreign agent identities with extensive API permissions or privileged Entra ID/Azure roles.
     $foreignAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
+    $foreignAgentIdentitiesWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
     $agentIdentityCount = 0
     if ($AgentIdentities) {
         $agentIdentityCount = $AgentIdentities.Count
@@ -2453,6 +2486,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $entraMaxTier = "$($agentIdentity.EntraMaxTier)"
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
                     $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
+                }
+
+                $azureMaxTier = "$($agentIdentity.AzureMaxTier)"
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+                    $foreignAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
             }
         }
@@ -5822,6 +5860,98 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-004] No enabled foreign agent identities with privileged Entra ID roles found."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Secure
+    }
+
+    # AGT-005: Apply result for enabled foreign agent identities with privileged Azure roles.
+    if ($agentIdentityCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-005] Skipped because no agent identities were found."
+        Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Skipped
+    } elseif ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with privileged Azure roles."
+        Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-005" -Props @{
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+
+        $agt005Tier0 = 0
+        $agt005Tier1 = 0
+        $agt005Tier2 = 0
+        $agt005TierUncat = 0
+        $agt005Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($agentIdentity in $foreignAgentIdentitiesWithPrivilegedAzureRoles) {
+            $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
+            foreach ($role in @($agentIdentity.AzureRoleDetails)) {
+                if ($role) {
+                    $azureRoleEntries.Add([pscustomobject]@{
+                        Source = "Direct"
+                        Role = $role
+                    })
+                }
+            }
+
+            $tiersSeen = @{}
+            $roleLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($tier in @("0", "1", "2", "Uncategorized")) {
+                foreach ($entry in $azureRoleEntries) {
+                    $role = $entry.Role
+                    $roleTier = Get-NormalizedRoleTierLabel -RoleTier $role.RoleTier
+                    if ($roleTier -ne $tier) { continue }
+                    $tiersSeen[$roleTier] = $true
+                    $roleName = $role.RoleName
+                    if (-not $roleName) { $roleName = $role.DisplayName }
+                    if (-not $roleName) { $roleName = $role.RoleDefinitionName }
+                    if (-not $roleName) { $roleName = $role.RoleDefinitionId }
+                    $scope = $role.Scope
+                    if (-not $scope -and $role.ScopeResolved) { $scope = $role.ScopeResolved.DisplayName }
+                    if (-not $scope -and $role.ScopeResolved) { $scope = "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" }
+                    if (-not $scope) { $scope = "Unknown scope" }
+                    if ($roleName) {
+                        $roleLines.Add("Tier ${roleTier}: $roleName scoped to $scope")
+                    }
+                }
+            }
+
+            if ($tiersSeen.ContainsKey("0")) { $agt005Tier0 += 1 }
+            if ($tiersSeen.ContainsKey("1")) { $agt005Tier1 += 1 }
+            if ($tiersSeen.ContainsKey("2")) { $agt005Tier2 += 1 }
+            if ($tiersSeen.ContainsKey("Uncategorized") -or $tiersSeen.Keys.Count -eq 0) { $agt005TierUncat += 1 }
+
+            $tier0Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" }).Count
+            $tier1Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" }).Count
+            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $parentPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
+                $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
+                if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+            }
+
+            $agt005Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "Publisher Name" = $agentIdentity.PublisherName
+                "Parent Blueprint Principal" = $parentPrincipal
+                "Tier 0 Azure Roles" = $tier0Count
+                "Tier 1 Azure Roles" = $tier1Count
+                "Azure Roles" = $roleDisplay
+                "_SortRisk" = $agentIdentity.Risk
+            })
+        }
+
+        Set-FindingOverride -FindingId "AGT-005" -Props @{
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have privileged Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            AffectedObjects = $agt005Affected
+        }
+        if ($agt005Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-005" -Props @{
+                Severity = 4
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p><p>Since at least one foreign agent identity has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-005] No enabled foreign agent identities with privileged Azure roles found."
+        Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Secure
     }
 
     #endregion
