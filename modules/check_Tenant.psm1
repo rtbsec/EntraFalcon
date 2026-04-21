@@ -1175,6 +1175,30 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "AGT-007",
+    "Title": "Internal Agent Identities with Extensive API Privileges (Delegated)",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-008",
+    "Title": "Internal Agent Identities with Privileged Entra ID Roles",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "MAI-001",
     "Title": "Managed Identities with API Privileges",
     "Category": "Managed Identities",
@@ -2158,6 +2182,44 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             RelatedReportUrl = ""
         }
     }
+    $AGT007VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity. Depending on how the agent identity is used, they may then be able to abuse the delegated permissions associated with it on behalf of the affected user(s).</p>"
+            Remediation = "<p>Review whether the assigned delegated API permissions are required for the intended functionality of the agent identity, and remove any permissions that are not strictly necessary.</p><p>General guidance:</p><ul><li>Delegated permissions should be limited to the absolute minimum required.</li><li>Review which users can authenticate to the agent identity and which actions the agent is expected to perform on their behalf.</li><li>Review who can manage the corresponding blueprint credentials.</li></ul>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled internal agent identities with extensive delegated API privileges were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT008VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity and abuse its Entra ID role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged tenant resources.</p>"
+            Remediation = "<p>Restrict internal agent identities to the minimum privileges required for their intended functionality. Regularly review assigned Entra ID roles and remove any assignments that are not strictly necessary.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled internal agent identities were identified that have privileged Entra ID roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
@@ -2313,6 +2375,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-004" = $AGT004VariantProps.Default
         "AGT-005" = $AGT005VariantProps.Default
         "AGT-006" = $AGT006VariantProps.Default
+        "AGT-007" = $AGT007VariantProps.Default
+        "AGT-008" = $AGT008VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2488,12 +2552,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identities
-    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006: Identify internal/foreign agent identities with extensive API permissions or privileged Entra ID/Azure roles.
+    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006/AGT-007/AGT-008: Identify internal/foreign agent identities with extensive API permissions or privileged Entra ID/Azure roles.
     $foreignAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
     $internalAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
+    $internalAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
+    $internalAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
     $agentIdentityCount = 0
     if ($AgentIdentities) {
         $agentIdentityCount = $AgentIdentities.Count
@@ -2519,10 +2585,16 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
                     $foreignAgentIdentitiesWithDelegatedExtensiveApi.Add($agentIdentity)
                 }
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
+                    $internalAgentIdentitiesWithDelegatedExtensiveApi.Add($agentIdentity)
+                }
 
                 $entraMaxTier = "$($agentIdentity.EntraMaxTier)"
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
                     $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
+                }
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+                    $internalAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
 
                 $azureMaxTier = "$($agentIdentity.AzureMaxTier)"
@@ -6099,7 +6171,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $agt006Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
-                "Publisher Name" = $agentIdentity.PublisherName
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Dangerous" = $agentIdentity.ApiDangerous
                 "High" = $agentIdentity.ApiHigh
@@ -6124,6 +6195,253 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-006] No enabled internal agent identities with extensive application API privileges found."
         Set-FindingOverride -FindingId "AGT-006" -Props $AGT006VariantProps.Secure
+    }
+
+    # AGT-007: Apply result for enabled internal agent identities with extensive delegated API permissions.
+    if ($agentIdentityCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-007] Skipped because no agent identities were found."
+        Set-FindingOverride -FindingId "AGT-007" -Props $AGT007VariantProps.Skipped
+    } elseif ($internalAgentIdentitiesWithDelegatedExtensiveApi.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-007] Found $($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal agent identities with extensive delegated API privileges."
+        Set-FindingOverride -FindingId "AGT-007" -Props $AGT007VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-007" -Props @{
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt007Affected = [System.Collections.Generic.List[object]]::new()
+        $agt007DangerousCount = 0
+        $agt007HighCount = 0
+        $agt007AssumedInheritedPermissionCount = 0
+        $agt007AssumedInheritedIdentityCount = 0
+        foreach ($agentIdentity in $internalAgentIdentitiesWithDelegatedExtensiveApi) {
+            $apiDelegatedDangerousValue = Get-IntSafe $agentIdentity.ApiDelegatedDangerous
+            $apiDelegatedHighValue = Get-IntSafe $agentIdentity.ApiDelegatedHigh
+            if ($apiDelegatedDangerousValue -gt 0) { $agt007DangerousCount += 1 }
+            if ($apiDelegatedHighValue -gt 0) { $agt007HighCount += 1 }
+
+            $permissions = @()
+            $identityHasAssumedInheritedPermissions = $false
+            $permissionSourceRows = @()
+            if ($agentIdentity.EffectiveApiPermissionSources) {
+                if ($agentIdentity.EffectiveApiPermissionSources -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiPermissionSources -is [string])) {
+                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
+                } else {
+                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
+                }
+            }
+            if ($permissionSourceRows.Count -gt 0) {
+                foreach ($level in @("Dangerous", "High")) {
+                    foreach ($source in $permissionSourceRows) {
+                        if ($source.PermissionType -ne "Delegated" -or $source.Category -ne $level) { continue }
+
+                        $scope = $source.Permission
+                        $apiName = $source.ApiName
+                        if (-not $apiName) { $apiName = "API" }
+                        $detailParts = [System.Collections.Generic.List[string]]::new()
+                        if ($source.ConsentType -eq "AllPrincipals") {
+                            $detailParts.Add("All users")
+                        } elseif ($source.ConsentType -eq "Principal") {
+                            $detailParts.Add("some users")
+                        }
+
+                        $originType = "$($source.OriginType)"
+                        $originSuffix = switch ($originType) {
+                            "Direct" { "direct" }
+                            "ConfirmedInherited" { "inherited" }
+                            "AssumedInherited" {
+                                $agt007AssumedInheritedPermissionCount += 1
+                                $identityHasAssumedInheritedPermissions = $true
+                                "assumed inherited"
+                            }
+                            default {
+                                if ([string]::IsNullOrWhiteSpace($originType)) { "source unknown" } else { $originType }
+                            }
+                        }
+                        if (-not [string]::IsNullOrWhiteSpace($originSuffix)) {
+                            $detailParts.Add($originSuffix)
+                        }
+                        $detailSuffix = if ($detailParts.Count -gt 0) { " (" + ($detailParts -join ", ") + ")" } else { "" }
+
+                        if ($scope) {
+                            $permissions += "${level}: $scope on API $apiName$detailSuffix"
+                        }
+                    }
+                }
+            } else {
+                $rawPerms = @()
+                if ($agentIdentity.EffectiveApiDelegatedDetails) {
+                    if ($agentIdentity.EffectiveApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiDelegatedDetails -is [string])) {
+                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
+                    } else {
+                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
+                    }
+                } elseif ($agentIdentity.ApiDelegatedDetails) {
+                    if ($agentIdentity.ApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.ApiDelegatedDetails -is [string])) {
+                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
+                    } else {
+                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
+                    }
+                }
+                foreach ($level in @("Dangerous", "High")) {
+                    foreach ($perm in $rawPerms) {
+                        if ($perm.ApiPermissionCategorization -ne $level) { continue }
+                        $scope = $perm.Scope
+                        if (-not $scope) { $scope = $perm.ApiPermission }
+                        $apiName = $perm.ApiName
+                        if (-not $apiName) { $apiName = $perm.ResourceDisplayName }
+                        if (-not $apiName) { $apiName = $perm.ResourceAppId }
+                        if (-not $apiName) { $apiName = "API" }
+                        $consentInfo = ""
+                        if ($perm.ConsentType -eq "AllPrincipals") {
+                            $consentInfo = " (All users)"
+                        } elseif ($perm.ConsentType -eq "Principal") {
+                            $consentInfo = " (some users)"
+                        }
+                        if ($scope) {
+                            $permissions += "${level}: $scope on API $apiName$consentInfo"
+                        }
+                    }
+                }
+            }
+            if ($identityHasAssumedInheritedPermissions) {
+                $agt007AssumedInheritedIdentityCount += 1
+            }
+            $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
+
+            $parentPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
+                $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
+                if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+            }
+
+            $agt007Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "Parent Blueprint Principal" = $parentPrincipal
+                "Dangerous" = $agentIdentity.ApiDelegatedDangerous
+                "High" = $agentIdentity.ApiDelegatedHigh
+                "Delegated API Permissions (>= High)" = $permissionDisplay
+                "_SortRisk" = $agentIdentity.Risk
+            })
+        }
+        $agt007AssumedInheritanceNote = ""
+        if ($agt007AssumedInheritedPermissionCount -gt 0) {
+            $agt007AssumedInheritanceNote = "<p><strong>Note:</strong> $agt007AssumedInheritedPermissionCount displayed permissions across $agt007AssumedInheritedIdentityCount agent identities are marked as assumed inherited. This happens when the parent blueprint inheritance configuration cannot be fully read from this tenant.</p>"
+        }
+        Set-FindingOverride -FindingId "AGT-007" -Props @{
+            Description = "<p>$($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal agent identities have extensive delegated API privileges.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt007DangerousCount</li><li>High: $agt007HighCount</li></ul>$agt007AssumedInheritanceNote"
+            AffectedObjects = $agt007Affected
+        }
+        if ($agt007DangerousCount -gt 0) {
+            Set-FindingOverride -FindingId "AGT-007" -Props @{
+                Severity = 3
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity. Depending on how the agent identity is used, they may then be able to abuse the delegated permissions associated with it on behalf of the affected user(s).</p><p>Since at least one internal agent identity has highly dangerous delegated API privileges, attackers may be able to compromise the entire tenant if a highly privileged user authenticates to the agent.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-007] No enabled internal agent identities with extensive delegated API privileges found."
+        Set-FindingOverride -FindingId "AGT-007" -Props $AGT007VariantProps.Secure
+    }
+
+    # AGT-008: Apply result for enabled internal agent identities with privileged Entra ID roles.
+    if ($agentIdentityCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-008] Skipped because no agent identities were found."
+        Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Skipped
+    } elseif ($internalAgentIdentitiesWithPrivilegedEntraRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-008] Found $($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities with privileged Entra ID roles."
+        Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-008" -Props @{
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+
+        $agt008Tier0 = 0
+        $agt008Tier1 = 0
+        $agt008Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($agentIdentity in $internalAgentIdentitiesWithPrivilegedEntraRoles) {
+            $entraRoleEntries = [System.Collections.Generic.List[object]]::new()
+            foreach ($role in @($agentIdentity.EntraRoleDetails)) {
+                if ($role) {
+                    $entraRoleEntries.Add([pscustomobject]@{
+                        Source = "Direct"
+                        GroupDisplayName = $null
+                        Role = $role
+                    })
+                }
+            }
+
+            $entraTierEntries = @()
+            foreach ($entry in $entraRoleEntries) {
+                $role = $entry.Role
+                if (-not $role) { continue }
+                if ($role.RoleTier -ne 0 -and $role.RoleTier -ne 1) { continue }
+                $entraTierEntries += $entry
+            }
+
+            $tier0Count = @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 0 }).Count
+            $tier1Count = @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 1 }).Count
+            if ($tier0Count -gt 0) { $agt008Tier0 += 1 }
+            if ($tier1Count -gt 0) { $agt008Tier1 += 1 }
+
+            $roleLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($entry in @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 0 })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleDefinitionId }
+                $scopeName = $role.ScopeResolved.DisplayName
+                $scopeType = $role.ScopeResolved.Type
+                if (-not $scopeName) { $scopeName = "Tenant" }
+                if (-not $scopeType) { $scopeType = "Directory" }
+                if ($roleName) {
+                    $roleLines.Add("Tier 0 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                }
+            }
+            foreach ($entry in @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 1 })) {
+                $role = $entry.Role
+                $roleName = $role.DisplayName
+                if (-not $roleName) { $roleName = $role.RoleDefinitionId }
+                $scopeName = $role.ScopeResolved.DisplayName
+                $scopeType = $role.ScopeResolved.Type
+                if (-not $scopeName) { $scopeName = "Tenant" }
+                if (-not $scopeType) { $scopeType = "Directory" }
+                if ($roleName) {
+                    $roleLines.Add("Tier 1 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                }
+            }
+
+            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $parentPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
+                $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
+                if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+            }
+
+            $agt008Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "Parent Blueprint Principal" = $parentPrincipal
+                "Tier 0 Entra Roles" = $tier0Count
+                "Tier 1 Entra Roles" = $tier1Count
+                "Entra Roles" = $roleDisplay
+                "_SortRisk" = $agentIdentity.Risk
+            })
+        }
+
+        Set-FindingOverride -FindingId "AGT-008" -Props @{
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities have privileged Entra ID roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt008Tier0</li><li>Tier 1: $agt008Tier1</li></ul>"
+            AffectedObjects = $agt008Affected
+        }
+        if ($agt008Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-008" -Props @{
+                Severity = 3
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity and abuse its Entra ID role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged tenant resources.</p><p>Since at least one internal agent identity has a Tier-0 Entra ID role assigned, attackers may be able to compromise the entire tenant.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-008] No enabled internal agent identities with privileged Entra ID roles found."
+        Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Secure
     }
 
     #endregion
