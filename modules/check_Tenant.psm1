@@ -1211,6 +1211,18 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "AGT-010",
+    "Title": "Inactive Agent Identities",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "MAI-001",
     "Title": "Managed Identities with API Privileges",
     "Category": "Managed Identities",
@@ -2251,6 +2263,25 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             RelatedReportUrl = ""
         }
     }
+    $AGT010VariantProps = @{
+        Default = @{
+            Threat = "<p>Inactive but enabled agent identities increase the attack surface. If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to authenticate as the dormant agent identity without immediate detection.</p>"
+            Remediation = '<p>Verify whether these agent identities are still required. Disable or remove agent identities that are no longer needed. If the identity is no longer used, also review whether the corresponding blueprint and credentials should be removed.</p><p>Reference:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#govern-the-agent-lifecycle" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#govern-the-agent-lifecycle</a></li></ul>'
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled inactive agent identities were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
@@ -2409,6 +2440,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-007" = $AGT007VariantProps.Default
         "AGT-008" = $AGT008VariantProps.Default
         "AGT-009" = $AGT009VariantProps.Default
+        "AGT-010" = $AGT010VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2584,7 +2616,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identities
-    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006/AGT-007/AGT-008/AGT-009: Identify internal/foreign agent identities with extensive API permissions or privileged Entra ID/Azure roles.
+    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006/AGT-007/AGT-008/AGT-009/AGT-010: Identify internal/foreign agent identities with extensive API permissions, inactivity, or privileged Entra ID/Azure roles.
     $foreignAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
@@ -2593,6 +2625,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $internalAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $internalAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
     $internalAgentIdentitiesWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
+    $inactiveEnabledAgentIdentities = [System.Collections.Generic.List[object]]::new()
     $agentIdentityCount = 0
     if ($AgentIdentities) {
         $agentIdentityCount = $AgentIdentities.Count
@@ -2601,6 +2634,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             foreach ($entry in $AgentIdentities.GetEnumerator()) {
                 $agentIdentity = $entry.Value
                 if (-not $agentIdentity) { continue }
+
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Inactive -eq $true) {
+                    $inactiveEnabledAgentIdentities.Add($agentIdentity)
+                }
 
                 $apiDangerous = Get-IntSafe $agentIdentity.ApiDangerous
                 $apiHigh = Get-IntSafe $agentIdentity.ApiHigh
@@ -5718,8 +5755,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $agt002Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
-                "Publisher Name" = $agentIdentity.PublisherName
                 "Parent Blueprint Principal" = $parentPrincipal
+                "Publisher Name" = $agentIdentity.PublisherName
                 "Dangerous" = $agentIdentity.ApiDangerous
                 "High" = $agentIdentity.ApiHigh
                 "Medium" = $agentIdentity.ApiMedium
@@ -5870,8 +5907,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $agt003Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
-                "Publisher Name" = $agentIdentity.PublisherName
                 "Parent Blueprint Principal" = $parentPrincipal
+                "Publisher Name" = $agentIdentity.PublisherName
                 "Dangerous" = $agentIdentity.ApiDelegatedDangerous
                 "High" = $agentIdentity.ApiDelegatedHigh
                 "Delegated API Permissions (>= High)" = $permissionDisplay
@@ -5990,8 +6027,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $agt004Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
-                "Publisher Name" = $agentIdentity.PublisherName
                 "Parent Blueprint Principal" = $parentPrincipal
+                "Publisher Name" = $agentIdentity.PublisherName
                 "Tier 0 Entra Roles" = $tier0Count
                 "Tier 1 Entra Roles" = $tier1Count
                 "Entra Roles" = $roleDisplay
@@ -6075,8 +6112,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $agt005Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
-                "Publisher Name" = $agentIdentity.PublisherName
                 "Parent Blueprint Principal" = $parentPrincipal
+                "Publisher Name" = $agentIdentity.PublisherName
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
                 "Azure Roles" = $roleDisplay
@@ -6581,6 +6618,44 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-009] No enabled internal agent identities with privileged Azure roles found."
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Secure
+    }
+
+    # AGT-010: Apply result for enabled inactive agent identities.
+    if ($agentIdentityCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-010] Skipped because no agent identities were found."
+        Set-FindingOverride -FindingId "AGT-010" -Props $AGT010VariantProps.Skipped
+    } elseif ($inactiveEnabledAgentIdentities.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-010] Found $($inactiveEnabledAgentIdentities.Count) inactive agent identities that are enabled."
+        Set-FindingOverride -FindingId "AGT-010" -Props $AGT010VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-010" -Props @{
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            AffectedSortKey = "Last sign-in (days)"
+            AffectedSortDir = "DESC"
+        }
+        $agt010Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($agentIdentity in $inactiveEnabledAgentIdentities) {
+            $parentPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
+                $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
+                if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+            }
+
+            $agt010Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "Parent Blueprint Principal" = $parentPrincipal
+                "Inactive" = $agentIdentity.Inactive
+                "Last sign-in (days)" = $agentIdentity.LastSignInDays
+                "Foreign Agent" = $agentIdentity.Foreign
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-010" -Props @{
+            Description = "<p>There are $($inactiveEnabledAgentIdentities.Count) enabled agent identities with no sign-in activities over the last 180 days.</p>"
+            AffectedObjects = $agt010Affected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-010] No inactive agent identities found."
+        Set-FindingOverride -FindingId "AGT-010" -Props $AGT010VariantProps.Secure
     }
 
     #endregion
