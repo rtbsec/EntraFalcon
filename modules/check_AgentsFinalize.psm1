@@ -589,19 +589,23 @@ function Invoke-CheckAgentsFinalize {
             [string]$RuleKind
         )
 
-        $apiName = if ($PermissionType -eq 'Application') { $Permission.ApiName } elseif ($Permission.PSObject.Properties['APIName']) { $Permission.APIName } else { $Permission.ApiName }
+        $apiName         = if ($PermissionType -eq 'Application') { $Permission.ApiName } elseif ($Permission.PSObject.Properties['APIName']) { $Permission.APIName } else { $Permission.ApiName }
         $permissionValue = if ($PermissionType -eq 'Application') { $Permission.ApiPermission } else { $Permission.Scope }
+        $consentType     = if ($PermissionType -eq 'Delegated' -and $Permission.PSObject.Properties['ConsentType']) { [string]$Permission.ConsentType } else { '' }
+        $principal       = if ($PermissionType -eq 'Delegated' -and $Permission.PSObject.Properties['Principal'])   { [string]$Permission.Principal }   else { '' }
 
         [pscustomobject]@{
             PermissionType          = $PermissionType
-            ApiName                 = if ([string]::IsNullOrWhiteSpace([string]$apiName)) { '-' } else { [string]$apiName }
+            ApiName                 = if ([string]::IsNullOrWhiteSpace([string]$apiName))         { '-' } else { [string]$apiName }
             Permission              = if ([string]::IsNullOrWhiteSpace([string]$permissionValue)) { '-' } else { [string]$permissionValue }
             Category                = if ([string]::IsNullOrWhiteSpace([string]$Permission.ApiPermissionCategorization)) { 'Uncategorized' } else { [string]$Permission.ApiPermissionCategorization }
             OriginType              = $OriginType
             OriginObjectDisplayName = if ([string]::IsNullOrWhiteSpace($OriginObjectDisplayName)) { '-' } else { $OriginObjectDisplayName }
-            OriginObjectId          = if ([string]::IsNullOrWhiteSpace($OriginObjectId)) { '-' } else { $OriginObjectId }
-            OriginReport            = if ([string]::IsNullOrWhiteSpace($OriginReport)) { '-' } else { $OriginReport }
-            RuleKind                = if ([string]::IsNullOrWhiteSpace($RuleKind)) { '-' } else { $RuleKind }
+            OriginObjectId          = if ([string]::IsNullOrWhiteSpace($OriginObjectId))          { '-' } else { $OriginObjectId }
+            OriginReport            = if ([string]::IsNullOrWhiteSpace($OriginReport))            { '-' } else { $OriginReport }
+            RuleKind                = if ([string]::IsNullOrWhiteSpace($RuleKind))                { '-' } else { $RuleKind }
+            ConsentType             = $consentType
+            Principal               = $principal
         }
     }
 
@@ -1404,33 +1408,57 @@ Execution Warnings = $($WarningList -join ' / ')
                 }
             }
         )
-        $ReportingEffectiveApiPermissions = @(
-            foreach ($object in @($item.EffectiveApiPermissionSources)) {
-                $source = switch ([string]$object.OriginType) {
-                    'Direct' { 'Direct' }
-                    'ConfirmedInherited' {
-                        switch ([string]$object.RuleKind) {
-                            'allAllowed' { 'Inherited (allAllowed)' }
-                            'enumerated' { 'Inherited (enumerated)' }
-                            default { 'Inherited' }
-                        }
-                    }
-                    'AssumedInherited' { 'Inherited (assumed foreign)' }
-                    default {
-                        if ([string]::IsNullOrWhiteSpace([string]$object.RuleKind) -or [string]$object.RuleKind -eq '-') {
-                            [string]$object.OriginType
-                        } else {
-                            "$($object.OriginType) ($($object.RuleKind))"
-                        }
+        $resolveSource = {
+            param($object)
+            switch ([string]$object.OriginType) {
+                'Direct'             { 'Direct' }
+                'ConfirmedInherited' {
+                    switch ([string]$object.RuleKind) {
+                        'allAllowed' { 'Inherited (allAllowed)' }
+                        'enumerated' { 'Inherited (enumerated)' }
+                        default      { 'Inherited' }
                     }
                 }
+                'AssumedInherited'   { 'Inherited (assumed foreign)' }
+                default {
+                    if ([string]::IsNullOrWhiteSpace([string]$object.RuleKind) -or [string]$object.RuleKind -eq '-') {
+                        [string]$object.OriginType
+                    } else {
+                        "$($object.OriginType) ($($object.RuleKind))"
+                    }
+                }
+            }
+        }
 
+        $ReportingEffectiveAppPermissions = @(
+            foreach ($object in @($item.EffectiveApiPermissionSources | Where-Object { $_.PermissionType -eq 'Application' })) {
                 [pscustomobject]@{
-                    PermissionType = $object.PermissionType
-                    ApiName = $object.ApiName
+                    ApiName    = $object.ApiName
                     Permission = $object.Permission
-                    Category = $object.Category
-                    Source = $source
+                    Category   = $object.Category
+                    Source     = & $resolveSource $object
+                }
+            }
+        )
+
+        $ReportingEffectiveDelegatedPermissions = @(
+            foreach ($object in @($item.EffectiveApiPermissionSources | Where-Object { $_.PermissionType -eq 'Delegated' })) {
+                $principalRaw     = [string]$object.Principal
+                $userDetails      = if ($principalRaw -and $principalRaw -ne '-') { $AllUsersBasicHT[$principalRaw] } else { $null }
+                $principalDisplay = if ($userDetails) {
+                    "<a href=Users_$($StartTimestamp)_$EscapedTenantName.html#$principalRaw>$($userDetails.UserPrincipalName)</a>"
+                } elseif ($principalRaw -and $principalRaw -ne '-') {
+                    $principalRaw
+                } else {
+                    '-'
+                }
+                [pscustomobject]@{
+                    ApiName     = $object.ApiName
+                    Permission  = $object.Permission
+                    Category    = $object.Category
+                    ConsentType = if ([string]::IsNullOrWhiteSpace([string]$object.ConsentType)) { '-' } else { [string]$object.ConsentType }
+                    Principal   = $principalDisplay
+                    Source      = & $resolveSource $object
                 }
             }
         )
@@ -1441,9 +1469,13 @@ Execution Warnings = $($WarningList -join ' / ')
             [void]$AgentIdentityTxt.AppendLine("Child Agent Users")
             [void]$AgentIdentityTxt.AppendLine(($item.AgentUsersDetails | Format-Table UPN,Enabled,Impact,Warnings | Out-String))
         }
-        if (($item.EffectiveApiPermissionSources | Measure-Object).Count -ge 1) {
-            [void]$AgentIdentityTxt.AppendLine("Effective API Permissions")
-            [void]$AgentIdentityTxt.AppendLine(($ReportingEffectiveApiPermissions | Select-Object PermissionType,ApiName,Permission,Category,Source | Format-Table -Wrap | Out-String -Width 320))
+        if (($ReportingEffectiveAppPermissions | Measure-Object).Count -ge 1) {
+            [void]$AgentIdentityTxt.AppendLine("Effective Application API Permissions")
+            [void]$AgentIdentityTxt.AppendLine(($ReportingEffectiveAppPermissions | Format-Table -Wrap | Out-String -Width 320))
+        }
+        if (($ReportingEffectiveDelegatedPermissions | Measure-Object).Count -ge 1) {
+            [void]$AgentIdentityTxt.AppendLine("Effective Delegated API Permissions")
+            [void]$AgentIdentityTxt.AppendLine(($ReportingEffectiveDelegatedPermissions | Select-Object ApiName,Permission,Category,ConsentType,Principal,Source | Format-Table -Wrap | Out-String -Width 320))
         }
         Add-ObjectDetails -Collection $AgentIdentityDetails -ObjectName $item.DisplayName -ObjectId $item.Id -Sections ([ordered]@{
             "General Information" = [pscustomobject]@{
@@ -1496,7 +1528,8 @@ Execution Warnings = $($WarningList -join ' / ')
                     }
                 }
             )
-            "Effective API Permissions" = $ReportingEffectiveApiPermissions
+            "Effective Application API Permissions"  = $ReportingEffectiveAppPermissions
+            "Effective Delegated API Permissions"    = $ReportingEffectiveDelegatedPermissions
         })
     }
 
