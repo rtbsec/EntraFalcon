@@ -1140,7 +1140,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-004",
-    "Title": "Foreign Agent Identities with Privileged Entra ID Roles",
+    "Title": "Foreign Agent Identities with Entra ID Roles",
     "Category": "Agent Identity",
     "Severity": 3,
     "Description": "",
@@ -1215,6 +1215,30 @@ function Invoke-CheckTenant {
     "Title": "Inactive Agent Identities",
     "Category": "Agent Identity",
     "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-011",
+    "Title": "Foreign Agent Users with Entra ID Roles",
+    "Category": "Agent Identity",
+    "Severity": 3,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-012",
+    "Title": "Foreign Agent Users with Privileged Azure Roles",
+    "Category": "Agent Identity",
+    "Severity": 3,
     "Description": "",
     "Threat": "",
     "Status": "NotVulnerable",
@@ -2159,7 +2183,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities were identified that have privileged Entra ID roles assigned.</p>"
+            Description = "<p>No enabled foreign agent identities were identified that have Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2278,6 +2302,44 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Skipped = @{
             Status = "Skipped"
             Description = "<p>Check skipped because no agent identities were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT011VariantProps = @{
+        Default = @{
+            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Entra ID role assignments.</p>"
+            Remediation = "<p>Restrict foreign agent users to the minimum Entra ID privileges required for their intended functionality. Regularly review assigned Entra ID roles and remove any assignments that are not strictly necessary. If privileged user context is not required, consider whether the agent user is needed at all.</p><p>If the justification is unclear, contact the publisher to validate the required role assignments and confirm the expected use of the agent user.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled foreign agent users were identified that have Entra ID roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT012VariantProps = @{
+        Default = @{
+            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure ID role assignments.</p>"
+            Remediation = "<p>Restrict foreign agent users to the minimum Azure privileges required for their intended functionality. Regularly review assigned Azure roles and remove any assignments that are not strictly necessary. If privileged user context is not required, consider whether the agent user is needed at all.</p><p>If the justification is unclear, contact the publisher to validate the required role assignments and confirm the expected use of the agent user.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled foreign agent users were identified that have privileged Azure roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -2441,6 +2503,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-008" = $AGT008VariantProps.Default
         "AGT-009" = $AGT009VariantProps.Default
         "AGT-010" = $AGT010VariantProps.Default
+        "AGT-011" = $AGT011VariantProps.Default
+        "AGT-012" = $AGT012VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2616,7 +2680,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identities
-    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006/AGT-007/AGT-008/AGT-009/AGT-010: Identify internal/foreign agent identities with extensive API permissions, inactivity, or privileged Entra ID/Azure roles.
+    # AGT-002/AGT-003/AGT-004/AGT-005/AGT-006/AGT-007/AGT-008/AGT-009/AGT-010: Identify internal/foreign agent identities with extensive API permissions, inactivity, or Entra ID/Azure role assignments.
     $foreignAgentIdentitiesWithExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithDelegatedExtensiveApi = [System.Collections.Generic.List[object]]::new()
     $foreignAgentIdentitiesWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
@@ -2660,7 +2724,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
 
                 $entraMaxTier = "$($agentIdentity.EntraMaxTier)"
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and (Get-IntSafe $agentIdentity.EntraRoles) -gt 0) {
                     $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
@@ -2681,7 +2745,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Users
-    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013: Reuse a single pass over users.
+    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013 and AGT-011: Reuse a single pass over users.
     # Track inactive users, tier-0 Entra users, tier-0 Azure users (all + hybrid), users without MFA capability, and likely unnecessary synced accounts.
     $inactiveEnabledUsers = [System.Collections.Generic.List[object]]::new()
     $enabledTier0Users = [System.Collections.Generic.List[object]]::new()
@@ -2692,7 +2756,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $enabledTier0AzureUnprotectedUsers = [System.Collections.Generic.List[object]]::new()
     $enabledUsersWithoutMfaCap = [System.Collections.Generic.List[object]]::new()
     $enabledOnPremNeverSignedInOlderThan90Users = [System.Collections.Generic.List[object]]::new()
+    $foreignAgentUsersWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
+    $foreignAgentUsersWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
     $enabledUsersForMfaCapCheckCount = 0
+    $agentUserCount = 0
     if ($Users) {
         write-host "[*] Analyzing Users"
         foreach ($entry in $Users.GetEnumerator()) {
@@ -2704,6 +2771,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $isOnPrem = $user.OnPrem -eq $true -or "$($user.OnPrem)".Trim().ToLowerInvariant() -eq "true"
             $isProtected = -not ($user.Protected -eq $false -or "$($user.Protected)".Trim().ToLowerInvariant() -eq "false")
             $isAgent = $user.Agent -eq $true
+            $isForeignAgent = $user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true"
             $mfaCapRaw = "$($user.MfaCap)".Trim()
             $hasMfaCap = $user.MfaCap -eq $true -or $mfaCapRaw.ToLowerInvariant() -eq "true"
             $isUnknownMfaCap = $mfaCapRaw -eq "?"
@@ -2712,6 +2780,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $lastSignInDays = "$($user.LastSignInDays)".Trim()
             $createdDays = Get-IntSafe $user.CreatedDays
             $excludeSyncUser = Test-IsExcludedSyncUser -UserObject $user
+            if ($isAgent) {
+                $agentUserCount += 1
+            }
             if ($isEnabled -and -not $excludeSyncUser -and -not $isAgent) {
                 $enabledUsersForMfaCapCheckCount += 1
             }
@@ -2750,6 +2821,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                         User = $user
                     })
                 }
+            }
+            if ($isEnabled -and $isAgent -and $isForeignAgent -and (Get-IntSafe $user.EntraRoles) -gt 0) {
+                $foreignAgentUsersWithPrivilegedEntraRoles.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
+            }
+            if ($isEnabled -and $isAgent -and $isForeignAgent -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+                $foreignAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
             }
             if ($isEnabled -and $azureMaxTier -eq "Tier-0") {
                 $enabledTier0AzureUsers.Add([pscustomobject]@{
@@ -5935,15 +6018,15 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-003" -Props $AGT003VariantProps.Secure
     }
 
-    # AGT-004: Apply result for enabled foreign agent identities with privileged Entra ID roles.
+    # AGT-004: Apply result for enabled foreign agent identities with Entra ID roles assigned.
     if ($agentIdentityCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-004] Skipped because no agent identities were found."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Skipped
     } elseif ($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with privileged Entra ID roles."
+        Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6036,11 +6119,17 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities have privileged Entra ID roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt004Tier0</li><li>Tier 1: $agt004Tier1</li><li>Tier 2: $agt004Tier2</li><li>Uncategorized tier: $agt004TierUncat</li></ul>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities have Entra ID roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt004Tier0</li><li>Tier 1: $agt004Tier1</li><li>Tier 2: $agt004Tier2</li><li>Uncategorized tier: $agt004TierUncat</li></ul>"
             AffectedObjects = $agt004Affected
         }
+        if ($agt004Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-004" -Props @{
+                Severity = 4
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Entra ID role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged tenant resources.</p><p>Since at least one foreign agent identity has a Tier-0 Entra ID role assigned, attackers may be able to compromise the entire tenant.</p>"
+            }
+        }
     } else {
-        Write-Log -Level Verbose -Message "[AGT-004] No enabled foreign agent identities with privileged Entra ID roles found."
+        Write-Log -Level Verbose -Message "[AGT-004] No enabled foreign agent identities with Entra ID roles found."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Secure
     }
 
@@ -6656,6 +6745,144 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-010] No inactive agent identities found."
         Set-FindingOverride -FindingId "AGT-010" -Props $AGT010VariantProps.Secure
+    }
+
+    # AGT-011: Apply result for enabled foreign agent users with Entra ID roles assigned.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-011] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Skipped
+    } elseif ($foreignAgentUsersWithPrivilegedEntraRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-011] Found $($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users with Entra ID roles."
+        Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-011" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt011Tier0 = 0
+        $agt011Tier1 = 0
+        $agt011Tier2 = 0
+        $agt011TierUncat = 0
+        $agt011Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $foreignAgentUsersWithPrivilegedEntraRoles) {
+            $user = $entry.User
+            $entraMaxTier = "$($user.EntraMaxTier)".Trim()
+            switch ($entraMaxTier) {
+                "Tier-0" { $agt011Tier0 += 1 }
+                "Tier-1" { $agt011Tier1 += 1 }
+                "Tier-2" { $agt011Tier2 += 1 }
+                default { $agt011TierUncat += 1 }
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $agt011Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Entra Roles" = $user.EntraRoles
+                "Entra Max Tier" = $user.EntraMaxTier
+                "Warnings" = $user.Warnings
+                "_SortRisk" = $user.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-011" -Props @{
+            Description = "<p>$($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users have Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt011Tier0</li><li>Tier 1: $agt011Tier1</li><li>Tier 2: $agt011Tier2</li><li>Uncategorized tier: $agt011TierUncat</li></ul>"
+            AffectedObjects = $agt011Affected
+        }
+        if ($agt011Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-011" -Props @{
+                Severity = 4
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Entra ID role assignments.</p><p>Since at least one foreign agent user has a Tier-0 Entra ID role assigned, attackers may be able to compromise the entire tenant.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-011] No enabled foreign agent users with Entra ID roles found."
+        Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Secure
+    }
+
+    # AGT-012: Apply result for enabled foreign agent users with privileged Azure roles.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-012] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Skipped
+    } elseif ($foreignAgentUsersWithPrivilegedAzureRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with privileged Azure roles."
+        Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-012" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt012Tier0 = 0
+        $agt012Tier1 = 0
+        $agt012Tier2 = 0
+        $agt012TierUncat = 0
+        $agt012Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $foreignAgentUsersWithPrivilegedAzureRoles) {
+            $user = $entry.User
+            $azureMaxTier = "$($user.AzureMaxTier)".Trim()
+            switch ($azureMaxTier) {
+                "Tier-0" { $agt012Tier0 += 1 }
+                "Tier-1" { $agt012Tier1 += 1 }
+                "Tier-2" { $agt012Tier2 += 1 }
+                default { $agt012TierUncat += 1 }
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $agt012Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Azure Roles" = $user.AzureRoles
+                "Azure Max Tier" = $user.AzureMaxTier
+                "Warnings" = $user.Warnings
+                "_SortRisk" = $user.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-012" -Props @{
+            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            AffectedObjects = $agt012Affected
+        }
+        if ($agt012Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-012" -Props @{
+                Severity = 4
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure ID role assignments.</p><p>Since at least one foreign agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with privileged Azure roles found."
+        Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Secure
     }
 
     #endregion
