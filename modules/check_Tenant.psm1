@@ -8700,7 +8700,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Set-FindingOverride -FindingId "USR-005" -Props $USR005VariantProps.VulnerableWithGuests
         }
         Set-FindingOverride -FindingId "USR-005" -Props @{
-            Description = "<p>There are $($inactiveEnabledUsers.Count) inactive users.</p><ul><li>Internal users: $inactiveMembers</li><li>Guest users: $inactiveGuests</li></ul>"
+            Description = "<p>There are $($inactiveEnabledUsers.Count) inactive users.</p><ul><li>Internal users: $inactiveMembers</li><li>Guest users: $inactiveGuests</li></ul><p><strong>Note:</strong> Users are considered inactive if they have no successful sign-in for 180 days or if they never signed in and were created more than 180 days ago.</p>"
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2CEntraRoles%2CAzureRoles%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
