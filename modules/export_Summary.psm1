@@ -143,6 +143,97 @@ return @"
         }
     }
 
+    function Get-DurationSeconds {
+        param(
+            [string]$Start,
+            [string]$End
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Start) -or [string]::IsNullOrWhiteSpace($End)) { return $null }
+
+        try {
+            $culture = [System.Globalization.CultureInfo]::InvariantCulture
+            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+            $startTime = [datetime]::ParseExact($Start, "yyyyMMdd HH:mm", $culture, $styles)
+            $endTime = [datetime]::ParseExact($End, "yyyyMMdd HH:mm", $culture, $styles)
+            $duration = $endTime - $startTime
+            if ($duration.TotalSeconds -lt 0) { return $null }
+            return [int][math]::Round($duration.TotalSeconds)
+        } catch {
+            return $null
+        }
+    }
+
+    function Get-IsoTimestamp {
+        param(
+            [string]$Value
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+        try {
+            $culture = [System.Globalization.CultureInfo]::InvariantCulture
+            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+            $parsedTime = [datetime]::ParseExact($Value, "yyyyMMdd HH:mm", $culture, $styles)
+            return $parsedTime.ToString("o")
+        } catch {
+            return $null
+        }
+    }
+
+    function Get-DomainUserCountLookup {
+        param(
+            [hashtable]$Users = @{}
+        )
+
+        $domainUserCount = @{}
+        foreach ($userObj in $Users.Values) {
+            if ($userObj.UPN) {
+                $at = $userObj.UPN.IndexOf('@')
+                if ($at -ge 0) {
+                    $upnDomain = $userObj.UPN.Substring($at + 1).ToLowerInvariant()
+                    if ($domainUserCount.ContainsKey($upnDomain)) {
+                        $domainUserCount[$upnDomain]++
+                    } else {
+                        $domainUserCount[$upnDomain] = 1
+                    }
+                }
+            }
+        }
+
+        return $domainUserCount
+    }
+
+    function Get-CoverageWarnings {
+        param(
+            [bool]$SubscriptionCountIncomplete
+        )
+
+        $warnings = New-Object System.Collections.Generic.List[string]
+
+        if (-not [bool]$GLOBALAzurePsChecks) {
+            if ($GlobalAuditSummary.ManagedIdentities.Count -ge 1) {
+                $warnings.Add("Azure IAM not collected: no subscription visible or accessible, but managed identities exist.")
+            } else {
+                $warnings.Add("Azure IAM not collected: no subscriptions exist or access is unavailable.")
+            }
+        }
+        if (-not [bool]$GLOBALGraphExtendedChecks) {
+            $warnings.Add("PIM role data not collected.")
+        }
+        if (-not [bool]$GLOBALPimForGroupsChecked) {
+            $warnings.Add("PIM group data not collected.")
+        }
+        if (-not [bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps) {
+            $warnings.Add("Default Microsoft enterprise applications not collected.")
+        }
+        if ($SubscriptionCountIncomplete) {
+            $warnings.Add("Subscription count is incomplete because Azure subscription access was unavailable.")
+        }
+
+        return @($warnings)
+    }
+
     function New-GeneralSection {
         param(
             [string]$TenantName,
@@ -208,21 +299,7 @@ return @"
 
         if (-not $Domains -or $Domains.Count -eq 0) { return "" }
 
-        # Build domain -> user count lookup (single pass, no regex)
-        $domainUserCount = @{}
-        foreach ($userObj in $Users.Values) {
-            if ($userObj.UPN) {
-                $at = $userObj.UPN.IndexOf('@')
-                if ($at -ge 0) {
-                    $upnDomain = $userObj.UPN.Substring($at + 1).ToLower()
-                    if ($domainUserCount.ContainsKey($upnDomain)) {
-                        $domainUserCount[$upnDomain]++
-                    } else {
-                        $domainUserCount[$upnDomain] = 1
-                    }
-                }
-            }
-        }
+        $domainUserCount = Get-DomainUserCountLookup -Users $Users
         $escapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
         $userReportBase = "Users_$($StartTimestamp)_$($escapedTenantName).html"
 
@@ -375,15 +452,29 @@ return @"
         "False (default)"
     }
 
+    $subscriptionCountNumeric = [int]$GlobalAuditSummary.Subscriptions.Count
+    $subscriptionCollected = [bool]$GLOBALAzurePsChecks
+    $subscriptionCountIncomplete = (-not $subscriptionCollected -and $subscriptionCountNumeric -eq 0 -and $GlobalAuditSummary.ManagedIdentities.Count -ge 1)
+    $subscriptionReason = $null
+    if ($subscriptionCountNumeric -eq 0) {
+        if ($subscriptionCountIncomplete) {
+            $subscriptionReason = "no subscription visible or accessible, but managed identities exist"
+        } elseif (-not $subscriptionCollected) {
+            $subscriptionReason = "no subscriptions or no access"
+        } else {
+            $subscriptionReason = "no subscriptions"
+        }
+    }
+
     #Check whether there are subscriptions
-    if ($($GlobalAuditSummary.Subscriptions.Count) -eq 0) {
+    if ($subscriptionCountNumeric -eq 0) {
         if ($($GlobalAuditSummary.ManagedIdentities.Count) -ge 1) {
             $SubscriptionCount = "? (no access - but there are managed identities!)"
         } else {
             $SubscriptionCount = "0 (no subscriptions or no access)"
         }
     } else {
-        $SubscriptionCount = $($GlobalAuditSummary.Subscriptions.Count)
+        $SubscriptionCount = $subscriptionCountNumeric
     }
 
     $securityFindingsSummary = $GlobalAuditSummary.SecurityFindings
@@ -395,6 +486,19 @@ return @"
     $hostOs = Get-EntraFalconHostOs
     $powerShellDisplay = "V$($PSVersionTable.PSVersion.ToString()) ($hostOs)"
     $durationDisplay = Get-DurationDisplay -Start $GlobalAuditSummary.Time.Start -End $GlobalAuditSummary.Time.End
+    $durationSeconds = Get-DurationSeconds -Start $GlobalAuditSummary.Time.Start -End $GlobalAuditSummary.Time.End
+    $executionStartIso = Get-IsoTimestamp -Value $GlobalAuditSummary.Time.Start
+    $executionEndIso = Get-IsoTimestamp -Value $GlobalAuditSummary.Time.End
+    $domainUserCount = Get-DomainUserCountLookup -Users $Users
+    $defaultDomain = @($TenantDomains | Where-Object { $_.IsDefault } | Select-Object -First 1 -ExpandProperty Id)
+    if ($defaultDomain.Count -eq 0) {
+        $defaultDomain = $null
+    } else {
+        $defaultDomain = $defaultDomain[0]
+    }
+    $coverageWarnings = Get-CoverageWarnings -SubscriptionCountIncomplete $subscriptionCountIncomplete
+    $summaryReportKey = "Summary"
+    $summaryReportName = "EntraFalcon Enumeration Summary"
 
     $azureIamBadge = if ([bool]$GLOBALAzurePsChecks) {
         New-GeneralStatusBadge -Text "Collected" -Tone "success"
@@ -1632,7 +1736,189 @@ Enumeration Results:
 "@
 
     # Set generic information hich gets injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
+    Set-GlobalReportManifest -CurrentReportKey $summaryReportKey -CurrentReportName $summaryReportName
+
+    $summaryJson = [ordered]@{
+        schemaVersion = 1
+        generatedAt   = (Get-Date).ToString("o")
+        tenant        = [ordered]@{
+            id            = $GlobalAuditSummary.Tenant.ID
+            name          = $GlobalAuditSummary.Tenant.Name
+            defaultDomain = $defaultDomain
+            license       = [ordered]@{
+                name  = $GlobalAuditSummary.TenantLicense.Name
+                level = $GlobalAuditSummary.TenantLicense.Level
+            }
+        }
+        execution     = [ordered]@{
+            start              = $executionStartIso
+            end                = $executionEndIso
+            durationSeconds    = $durationSeconds
+            entraFalconVersion = $GlobalAuditSummary.EntraFalcon.Version
+            powershellVersion  = $PSVersionTable.PSVersion.ToString()
+            hostOs             = $hostOs
+            userAgent          = $GlobalAuditSummary.UserAgent.Name
+        }
+        coverage      = [ordered]@{
+            azureIamCollected         = [bool]$GLOBALAzurePsChecks
+            pimRoleDataCollected      = [bool]$GLOBALGraphExtendedChecks
+            pimGroupDataCollected     = [bool]$GLOBALPimForGroupsChecked
+            defaultMicrosoftSpCollected = [bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps
+            coverageWarnings          = @($coverageWarnings)
+        }
+        counts        = [ordered]@{
+            users                             = [ordered]@{
+                count      = $GlobalAuditSummary.Users.Count
+                guests     = $GlobalAuditSummary.Users.Guests
+                inactive   = $GlobalAuditSummary.Users.Inactive
+                enabled    = $GlobalAuditSummary.Users.Enabled
+                onPrem     = $GlobalAuditSummary.Users.OnPrem
+                mfaCapable = $GlobalAuditSummary.Users.MfaCapable
+            }
+            groups                            = [ordered]@{
+                count        = $GlobalAuditSummary.Groups.Count
+                m365         = $GlobalAuditSummary.Groups.M365
+                publicM365   = $GlobalAuditSummary.Groups.PublicM365
+                pimOnboarded = $GlobalAuditSummary.Groups.PimOnboarded
+                onPrem       = $GlobalAuditSummary.Groups.OnPrem
+            }
+            appRegistrations                  = [ordered]@{
+                count       = $GlobalAuditSummary.AppRegistrations.Count
+                appLock     = $GlobalAuditSummary.AppRegistrations.AppLock
+                credentials = [ordered]@{
+                    appsSecrets        = $GlobalAuditSummary.AppRegistrations.Credentials.AppsSecrets
+                    appsCerts          = $GlobalAuditSummary.AppRegistrations.Credentials.AppsCerts
+                    appsFederatedCreds = $GlobalAuditSummary.AppRegistrations.Credentials.AppsFederatedCreds
+                    appsNoCreds        = $GlobalAuditSummary.AppRegistrations.Credentials.AppsNoCreds
+                }
+            }
+            enterpriseApps                    = [ordered]@{
+                count         = $GlobalAuditSummary.EnterpriseApps.Count
+                foreign       = $GlobalAuditSummary.EnterpriseApps.Foreign
+                credentials   = $GlobalAuditSummary.EnterpriseApps.Credentials
+                includeMsApps = $GlobalAuditSummary.EnterpriseApps.IncludeMsApps
+            }
+            managedIdentities                 = [ordered]@{
+                count      = $GlobalAuditSummary.ManagedIdentities.Count
+                isExplicit = $GlobalAuditSummary.ManagedIdentities.IsExplicit
+            }
+            agentIdentities                   = [ordered]@{
+                count           = $GlobalAuditSummary.AgentIdentities.Count
+                foreign         = $GlobalAuditSummary.AgentIdentities.Foreign
+                inactive        = $GlobalAuditSummary.AgentIdentities.Inactive
+                totalAgentUsers = $GlobalAuditSummary.AgentIdentities.TotalAgentUsers
+            }
+            agentIdentityBlueprintsPrincipals = [ordered]@{
+                count   = $GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Count
+                foreign = $GlobalAuditSummary.AgentIdentityBlueprintsPrincipals.Foreign
+            }
+            agentIdentityBlueprints           = [ordered]@{
+                count       = $GlobalAuditSummary.AgentIdentityBlueprints.Count
+                credentials = [ordered]@{
+                    secrets              = $GlobalAuditSummary.AgentIdentityBlueprints.Credentials.Secrets
+                    certificates         = $GlobalAuditSummary.AgentIdentityBlueprints.Credentials.Certificates
+                    federatedCredentials = $GlobalAuditSummary.AgentIdentityBlueprints.Credentials.'Federated Credentials'
+                    none                 = $GlobalAuditSummary.AgentIdentityBlueprints.Credentials.None
+                }
+            }
+            administrativeUnits              = [ordered]@{
+                count = $GlobalAuditSummary.AdministrativeUnits.Count
+            }
+            conditionalAccess                = [ordered]@{
+                count   = $GlobalAuditSummary.ConditionalAccess.Count
+                enabled = $GlobalAuditSummary.ConditionalAccess.Enabled
+            }
+            domains                           = [ordered]@{
+                count        = $GlobalAuditSummary.Domains.Count
+                federated    = $GlobalAuditSummary.Domains.Federated
+                verified     = $GlobalAuditSummary.Domains.Verified
+                default      = $GlobalAuditSummary.Domains.Default
+                adminManaged = $GlobalAuditSummary.Domains.AdminManaged
+            }
+            subscriptions                     = [ordered]@{
+                count      = $subscriptionCountNumeric
+                collected  = $subscriptionCollected
+                incomplete = $subscriptionCountIncomplete
+                reason     = $subscriptionReason
+            }
+            entraRoleAssignments              = [ordered]@{
+                count         = $GlobalAuditSummary.EntraRoleAssignments.Count
+                eligible      = $GlobalAuditSummary.EntraRoleAssignments.Eligible
+                builtIn       = $GlobalAuditSummary.EntraRoleAssignments.BuiltIn
+                principalType = [ordered]@{
+                    user               = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.User
+                    group              = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Group
+                    app                = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.App
+                    mi                 = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.MI
+                    agentIdentity      = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.AgentIdentity
+                    blueprintPrincipal = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.BlueprintPrincipal
+                    unknown            = $GlobalAuditSummary.EntraRoleAssignments.PrincipalType.Unknown
+                }
+                tiers         = [ordered]@{
+                    tier0         = $GlobalAuditSummary.EntraRoleAssignments.Tiers.'Tier-0'
+                    tier1         = $GlobalAuditSummary.EntraRoleAssignments.Tiers.'Tier-1'
+                    tier2         = $GlobalAuditSummary.EntraRoleAssignments.Tiers.'Tier-2'
+                    uncategorized = $GlobalAuditSummary.EntraRoleAssignments.Tiers.Uncategorized
+                }
+            }
+            azureRoleAssignments              = [ordered]@{
+                count         = $GlobalAuditSummary.AzureRoleAssignments.Count
+                eligible      = $GlobalAuditSummary.AzureRoleAssignments.Eligible
+                builtIn       = $GlobalAuditSummary.AzureRoleAssignments.BuiltIn
+                principalType = [ordered]@{
+                    user               = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.User
+                    group              = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Group
+                    sp                 = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.SP
+                    mi                 = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.MI
+                    agentIdentity      = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.AgentIdentity
+                    blueprintPrincipal = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.BlueprintPrincipal
+                    unknown            = $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Unknown
+                }
+                tiers         = [ordered]@{
+                    tier0         = $GlobalAuditSummary.AzureRoleAssignments.Tiers.'Tier-0'
+                    tier1         = $GlobalAuditSummary.AzureRoleAssignments.Tiers.'Tier-1'
+                    tier2         = $GlobalAuditSummary.AzureRoleAssignments.Tiers.'Tier-2'
+                    tier3         = $GlobalAuditSummary.AzureRoleAssignments.Tiers.'Tier-3'
+                    uncategorized = $GlobalAuditSummary.AzureRoleAssignments.Tiers.Uncategorized
+                }
+            }
+            pimSettings                       = [ordered]@{
+                count = $GlobalAuditSummary.PimSettings.Count
+            }
+            securityFindings                 = [ordered]@{
+                vulnerable    = $securityFindingsSummary.Vulnerable
+                notVulnerable = $securityFindingsSummary.NotVulnerable
+                skipped       = $securityFindingsSummary.Skipped
+                total         = $securityFindingsSummary.Total
+            }
+        }
+        domains       = @(
+            @($TenantDomains | ForEach-Object {
+                $domainKey = $_.Id.ToLowerInvariant()
+                [ordered]@{
+                    id                      = $_.Id
+                    authenticationType      = $_.AuthenticationType
+                    isAdminManaged          = $_.IsAdminManaged
+                    isDefault               = $_.IsDefault
+                    isVerified              = $_.IsVerified
+                    supportedServices       = @($_.SupportedServices)
+                    federatedIdpMfaBehavior = if ([string]::IsNullOrWhiteSpace($_.FederatedIdpMfaBehavior)) { $null } else { $_.FederatedIdpMfaBehavior }
+                    userCount               = if ($domainUserCount.ContainsKey($domainKey)) { $domainUserCount[$domainKey] } else { 0 }
+                }
+            })
+        )
+        subscriptionDetails = @(
+            @($GlobalAuditSummary.Subscriptions.Details | ForEach-Object {
+                [ordered]@{
+                    id               = $_.Id
+                    displayName      = $_.DisplayName
+                    state            = $_.State
+                    managedByTenants = $_.ManagedByTenants
+                    resources        = $_.Resources
+                }
+            })
+        )
+    }
 
     # Build header section
     $headerHTML = "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div>$generalSectionHtml"
@@ -1642,15 +1928,15 @@ Enumeration Results:
     $CssCombined = "<title>EF - Summary</title>`n" + $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Head $CssCombined -PostContent $PostContentCombined
     $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
-    $summaryTxtPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
+    $summaryJsonPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).json"
     $Report | Out-File $summaryHtmlPath
-    $OutputCLI | Out-File -Width 512 -FilePath $summaryTxtPath
+    $summaryJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryJsonPath -Encoding utf8
 
     # Print to console
     Write-Host "`n`n========================================= Summary =========================================" -ForegroundColor Cyan
     Write-Host $OutputCLI
     Write-Host "===========================================================================================" -ForegroundColor Cyan
     write-host "[+] Enumeration summary stored at: $summaryHtmlPath"
-    write-host "[+] Enumeration summary (txt) stored at: $summaryTxtPath"
+    write-host "[+] Enumeration summary (json) stored at: $summaryJsonPath"
 }
 
