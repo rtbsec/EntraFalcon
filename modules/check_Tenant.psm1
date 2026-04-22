@@ -174,6 +174,88 @@ function Invoke-CheckTenant {
                $upn.StartsWith("ADToAADSyncServiceAccount", [System.StringComparison]::OrdinalIgnoreCase)
     }
 
+    function Get-AgentIdentityEffectiveRoleEntries {
+        param(
+            [Parameter(Mandatory = $true)]
+            $AgentIdentity,
+            [Parameter(Mandatory = $true)]
+            [ValidateSet("Entra", "Azure")]
+            [string]$RoleSystem
+        )
+
+        $detailsProperty = if ($RoleSystem -eq "Entra") { "EntraRoleDetails" } else { "AzureRoleDetails" }
+        $entries = [System.Collections.Generic.List[object]]::new()
+
+        foreach ($role in @($AgentIdentity.$detailsProperty)) {
+            if (-not $role) { continue }
+            if ($role.PSObject -and $role.PSObject.Properties.Count -eq 0) { continue }
+            if ("$($role.AssignmentType)".Trim() -ne "Active") { continue }
+            $hasMeaningfulFields = (
+                -not [string]::IsNullOrWhiteSpace("$($role.RoleTier)") -or
+                -not [string]::IsNullOrWhiteSpace("$($role.DisplayName)") -or
+                -not [string]::IsNullOrWhiteSpace("$($role.RoleName)") -or
+                -not [string]::IsNullOrWhiteSpace("$($role.RoleDefinitionId)") -or
+                -not [string]::IsNullOrWhiteSpace("$($role.RoleDefinitionName)")
+            )
+            if (-not $hasMeaningfulFields) { continue }
+            $entries.Add([pscustomobject]@{
+                Source = "Direct"
+                GroupDisplayName = $null
+                Role = $role
+            })
+        }
+
+        foreach ($sourceDefinition in @(
+            @{ Source = "GroupMember"; Groups = @($AgentIdentity.GroupMember) },
+            @{ Source = "GroupOwner"; Groups = @($AgentIdentity.GroupOwner) }
+        )) {
+            foreach ($group in $sourceDefinition.Groups) {
+                if (-not $group) { continue }
+                $groupDisplayName = if ($group.DisplayName) { $group.DisplayName } else { $group.Id }
+                $addedDetailedRole = $false
+                foreach ($role in @($group.$detailsProperty)) {
+                    if (-not $role) { continue }
+                    if ($role.PSObject -and $role.PSObject.Properties.Count -eq 0) { continue }
+                    if ("$($role.AssignmentType)".Trim() -ne "Active") { continue }
+                    $hasMeaningfulFields = (
+                        -not [string]::IsNullOrWhiteSpace("$($role.RoleTier)") -or
+                        -not [string]::IsNullOrWhiteSpace("$($role.DisplayName)") -or
+                        -not [string]::IsNullOrWhiteSpace("$($role.RoleName)") -or
+                        -not [string]::IsNullOrWhiteSpace("$($role.RoleDefinitionId)") -or
+                        -not [string]::IsNullOrWhiteSpace("$($role.RoleDefinitionName)")
+                    )
+                    if (-not $hasMeaningfulFields) { continue }
+                    $addedDetailedRole = $true
+                    $entries.Add([pscustomobject]@{
+                        Source = $sourceDefinition.Source
+                        GroupDisplayName = $groupDisplayName
+                        Role = $role
+                    })
+                }
+
+                # Some group-derived role paths are only exposed as aggregate role counts / max tier.
+                if ($addedDetailedRole) { continue }
+                $groupMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem $RoleSystem
+                $aggregateRoleCount = Get-IntSafe $groupMetrics.RoleCount
+                $aggregateRoleTier = "$($groupMetrics.MaxTier)"
+                $normalizedTier = Get-NormalizedRoleTierLabel -RoleTier $aggregateRoleTier
+                if ($aggregateRoleCount -le 0) { continue }
+                if ($normalizedTier -eq "Uncategorized") { continue }
+                $entries.Add([pscustomobject]@{
+                    Source = $sourceDefinition.Source
+                    GroupDisplayName = $groupDisplayName
+                    Role = [pscustomobject]@{
+                        RoleTier = $aggregateRoleTier
+                        AssignmentType = "Active"
+                        IsSynthetic = $true
+                    }
+                })
+            }
+        }
+
+        return @($entries)
+    }
+
     function Write-CapHardFailureTrace {
         param(
             [string]$CapId,
@@ -1147,12 +1229,12 @@ function Invoke-CheckTenant {
     "Threat": "",
     "Status": "NotVulnerable",
     "Remediation": "",
-    "Confidence": "Requires Verification",
+    "Confidence": "Sure",
     "AffectedObjects": []
   },
   {
     "FindingId": "AGT-005",
-    "Title": "Foreign Agent Identities with Privileged Azure Roles",
+    "Title": "Foreign Agent Identities with Azure Roles",
     "Category": "Agent Identity",
     "Severity": 3,
     "Description": "",
@@ -1236,7 +1318,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-012",
-    "Title": "Foreign Agent Users with Privileged Azure Roles",
+    "Title": "Foreign Agent Users with Azure Roles",
     "Category": "Agent Identity",
     "Severity": 3,
     "Description": "",
@@ -2239,7 +2321,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Vulnerable = @{
             Status = "Vulnerable"
-            Confidence = "Requires Verification"
         }
         Secure = @{
             Status = "NotVulnerable"
@@ -2262,7 +2343,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities were identified that have privileged Azure roles assigned.</p>"
+            Description = "<p>No enabled foreign agent identities were identified that have Azure roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2387,7 +2468,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     }
     $AGT012VariantProps = @{
         Default = @{
-            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure ID role assignments.</p>"
+            Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure role assignments.</p>"
             Remediation = "<p>Restrict foreign agent users to the minimum Azure privileges required for their intended functionality. Regularly review assigned Azure roles and remove any assignments that are not strictly necessary. If privileged user context is not required, consider whether the agent user is needed at all.</p><p>If the justification is unclear, contact the publisher to validate the required role assignments and confirm the expected use of the agent user.</p>"
         }
         Vulnerable = @{
@@ -2395,7 +2476,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent users were identified that have privileged Azure roles assigned.</p>"
+            Description = "<p>No enabled foreign agent users were identified that have Azure roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2453,6 +2534,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Secure = @{
             Status = "NotVulnerable"
             Description = "<p>No enabled agent users were identified that own groups referenced by Conditional Access policies.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
         }
         Skipped = @{
             Status = "Skipped"
@@ -2890,7 +2973,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
 
                 $entraMaxTier = "$($agentIdentity.EntraMaxTier)"
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and (Get-IntSafe $agentIdentity.EntraRoles) -gt 0) {
+                $effectiveEntraRoleEntries = @()
+                if ($agentIdentity.Enabled -eq $true) {
+                    $effectiveEntraRoleEntries = @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Entra)
+                }
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $effectiveEntraRoleEntries.Count -gt 0) {
                     $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
@@ -2898,7 +2985,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
 
                 $azureMaxTier = "$($agentIdentity.AzureMaxTier)"
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+                $effectiveAzureRoleEntries = @()
+                if ($agentIdentity.Enabled -eq $true) {
+                    $effectiveAzureRoleEntries = @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)
+                }
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $effectiveAzureRoleEntries.Count -gt 0) {
                     $foreignAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
                 if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
@@ -3010,7 +3101,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and $isForeignAgent -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+            if ($isEnabled -and $isAgent -and $isForeignAgent -and (Get-IntSafe $user.AzureRoles) -gt 0) {
                 $foreignAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
@@ -5867,11 +5958,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $secretLines = [System.Collections.Generic.List[string]]::new()
             $credentialDetails = @()
             if ($blueprint.AppCredentialsDetails) {
-                if ($blueprint.AppCredentialsDetails -is [System.Collections.IEnumerable] -and -not ($blueprint.AppCredentialsDetails -is [string])) {
-                    $credentialDetails = @($blueprint.AppCredentialsDetails)
-                } else {
-                    $credentialDetails = @($blueprint.AppCredentialsDetails)
-                }
+                $credentialDetails = @($blueprint.AppCredentialsDetails)
             }
             foreach ($cred in $credentialDetails) {
                 if ($cred.Type -ne "Secret") { continue }
@@ -5966,11 +6053,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             if ($blueprint.AppOwnerSPs) {
                 $ownerSpList = @()
-                if ($blueprint.AppOwnerSPs -is [System.Collections.IEnumerable] -and -not ($blueprint.AppOwnerSPs -is [string])) {
-                    $ownerSpList = @($blueprint.AppOwnerSPs)
-                } else {
-                    $ownerSpList = @($blueprint.AppOwnerSPs)
-                }
+                $ownerSpList = @($blueprint.AppOwnerSPs)
                 foreach ($owner in $ownerSpList) {
                     $ownerDetailsEnumerated += 1
                     $name = $owner.displayName
@@ -6075,11 +6158,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $identityHasAssumedInheritedPermissions = $false
             $permissionSourceRows = @()
             if ($agentIdentity.EffectiveApiPermissionSources) {
-                if ($agentIdentity.EffectiveApiPermissionSources -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiPermissionSources -is [string])) {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                } else {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                }
+                $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
             }
             if ($permissionSourceRows.Count -gt 0) {
                 foreach ($level in @("Dangerous", "High", "Medium")) {
@@ -6114,17 +6193,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             } else {
                 $rawPerms = @()
                 if ($agentIdentity.EffectiveAppApiPermission) {
-                    if ($agentIdentity.EffectiveAppApiPermission -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveAppApiPermission -is [string])) {
-                        $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
-                    } else {
-                        $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
-                    }
+                    $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
                 } elseif ($agentIdentity.AppApiPermission) {
-                    if ($agentIdentity.AppApiPermission -is [System.Collections.IEnumerable] -and -not ($agentIdentity.AppApiPermission -is [string])) {
-                        $rawPerms = @($agentIdentity.AppApiPermission)
-                    } else {
-                        $rawPerms = @($agentIdentity.AppApiPermission)
-                    }
+                    $rawPerms = @($agentIdentity.AppApiPermission)
                 }
                 foreach ($level in @("Dangerous", "High", "Medium")) {
                     foreach ($perm in $rawPerms) {
@@ -6212,11 +6283,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $identityHasAssumedInheritedPermissions = $false
             $permissionSourceRows = @()
             if ($agentIdentity.EffectiveApiPermissionSources) {
-                if ($agentIdentity.EffectiveApiPermissionSources -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiPermissionSources -is [string])) {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                } else {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                }
+                $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
             }
             if ($permissionSourceRows.Count -gt 0) {
                 foreach ($level in @("Dangerous", "High")) {
@@ -6261,17 +6328,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             } else {
                 $rawPerms = @()
                 if ($agentIdentity.EffectiveApiDelegatedDetails) {
-                    if ($agentIdentity.EffectiveApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiDelegatedDetails -is [string])) {
-                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
-                    } else {
-                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
-                    }
+                    $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
                 } elseif ($agentIdentity.ApiDelegatedDetails) {
-                    if ($agentIdentity.ApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.ApiDelegatedDetails -is [string])) {
-                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
-                    } else {
-                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
-                    }
+                    $rawPerms = @($agentIdentity.ApiDelegatedDetails)
                 }
                 foreach ($level in @("Dangerous", "High")) {
                     foreach ($perm in $rawPerms) {
@@ -6344,7 +6403,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6356,68 +6415,62 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt004Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $foreignAgentIdentitiesWithPrivilegedEntraRoles) {
             $entraRoleEntries = [System.Collections.Generic.List[object]]::new()
-            foreach ($role in @($agentIdentity.EntraRoleDetails)) {
-                if ($role) {
-                    $entraRoleEntries.Add([pscustomobject]@{
-                        Source = "Direct"
-                        GroupDisplayName = $null
-                        Role = $role
-                    })
-                }
+            foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Entra)) {
+                if (-not $entry.Role) { continue }
+                $entraRoleEntries.Add($entry)
             }
 
+            $tiersSeen = @{}
             $tier0Count = 0
             $tier1Count = 0
-            $tier2Count = 0
-            $tierUncatCount = 0
-            foreach ($entry in $entraRoleEntries) {
-                $tierLabel = Get-NormalizedRoleTierLabel $entry.Role.RoleTier
-                switch ($tierLabel) {
-                    "0" { $tier0Count += 1; $agt004Tier0 += 1 }
-                    "1" { $tier1Count += 1; $agt004Tier1 += 1 }
-                    "2" { $tier2Count += 1; $agt004Tier2 += 1 }
-                    default { $tierUncatCount += 1; $agt004TierUncat += 1 }
-                }
-            }
-
             $roleLines = [System.Collections.Generic.List[string]]::new()
-            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "0" })) {
-                $role = $entry.Role
-                $roleName = $role.DisplayName
-                if (-not $roleName) { $roleName = $role.RoleTemplateId }
-                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 0 Entra Role: $roleName scoped to $scope")
-                }
-            }
-            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "1" })) {
-                $role = $entry.Role
-                $roleName = $role.DisplayName
-                if (-not $roleName) { $roleName = $role.RoleTemplateId }
-                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 1 Entra Role: $roleName scoped to $scope")
-                }
-            }
-            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "2" })) {
-                $role = $entry.Role
-                $roleName = $role.DisplayName
-                if (-not $roleName) { $roleName = $role.RoleTemplateId }
-                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 2 Entra Role: $roleName scoped to $scope")
-                }
-            }
-            foreach ($entry in @($entraRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel $_.Role.RoleTier) -eq "Uncategorized" })) {
-                $role = $entry.Role
-                $roleName = $role.DisplayName
-                if (-not $roleName) { $roleName = $role.RoleTemplateId }
-                $scope = if ($role.ScopeResolved) { "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" } else { "Tenant" }
-                if ($roleName) {
-                    $roleLines.Add("Uncategorized Entra Role: $roleName scoped to $scope")
+            foreach ($tier in @("0", "1", "2", "Uncategorized")) {
+                foreach ($entry in $entraRoleEntries) {
+                    $role = $entry.Role
+                    $roleTier = Get-NormalizedRoleTierLabel -RoleTier $role.RoleTier
+                    if ($roleTier -ne $tier) { continue }
+                    $tiersSeen[$roleTier] = $true
+                    if ($roleTier -eq "0") { $tier0Count += 1 }
+                    if ($roleTier -eq "1") { $tier1Count += 1 }
+                    $roleName = $role.DisplayName
+                    if (-not $roleName) { $roleName = $role.RoleDefinitionId }
+                    if (-not $roleName) { $roleName = $role.RoleTemplateId }
+                    $scopeName = $role.ScopeResolved.DisplayName
+                    $scopeType = $role.ScopeResolved.Type
+                    if (-not $scopeName) { $scopeName = "Tenant" }
+                    if (-not $scopeType) { $scopeType = "Directory" }
+                    if ($roleName -or $role.IsSynthetic) {
+                        switch ($entry.Source) {
+                            "Direct" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role (details not expanded)")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                                }
+                            }
+                            "GroupMember" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role through group membership '$($entry.GroupDisplayName)'")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                                }
+                            }
+                            "GroupOwner" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role through group ownership '$($entry.GroupDisplayName)'")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier} Entra Role: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
+            if ($tiersSeen.ContainsKey("0")) { $agt004Tier0 += 1 }
+            if ($tiersSeen.ContainsKey("1")) { $agt004Tier1 += 1 }
+            if ($tiersSeen.ContainsKey("2")) { $agt004Tier2 += 1 }
+            if ($tiersSeen.ContainsKey("Uncategorized") -or $tiersSeen.Keys.Count -eq 0) { $agt004TierUncat += 1 }
             $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $parentPrincipal = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
@@ -6451,15 +6504,15 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Secure
     }
 
-    # AGT-005: Apply result for enabled foreign agent identities with privileged Azure roles.
+    # AGT-005: Apply result for enabled foreign agent identities with Azure roles.
     if ($agentIdentityCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-005] Skipped because no agent identities were found."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Skipped
     } elseif ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with Azure roles."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6471,13 +6524,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt005Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $foreignAgentIdentitiesWithPrivilegedAzureRoles) {
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
-            foreach ($role in @($agentIdentity.AzureRoleDetails)) {
-                if ($role) {
-                    $azureRoleEntries.Add([pscustomobject]@{
-                        Source = "Direct"
-                        Role = $role
-                    })
-                }
+            foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)) {
+                if (-not $entry.Role) { continue }
+                $azureRoleEntries.Add($entry)
             }
 
             $tiersSeen = @{}
@@ -6493,11 +6542,42 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (-not $roleName) { $roleName = $role.RoleDefinitionName }
                     if (-not $roleName) { $roleName = $role.RoleDefinitionId }
                     $scope = $role.Scope
-                    if (-not $scope -and $role.ScopeResolved) { $scope = $role.ScopeResolved.DisplayName }
-                    if (-not $scope -and $role.ScopeResolved) { $scope = "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" }
+                    if (-not $scope -and $role.ScopeResolved) {
+                        $scopeResolvedName = "$($role.ScopeResolved.DisplayName)".Trim()
+                        $scopeResolvedType = "$($role.ScopeResolved.Type)".Trim()
+                        if (-not [string]::IsNullOrWhiteSpace($scopeResolvedName) -and -not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                            $scope = "$scopeResolvedName ($scopeResolvedType)"
+                        } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedName)) {
+                            $scope = $scopeResolvedName
+                        } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                            $scope = $scopeResolvedType
+                        }
+                    }
                     if (-not $scope) { $scope = "Unknown scope" }
-                    if ($roleName) {
-                        $roleLines.Add("Tier ${roleTier}: $roleName scoped to $scope")
+                    if ($roleName -or $role.IsSynthetic) {
+                        switch ($entry.Source) {
+                            "Direct" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier}: Azure role details not expanded")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier}: $roleName scoped to $scope")
+                                }
+                            }
+                            "GroupMember" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier}: Azure role through group membership '$($entry.GroupDisplayName)' (details not expanded)")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier}: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scope")
+                                }
+                            }
+                            "GroupOwner" {
+                                if ($role.IsSynthetic) {
+                                    $roleLines.Add("Tier ${roleTier}: Azure role through group ownership '$($entry.GroupDisplayName)' (details not expanded)")
+                                } else {
+                                    $roleLines.Add("Tier ${roleTier}: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scope")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -6529,7 +6609,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have privileged Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
             AffectedObjects = $agt005Affected
         }
         if ($agt005Tier0 -gt 0) {
@@ -6539,7 +6619,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
         }
     } else {
-        Write-Log -Level Verbose -Message "[AGT-005] No enabled foreign agent identities with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-005] No enabled foreign agent identities with Azure roles found."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Secure
     }
 
@@ -6570,11 +6650,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $identityHasAssumedInheritedPermissions = $false
             $permissionSourceRows = @()
             if ($agentIdentity.EffectiveApiPermissionSources) {
-                if ($agentIdentity.EffectiveApiPermissionSources -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiPermissionSources -is [string])) {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                } else {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                }
+                $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
             }
             if ($permissionSourceRows.Count -gt 0) {
                 foreach ($level in @("Dangerous", "High")) {
@@ -6609,17 +6685,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             } else {
                 $rawPerms = @()
                 if ($agentIdentity.EffectiveAppApiPermission) {
-                    if ($agentIdentity.EffectiveAppApiPermission -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveAppApiPermission -is [string])) {
-                        $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
-                    } else {
-                        $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
-                    }
+                    $rawPerms = @($agentIdentity.EffectiveAppApiPermission)
                 } elseif ($agentIdentity.AppApiPermission) {
-                    if ($agentIdentity.AppApiPermission -is [System.Collections.IEnumerable] -and -not ($agentIdentity.AppApiPermission -is [string])) {
-                        $rawPerms = @($agentIdentity.AppApiPermission)
-                    } else {
-                        $rawPerms = @($agentIdentity.AppApiPermission)
-                    }
+                    $rawPerms = @($agentIdentity.AppApiPermission)
                 }
                 foreach ($level in @("Dangerous", "High")) {
                     foreach ($perm in $rawPerms) {
@@ -6704,11 +6772,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $identityHasAssumedInheritedPermissions = $false
             $permissionSourceRows = @()
             if ($agentIdentity.EffectiveApiPermissionSources) {
-                if ($agentIdentity.EffectiveApiPermissionSources -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiPermissionSources -is [string])) {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                } else {
-                    $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
-                }
+                $permissionSourceRows = @($agentIdentity.EffectiveApiPermissionSources)
             }
             if ($permissionSourceRows.Count -gt 0) {
                 foreach ($level in @("Dangerous", "High")) {
@@ -6751,17 +6815,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             } else {
                 $rawPerms = @()
                 if ($agentIdentity.EffectiveApiDelegatedDetails) {
-                    if ($agentIdentity.EffectiveApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.EffectiveApiDelegatedDetails -is [string])) {
-                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
-                    } else {
-                        $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
-                    }
+                    $rawPerms = @($agentIdentity.EffectiveApiDelegatedDetails)
                 } elseif ($agentIdentity.ApiDelegatedDetails) {
-                    if ($agentIdentity.ApiDelegatedDetails -is [System.Collections.IEnumerable] -and -not ($agentIdentity.ApiDelegatedDetails -is [string])) {
-                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
-                    } else {
-                        $rawPerms = @($agentIdentity.ApiDelegatedDetails)
-                    }
+                    $rawPerms = @($agentIdentity.ApiDelegatedDetails)
                 }
                 foreach ($level in @("Dangerous", "High")) {
                     foreach ($perm in $rawPerms) {
@@ -6842,31 +6898,27 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt008Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $internalAgentIdentitiesWithPrivilegedEntraRoles) {
             $entraRoleEntries = [System.Collections.Generic.List[object]]::new()
-            foreach ($role in @($agentIdentity.EntraRoleDetails)) {
-                if ($role) {
-                    $entraRoleEntries.Add([pscustomobject]@{
-                        Source = "Direct"
-                        GroupDisplayName = $null
-                        Role = $role
-                    })
-                }
+            foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Entra)) {
+                if (-not $entry.Role) { continue }
+                $entraRoleEntries.Add($entry)
             }
 
             $entraTierEntries = @()
             foreach ($entry in $entraRoleEntries) {
                 $role = $entry.Role
                 if (-not $role) { continue }
-                if ($role.RoleTier -ne 0 -and $role.RoleTier -ne 1) { continue }
+                $roleTier = Get-NormalizedRoleTierLabel -RoleTier $role.RoleTier
+                if ($roleTier -ne "0" -and $roleTier -ne "1") { continue }
                 $entraTierEntries += $entry
             }
 
-            $tier0Count = @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 0 }).Count
-            $tier1Count = @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 1 }).Count
+            $tier0Count = @($entraTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" }).Count
+            $tier1Count = @($entraTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" }).Count
             if ($tier0Count -gt 0) { $agt008Tier0 += 1 }
             if ($tier1Count -gt 0) { $agt008Tier1 += 1 }
 
             $roleLines = [System.Collections.Generic.List[string]]::new()
-            foreach ($entry in @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 0 })) {
+            foreach ($entry in @($entraTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" })) {
                 $role = $entry.Role
                 $roleName = $role.DisplayName
                 if (-not $roleName) { $roleName = $role.RoleDefinitionId }
@@ -6874,11 +6926,33 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $scopeType = $role.ScopeResolved.Type
                 if (-not $scopeName) { $scopeName = "Tenant" }
                 if (-not $scopeType) { $scopeType = "Directory" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 0 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                if ($roleName -or $role.IsSynthetic) {
+                    switch ($entry.Source) {
+                        "Direct" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Entra Role (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                        "GroupMember" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Entra Role through group membership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Entra Role: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                        "GroupOwner" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Entra Role through group ownership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Entra Role: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                    }
                 }
             }
-            foreach ($entry in @($entraTierEntries | Where-Object { $_.Role.RoleTier -eq 1 })) {
+            foreach ($entry in @($entraTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" })) {
                 $role = $entry.Role
                 $roleName = $role.DisplayName
                 if (-not $roleName) { $roleName = $role.RoleDefinitionId }
@@ -6886,8 +6960,30 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $scopeType = $role.ScopeResolved.Type
                 if (-not $scopeName) { $scopeName = "Tenant" }
                 if (-not $scopeType) { $scopeType = "Directory" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 1 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                if ($roleName -or $role.IsSynthetic) {
+                    switch ($entry.Source) {
+                        "Direct" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Entra Role (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Entra Role: $roleName scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                        "GroupMember" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Entra Role through group membership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Entra Role: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                        "GroupOwner" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Entra Role through group ownership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Entra Role: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scopeName ($scopeType)")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -6942,55 +7038,114 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt009Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $internalAgentIdentitiesWithPrivilegedAzureRoles) {
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
-            foreach ($role in @($agentIdentity.AzureRoleDetails)) {
-                if ($role) {
-                    $azureRoleEntries.Add([pscustomobject]@{
-                        Source = "Direct"
-                        Role = $role
-                    })
-                }
+            foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)) {
+                if (-not $entry.Role) { continue }
+                $azureRoleEntries.Add($entry)
             }
 
             $azureTierEntries = @()
             foreach ($entry in $azureRoleEntries) {
                 $role = $entry.Role
                 if (-not $role) { continue }
-                if ($role.RoleTier -ne 0 -and $role.RoleTier -ne 1) { continue }
+                $roleTier = Get-NormalizedRoleTierLabel -RoleTier $role.RoleTier
+                if ($roleTier -ne "0" -and $roleTier -ne "1") { continue }
                 $azureTierEntries += $entry
             }
 
-            $tier0Count = @($azureTierEntries | Where-Object { $_.Role.RoleTier -eq 0 }).Count
-            $tier1Count = @($azureTierEntries | Where-Object { $_.Role.RoleTier -eq 1 }).Count
+            $tier0Count = @($azureTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" }).Count
+            $tier1Count = @($azureTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" }).Count
             if ($tier0Count -gt 0) { $agt009Tier0 += 1 }
             if ($tier1Count -gt 0) { $agt009Tier1 += 1 }
 
             $roleLines = [System.Collections.Generic.List[string]]::new()
-            foreach ($entry in @($azureTierEntries | Where-Object { $_.Role.RoleTier -eq 0 })) {
+            foreach ($entry in @($azureTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" })) {
                 $role = $entry.Role
                 $roleName = $role.RoleName
                 if (-not $roleName) { $roleName = $role.DisplayName }
                 if (-not $roleName) { $roleName = $role.RoleDefinitionName }
                 if (-not $roleName) { $roleName = $role.RoleDefinitionId }
                 $scope = $role.Scope
-                if (-not $scope -and $role.ScopeResolved) { $scope = $role.ScopeResolved.DisplayName }
-                if (-not $scope -and $role.ScopeResolved) { $scope = "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" }
+                if (-not $scope -and $role.ScopeResolved) {
+                    $scopeResolvedName = "$($role.ScopeResolved.DisplayName)".Trim()
+                    $scopeResolvedType = "$($role.ScopeResolved.Type)".Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($scopeResolvedName) -and -not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                        $scope = "$scopeResolvedName ($scopeResolvedType)"
+                    } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedName)) {
+                        $scope = $scopeResolvedName
+                    } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                        $scope = $scopeResolvedType
+                    }
+                }
                 if (-not $scope) { $scope = "Unknown scope" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 0 Azure Role: $roleName scoped to $scope")
+                if ($roleName -or $role.IsSynthetic) {
+                    switch ($entry.Source) {
+                        "Direct" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Azure Role (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Azure Role: $roleName scoped to $scope")
+                            }
+                        }
+                        "GroupMember" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Azure Role through group membership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Azure Role: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scope")
+                            }
+                        }
+                        "GroupOwner" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 0 Azure Role through group ownership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 0 Azure Role: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scope")
+                            }
+                        }
+                    }
                 }
             }
-            foreach ($entry in @($azureTierEntries | Where-Object { $_.Role.RoleTier -eq 1 })) {
+            foreach ($entry in @($azureTierEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" })) {
                 $role = $entry.Role
                 $roleName = $role.RoleName
                 if (-not $roleName) { $roleName = $role.DisplayName }
                 if (-not $roleName) { $roleName = $role.RoleDefinitionName }
                 if (-not $roleName) { $roleName = $role.RoleDefinitionId }
                 $scope = $role.Scope
-                if (-not $scope -and $role.ScopeResolved) { $scope = $role.ScopeResolved.DisplayName }
-                if (-not $scope -and $role.ScopeResolved) { $scope = "$($role.ScopeResolved.DisplayName) ($($role.ScopeResolved.Type))" }
+                if (-not $scope -and $role.ScopeResolved) {
+                    $scopeResolvedName = "$($role.ScopeResolved.DisplayName)".Trim()
+                    $scopeResolvedType = "$($role.ScopeResolved.Type)".Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($scopeResolvedName) -and -not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                        $scope = "$scopeResolvedName ($scopeResolvedType)"
+                    } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedName)) {
+                        $scope = $scopeResolvedName
+                    } elseif (-not [string]::IsNullOrWhiteSpace($scopeResolvedType)) {
+                        $scope = $scopeResolvedType
+                    }
+                }
                 if (-not $scope) { $scope = "Unknown scope" }
-                if ($roleName) {
-                    $roleLines.Add("Tier 1 Azure Role: $roleName scoped to $scope")
+                if ($roleName -or $role.IsSynthetic) {
+                    switch ($entry.Source) {
+                        "Direct" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Azure Role (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Azure Role: $roleName scoped to $scope")
+                            }
+                        }
+                        "GroupMember" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Azure Role through group membership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Azure Role: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scope")
+                            }
+                        }
+                        "GroupOwner" {
+                            if ($role.IsSynthetic) {
+                                $roleLines.Add("Tier 1 Azure Role through group ownership '$($entry.GroupDisplayName)' (details not expanded)")
+                            } else {
+                                $roleLines.Add("Tier 1 Azure Role: $roleName through group ownership '$($entry.GroupDisplayName)' scoped to $scope")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -7110,7 +7265,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $agt011Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Entra Roles" = $user.EntraRoles
@@ -7134,15 +7289,15 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Secure
     }
 
-    # AGT-012: Apply result for enabled foreign agent users with privileged Azure roles.
+    # AGT-012: Apply result for enabled foreign agent users with Azure roles.
     if ($agentUserCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-012] Skipped because no agent users were found."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Skipped
     } elseif ($foreignAgentUsersWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with Azure roles."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7179,7 +7334,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $agt012Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
@@ -7189,17 +7344,17 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
             AffectedObjects = $agt012Affected
         }
         if ($agt012Tier0 -gt 0) {
             Set-FindingOverride -FindingId "AGT-012" -Props @{
                 Severity = 4
-                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure ID role assignments.</p><p>Since at least one foreign agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure role assignments.</p><p>Since at least one foreign agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
             }
         }
     } else {
-        Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with Azure roles found."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Secure
     }
 
@@ -7341,7 +7496,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-015] Found $($agentUsersOwningCapRelatedGroups.Count) enabled agent users owning CAP-related groups."
         Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-015" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7406,11 +7561,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-015] No enabled agent users owning CAP-related groups found."
         Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Secure
-        Set-FindingOverride -FindingId "AGT-015" -Props @{
-            Description = "<p>No enabled agent users were identified that own groups referenced by Conditional Access policies.</p>"
-            AffectedObjects = @()
-            RelatedReportUrl = ""
-        }
     }
 
     # AGT-016: Apply result for enabled inactive agent users.

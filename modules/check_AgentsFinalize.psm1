@@ -1316,8 +1316,30 @@ Execution Warnings = $($WarningList -join ' / ')
                 }
             }
         )
+        $ReportingEligibleRoles = @(
+            foreach ($object in @($item.EligibleEntraRoleDetails)) {
+                [pscustomobject]@{
+                    "Role name" = $object.DisplayName
+                    "Tier Level" = $object.RoleTier
+                    "Privileged" = $object.isPrivileged
+                    "IsBuiltin" = $object.IsBuiltin
+                    "Scoped to" = "$($object.ScopeResolved.DisplayName) ($($object.ScopeResolved.Type))"
+                }
+            }
+        )
         $ReportingAzureRoles = @(
             foreach ($object in @($item.AzureRoleDetails)) {
+                [pscustomobject]@{
+                    "Role name" = $object.RoleName
+                    "RoleType" = $object.RoleType
+                    "Tier Level" = $object.RoleTier
+                    "Conditions" = $object.Conditions
+                    "Scoped to" = $object.Scope
+                }
+            }
+        )
+        $ReportingEligibleAzureRoles = @(
+            foreach ($object in @($item.EligibleAzureRoleDetails)) {
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
@@ -1510,7 +1532,9 @@ Execution Warnings = $($WarningList -join ' / ')
                 }
             )
             "Active Entra Role Assignments" = $ReportingRoles
-            "Azure IAM assignments" = $ReportingAzureRoles
+            "Eligible Entra Role Assignments" = $ReportingEligibleRoles
+            "Active Azure IAM assignments" = $ReportingAzureRoles
+            "Eligible Azure IAM assignments" = $ReportingEligibleAzureRoles
             "Owner of Groups" = $ReportingGroupOwner
             "Owned App Registrations" = $ReportingAppOwner
             "Owned Service Principals" = $ReportingSPOwner
