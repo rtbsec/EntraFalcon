@@ -1576,7 +1576,7 @@ Appendix: Used API Permission Reference
     $GlobalAuditSummary.AgentIdentities.Foreign = @($AgentIdentityItems | Where-Object { $_.Foreign }).Count
     $GlobalAuditSummary.AgentIdentities.Inactive = @($AgentIdentityItems | Where-Object { $_.Inactive }).Count
     $TotalAgentUsers = ($AgentIdentityItems | Measure-Object -Property AgentUsers -Sum).Sum
-    $GlobalAuditSummary.AgentIdentities.TotalAgentUsers = if ($null -eq $TotalAgentUsers) { 0 } else { $TotalAgentUsers }
+    $GlobalAuditSummary.AgentIdentities.TotalAgentUsers = if ($null -eq $TotalAgentUsers) { 0 } else { [int]$TotalAgentUsers }
     $GlobalAuditSummary.AgentIdentities.ApiCategorization.Dangerous = @($AgentIdentityItems | Where-Object { $_.ApiDangerous -gt 0 }).Count
     $GlobalAuditSummary.AgentIdentities.ApiCategorization.High = @($AgentIdentityItems | Where-Object { $_.ApiHigh -gt 0 }).Count
     $GlobalAuditSummary.AgentIdentities.ApiCategorization.Medium = @($AgentIdentityItems | Where-Object { $_.ApiMedium -gt 0 }).Count
