@@ -1247,6 +1247,54 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "AGT-013",
+    "Title": "Internal Agent Users with Privileged Entra ID Roles",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-014",
+    "Title": "Internal Agent Users with Privileged Azure Roles",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-015",
+    "Title": "Agent Users Owning CAP-Related Groups",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
+    "FindingId": "AGT-016",
+    "Title": "Inactive Agent Users",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Sure",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "MAI-001",
     "Title": "Managed Identities with API Privileges",
     "Category": "Managed Identities",
@@ -2344,6 +2392,82 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             RelatedReportUrl = ""
         }
     }
+    $AGT013VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Entra ID role assignments.</p>"
+            Remediation = "<p>Restrict internal agent users to the minimum Entra ID privileges required for their intended functionality. Regularly review assigned Entra ID roles and remove any assignments that are not strictly necessary. If privileged user context is not required, consider whether the agent user is needed at all.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled internal agent users were identified that have privileged Entra ID roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT014VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Azure role assignments.</p>"
+            Remediation = "<p>Restrict internal agent users to the minimum Azure privileges required for their intended functionality. Regularly review assigned Azure roles and remove any assignments that are not strictly necessary. If privileged user context is not required, consider whether the agent user is needed at all.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled internal agent users were identified that have privileged Azure roles assigned.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT015VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain control of an agent user, they may be able to abuse ownership of groups that are referenced by Conditional Access policies. By changing group membership, attackers may be able to influence which users are included in or excluded from specific Conditional Access controls.</p>"
+            Remediation = "<p>Review whether agent users really need to own groups that are referenced by Conditional Access policies. Remove unnecessary ownership assignments and use dedicated administrative identities for managing CAP-related groups.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled agent users were identified that own groups referenced by Conditional Access policies.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+    $AGT016VariantProps = @{
+        Default = @{
+            Threat = "<p>Inactive but enabled agent users increase the attack surface. If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to authenticate as the dormant agent user without immediate detection.</p>"
+            Remediation = '<p>Verify whether these agent users are still required. Disable or remove any agent users that are no longer needed.</p><p>In general, agent user accounts should only be created where a user object is truly required, such as for an agent that needs a mailbox or Teams presence. If the agent can operate with application credentials alone, avoid agent user accounts because they add complexity through licenses, group memberships, and user-level policies.</p><p>References:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#design-agent-identity-blueprints" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#design-agent-identity-blueprints</a></li><li><a href="https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#govern-the-agent-lifecycle" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/agent-id/best-practices-agent-id#govern-the-agent-lifecycle</a></li></ul>'
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No enabled inactive agent users were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent users were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
@@ -2505,6 +2629,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-010" = $AGT010VariantProps.Default
         "AGT-011" = $AGT011VariantProps.Default
         "AGT-012" = $AGT012VariantProps.Default
+        "AGT-013" = $AGT013VariantProps.Default
+        "AGT-014" = $AGT014VariantProps.Default
+        "AGT-015" = $AGT015VariantProps.Default
+        "AGT-016" = $AGT016VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2745,7 +2873,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Users
-    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013 and AGT-011: Reuse a single pass over users.
+    # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013 and AGT-011/AGT-012/AGT-013/AGT-014/AGT-015/AGT-016: Reuse a single pass over users.
     # Track inactive users, tier-0 Entra users, tier-0 Azure users (all + hybrid), users without MFA capability, and likely unnecessary synced accounts.
     $inactiveEnabledUsers = [System.Collections.Generic.List[object]]::new()
     $enabledTier0Users = [System.Collections.Generic.List[object]]::new()
@@ -2758,6 +2886,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $enabledOnPremNeverSignedInOlderThan90Users = [System.Collections.Generic.List[object]]::new()
     $foreignAgentUsersWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
     $foreignAgentUsersWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
+    $internalAgentUsersWithPrivilegedEntraRoles = [System.Collections.Generic.List[object]]::new()
+    $internalAgentUsersWithPrivilegedAzureRoles = [System.Collections.Generic.List[object]]::new()
+    $agentUsersOwningCapRelatedGroups = [System.Collections.Generic.List[object]]::new()
+    $inactiveEnabledAgentUsers = [System.Collections.Generic.List[object]]::new()
     $enabledUsersForMfaCapCheckCount = 0
     $agentUserCount = 0
     if ($Users) {
@@ -2788,6 +2920,12 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             if ($isEnabled -and $isInactive) {
                 $inactiveEnabledUsers.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
+            }
+            if ($isEnabled -and $isAgent -and $isInactive) {
+                $inactiveEnabledAgentUsers.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
@@ -2828,11 +2966,42 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     User = $user
                 })
             }
+            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+                $internalAgentUsersWithPrivilegedEntraRoles.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
+            }
             if ($isEnabled -and $isAgent -and $isForeignAgent -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
                 $foreignAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
+            }
+            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+                $internalAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
+                    Id = $entry.Key
+                    User = $user
+                })
+            }
+            if ($isEnabled -and $isAgent) {
+                $ownedCapRelatedGroups = [System.Collections.Generic.List[object]]::new()
+                $ownedCapReferences = 0
+                foreach ($group in @($user.GroupOwnerDetails)) {
+                    $groupCapCount = Get-IntSafe $group.CAPs
+                    if ($groupCapCount -gt 0) {
+                        $ownedCapRelatedGroups.Add($group)
+                        $ownedCapReferences += $groupCapCount
+                    }
+                }
+                if ($ownedCapRelatedGroups.Count -gt 0) {
+                    $agentUsersOwningCapRelatedGroups.Add([pscustomobject]@{
+                        Id = $entry.Key
+                        User = $user
+                        OwnedCapRelatedGroups = @($ownedCapRelatedGroups)
+                        OwnedCapReferences = $ownedCapReferences
+                    })
+                }
             }
             if ($isEnabled -and $azureMaxTier -eq "Tier-0") {
                 $enabledTier0AzureUsers.Add([pscustomobject]@{
@@ -6883,6 +7052,281 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with privileged Azure roles found."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Secure
+    }
+
+    # AGT-013: Apply result for enabled internal agent users with privileged Entra ID roles.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-013] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Skipped
+    } elseif ($internalAgentUsersWithPrivilegedEntraRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-013] Found $($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users with privileged Entra ID roles."
+        Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-013" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt013Tier0 = 0
+        $agt013Tier1 = 0
+        $agt013Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $internalAgentUsersWithPrivilegedEntraRoles) {
+            $user = $entry.User
+            $entraMaxTier = "$($user.EntraMaxTier)".Trim()
+            switch ($entraMaxTier) {
+                "Tier-0" { $agt013Tier0 += 1 }
+                "Tier-1" { $agt013Tier1 += 1 }
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $agt013Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Entra Roles" = $user.EntraRoles
+                "Entra Max Tier" = $user.EntraMaxTier
+                "Warnings" = $user.Warnings
+                "_SortRisk" = $user.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-013" -Props @{
+            Description = "<p>$($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users have privileged Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt013Tier0</li><li>Tier 1: $agt013Tier1</li></ul>"
+            AffectedObjects = $agt013Affected
+        }
+        if ($agt013Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-013" -Props @{
+                Severity = 3
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Entra ID role assignments.</p><p>Since at least one internal agent user has a Tier-0 Entra ID role assigned, attackers may be able to compromise the entire tenant.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-013] No enabled internal agent users with privileged Entra ID roles found."
+        Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Secure
+    }
+
+    # AGT-014: Apply result for enabled internal agent users with privileged Azure roles.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-014] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Skipped
+    } elseif ($internalAgentUsersWithPrivilegedAzureRoles.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with privileged Azure roles."
+        Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-014" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt014Tier0 = 0
+        $agt014Tier1 = 0
+        $agt014Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $internalAgentUsersWithPrivilegedAzureRoles) {
+            $user = $entry.User
+            $azureMaxTier = "$($user.AzureMaxTier)".Trim()
+            switch ($azureMaxTier) {
+                "Tier-0" { $agt014Tier0 += 1 }
+                "Tier-1" { $agt014Tier1 += 1 }
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $agt014Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Azure Roles" = $user.AzureRoles
+                "Azure Max Tier" = $user.AzureMaxTier
+                "Warnings" = $user.Warnings
+                "_SortRisk" = $user.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-014" -Props @{
+            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt014Tier0</li><li>Tier 1: $agt014Tier1</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            AffectedObjects = $agt014Affected
+        }
+        if ($agt014Tier0 -gt 0) {
+            Set-FindingOverride -FindingId "AGT-014" -Props @{
+                Severity = 3
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Azure role assignments.</p><p>Since at least one internal agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-014] No enabled internal agent users with privileged Azure roles found."
+        Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Secure
+    }
+
+    # AGT-015: Apply result for enabled agent users owning CAP-related groups.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-015] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Skipped
+    } elseif ($agentUsersOwningCapRelatedGroups.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-015] Found $($agentUsersOwningCapRelatedGroups.Count) enabled agent users owning CAP-related groups."
+        Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-015" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortRisk"
+            AffectedSortDir = "DESC"
+        }
+        $agt015Foreign = 0
+        $agt015Internal = 0
+        $agt015OwnedGroups = 0
+        $agt015CapReferences = 0
+        $agt015Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $agentUsersOwningCapRelatedGroups) {
+            $user = $entry.User
+            $ownedCapGroups = @($entry.OwnedCapRelatedGroups)
+            $agt015OwnedGroups += $ownedCapGroups.Count
+            $agt015CapReferences += (Get-IntSafe $entry.OwnedCapReferences)
+            if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") {
+                $agt015Foreign += 1
+            } else {
+                $agt015Internal += 1
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $ownedGroupDisplay = foreach ($group in $ownedCapGroups) {
+                $groupDisplayName = $group.Id
+                if ($AllGroupsDetails -and $AllGroupsDetails.ContainsKey($group.Id) -and $AllGroupsDetails[$group.Id]) {
+                    $matchingGroup = $AllGroupsDetails[$group.Id]
+                    if (-not [string]::IsNullOrWhiteSpace("$($matchingGroup.DisplayName)")) {
+                        $groupDisplayName = $matchingGroup.DisplayName
+                    }
+                }
+                "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($group.Id)`" target=`"_blank`">$groupDisplayName</a> (CAPs: $(Get-IntSafe $group.CAPs))"
+            }
+
+            $agt015Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
+                "CAP Groups Owned" = $ownedCapGroups.Count
+                "Owned CAP-Related Groups" = ($ownedGroupDisplay -join "<br>")
+                "_SortRisk" = $user.Risk
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-015" -Props @{
+            Description = "<p>$($agentUsersOwningCapRelatedGroups.Count) enabled agent users own $agt015OwnedGroups groups that are referenced by Conditional Access policies.</p><p>Affected agent users by parent type:</p><ul><li>Foreign agent users: $agt015Foreign</li><li>Internal agent users: $agt015Internal</li></ul><p>Total Conditional Access references across owned groups: $agt015CapReferences</p>"
+            AffectedObjects = $agt015Affected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-015] No enabled agent users owning CAP-related groups found."
+        Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Secure
+        Set-FindingOverride -FindingId "AGT-015" -Props @{
+            Description = "<p>No enabled agent users were identified that own groups referenced by Conditional Access policies.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
+
+    # AGT-016: Apply result for enabled inactive agent users.
+    if ($agentUserCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-016] Skipped because no agent users were found."
+        Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Skipped
+    } elseif ($inactiveEnabledAgentUsers.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-016] Found $($inactiveEnabledAgentUsers.Count) enabled inactive agent users."
+        Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Vulnerable
+        Set-FindingOverride -FindingId "AGT-016" -Props @{
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            AffectedSortKey = "_SortLastSignInDays"
+            AffectedSortDir = "DESC"
+        }
+        $agt016Foreign = 0
+        $agt016Internal = 0
+        $agt016Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($entry in $inactiveEnabledAgentUsers) {
+            $user = $entry.User
+            if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") {
+                $agt016Foreign += 1
+            } else {
+                $agt016Internal += 1
+            }
+
+            $displayName = "$($user.UPN)"
+            if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
+
+            $parentBlueprintPrincipal = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
+                $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+            }
+
+            $parentAgentIdentity = "-"
+            if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
+                $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
+                if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+            }
+
+            $sortLastSignInDays = -1
+            $lastSignInDaysRaw = "$($user.LastSignInDays)".Trim()
+            if (-not [string]::IsNullOrWhiteSpace($lastSignInDaysRaw) -and $lastSignInDaysRaw -ne "-" -and $lastSignInDaysRaw -ne "?") {
+                [int]::TryParse($lastSignInDaysRaw, [ref]$sortLastSignInDays) | Out-Null
+            }
+
+            $agt016Affected.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "Parent Blueprint Principal" = $parentBlueprintPrincipal
+                "Parent Agent Identity" = $parentAgentIdentity
+                "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
+                "Inactive" = $user.Inactive
+                "Last sign-in (days)" = $user.LastSignInDays
+                "_SortLastSignInDays" = $sortLastSignInDays
+            })
+        }
+        Set-FindingOverride -FindingId "AGT-016" -Props @{
+            Description = "<p>There are $($inactiveEnabledAgentUsers.Count) inactive enabled agent users.</p><ul><li>Foreign agent users: $agt016Foreign</li><li>Internal agent users: $agt016Internal</li></ul><p><strong>Note:</strong> Users are considered inactive if they have no successful sign-in for 180 days or if they never signed in and were created more than 180 days ago.</p>"
+            AffectedObjects = $agt016Affected
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-016] No enabled inactive agent users found."
+        Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Secure
     }
 
     #endregion
