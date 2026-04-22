@@ -1295,6 +1295,18 @@ function Invoke-CheckTenant {
     "AffectedObjects": []
   },
   {
+    "FindingId": "AGT-017",
+    "Title": "Blueprints with Non-Tier-0 Owner",
+    "Category": "Agent Identity",
+    "Severity": 2,
+    "Description": "",
+    "Threat": "",
+    "Status": "NotVulnerable",
+    "Remediation": "",
+    "Confidence": "Requires Verification",
+    "AffectedObjects": []
+  },
+  {
     "FindingId": "MAI-001",
     "Title": "Managed Identities with API Privileges",
     "Category": "Managed Identities",
@@ -2468,6 +2480,25 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             RelatedReportUrl = ""
         }
     }
+    $AGT017VariantProps = @{
+        Default = @{
+            Threat = "<p>If attackers gain control of a non-Tier-0 owner of a high-impact blueprint, they may be able to add their own credentials and take over the corresponding child blueprint principals, agent identities, and agent users.</p>"
+            Remediation = "<p>Verify that blueprint owners, especially for high-impact blueprints, are adequately protected. Standard user accounts should not be assigned ownership of high-impact blueprints. If ownership is required, provision a dedicated administrative account. Secure this account with appropriate measures, such as phishing-resistant multi-factor authentication (for example, FIDO2) and device requirements.</p><p>If the owner is a service principal, verify who can control that service principal and ensure it is appropriately secured.</p>"
+        }
+        Vulnerable = @{
+            Status = "Vulnerable"
+        }
+        Secure = @{
+            Status = "NotVulnerable"
+            Description = "<p>No blueprints with an impact score of at least 200 and non-Tier-0 owners were identified.</p>"
+        }
+        Skipped = @{
+            Status = "Skipped"
+            Description = "<p>Check skipped because no agent identity blueprints were identified in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+    }
     #endregion
     #region MAI VariantProps
     $MAI001VariantProps = @{
@@ -2633,6 +2664,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "AGT-014" = $AGT014VariantProps.Default
         "AGT-015" = $AGT015VariantProps.Default
         "AGT-016" = $AGT016VariantProps.Default
+        "AGT-017" = $AGT017VariantProps.Default
         "MAI-001" = $MAI001VariantProps.Default
         "MAI-002" = $MAI002VariantProps.Default
         "MAI-003" = $MAI003VariantProps.Default
@@ -2667,6 +2699,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     # ENT-010 = enabled + internal + extensive API permissions (delegated);
     # ENT-011 = enabled + internal + Entra max tier 0/1; ENT-012 = enabled + internal + Azure max tier 0/1.
     $ownerFindingMinImpact = 50
+    $blueprintOwnerFindingMinImpact = 200
     $entAppsWithSecrets = [System.Collections.Generic.List[object]]::new()
     $entAppsInactiveEnabled = [System.Collections.Generic.List[object]]::new()
     $entAppsWithOwners = [System.Collections.Generic.List[object]]::new()
@@ -2788,8 +2821,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #endregion
 
     #region Enumeration: Agent Identity Blueprints
-    # AGT-001: Reuse the blueprint enumeration output to identify blueprints with client secrets.
+    # AGT-001 / AGT-017: Reuse the blueprint enumeration output to identify blueprints with client secrets or high-impact owners.
     $agentBlueprintsWithSecrets = [System.Collections.Generic.List[object]]::new()
+    $agentBlueprintsWithOwners = [System.Collections.Generic.List[object]]::new()
     $agentBlueprintCount = 0
     if ($AgentIdentityBlueprints) {
         $agentBlueprintCount = $AgentIdentityBlueprints.Count
@@ -2800,6 +2834,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 if (-not $blueprint) { continue }
                 if ((Get-IntSafe $blueprint.SecretsCount) -gt 0) {
                     $agentBlueprintsWithSecrets.Add($blueprint)
+                }
+                $blueprintImpactValue = Get-IntSafe $blueprint.Impact
+                if ((Get-IntSafe $blueprint.Owners) -gt 0 -and $blueprintImpactValue -ge $blueprintOwnerFindingMinImpact) {
+                    $agentBlueprintsWithOwners.Add($blueprint)
                 }
             }
         }
@@ -5894,6 +5932,117 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         Write-Log -Level Verbose -Message "[AGT-001] No agent identity blueprints with client secrets found."
         Set-FindingOverride -FindingId "AGT-001" -Props $AGT001VariantProps.Secure
+    }
+
+    # AGT-017: Apply result for high-impact blueprints with non-Tier-0 owners.
+    if ($agentBlueprintCount -eq 0) {
+        Write-Log -Level Verbose -Message "[AGT-017] Skipped because no agent identity blueprints were found."
+        Set-FindingOverride -FindingId "AGT-017" -Props $AGT017VariantProps.Skipped
+    } elseif ($agentBlueprintsWithOwners.Count -gt 0) {
+        Write-Log -Level Verbose -Message "[AGT-017] Found $($agentBlueprintsWithOwners.Count) blueprints with owners and impact >= $blueprintOwnerFindingMinImpact (before Tier-0 owner filtering)."
+        $agt017Affected = [System.Collections.Generic.List[object]]::new()
+        foreach ($blueprint in $agentBlueprintsWithOwners) {
+            $ownerLinks = [System.Collections.Generic.List[string]]::new()
+            $nonTier0OwnerCount = 0
+            $ownerDetailsEnumerated = 0
+
+            if ($blueprint.AppOwnerUsers) {
+                foreach ($owner in $blueprint.AppOwnerUsers) {
+                    $ownerDetailsEnumerated += 1
+                    $ownerId = "$($owner.Id)".Trim()
+                    if (Test-IsTier0OwnerId -OwnerId $ownerId -OwnerType "User") { continue }
+                    $name = $owner.userPrincipalName
+                    if (-not $name) { $name = $owner.displayName }
+                    if (-not $name) { $name = $owner.Id }
+                    $label = "$name (User)"
+                    if ($owner.Id) {
+                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)`" target=`"_blank`">$label</a>")
+                    } else {
+                        $ownerLinks.Add("$label")
+                    }
+                    $nonTier0OwnerCount += 1
+                }
+            }
+
+            if ($blueprint.AppOwnerSPs) {
+                $ownerSpList = @()
+                if ($blueprint.AppOwnerSPs -is [System.Collections.IEnumerable] -and -not ($blueprint.AppOwnerSPs -is [string])) {
+                    $ownerSpList = @($blueprint.AppOwnerSPs)
+                } else {
+                    $ownerSpList = @($blueprint.AppOwnerSPs)
+                }
+                foreach ($owner in $ownerSpList) {
+                    $ownerDetailsEnumerated += 1
+                    $name = $owner.displayName
+                    if (-not $name) { $name = $owner.Id }
+                    $spLink = $null
+                    $spType = $owner.servicePrincipalType
+                    if (-not $spType) { $spType = $owner.Type }
+                    if (-not $spType) { $spType = "ServicePrincipal" }
+                    $ownerId = "$($owner.Id)".Trim()
+                    if (Test-IsTier0OwnerId -OwnerId $ownerId -OwnerType $spType) { continue }
+                    if ($spType -eq "ServicePrincipal" -and $owner.Id -and $enterpriseAppIds.ContainsKey($owner.Id)) {
+                        $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)"
+                    }
+                    $label = "$name ($spType)"
+                    if ($spLink) {
+                        $ownerLinks.Add("<a href=`"$spLink`" target=`"_blank`">$label</a>")
+                    } else {
+                        $ownerLinks.Add("$label")
+                    }
+                    $nonTier0OwnerCount += 1
+                }
+            }
+
+            $rawOwnerCount = Get-IntSafe $blueprint.Owners
+            if ($ownerDetailsEnumerated -eq 0 -and $rawOwnerCount -gt 0) {
+                $nonTier0OwnerCount = $rawOwnerCount
+                if ($ownerLinks.Count -eq 0) {
+                    $ownerLinks.Add("Owner details unavailable for Tier-0 filtering")
+                }
+            }
+            if ($nonTier0OwnerCount -eq 0) { continue }
+
+            $ownerDisplay = ""
+            if ($ownerLinks.Count -gt 0) {
+                $maxOwners = 10
+                $shown = $ownerLinks
+                if ($ownerLinks.Count -gt $maxOwners) {
+                    $shown = $ownerLinks.GetRange(0, $maxOwners)
+                    $shown.Add("+$($ownerLinks.Count - $maxOwners) more")
+                }
+                $ownerDisplay = $shown -join "<br>"
+            }
+
+            $agt017Affected.Add([pscustomobject]@{
+                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
+                "Owners Count" = $nonTier0OwnerCount
+                "Owners" = $ownerDisplay
+                "Blueprint Principals" = $blueprint.BlueprintPrincipals
+                "Agent Identities" = $blueprint.LinkedAgentIdentities
+                "Agent Users" = $blueprint.AgentUsers
+                "Impact Score" = $blueprint.Impact
+            })
+        }
+        if ($agt017Affected.Count -gt 0) {
+            Set-FindingOverride -FindingId "AGT-017" -Props $AGT017VariantProps.Vulnerable
+            Set-FindingOverride -FindingId "AGT-017" -Props @{
+                RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Owners=%3E0&Impact=%3E%3D$blueprintOwnerFindingMinImpact&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CSponsors%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                AffectedSortKey = "Impact Score"
+                AffectedSortDir = "DESC"
+                Description = "<p>$($agt017Affected.Count) blueprints with an impact score of at least $blueprintOwnerFindingMinImpact have one or more assigned non-Tier-0 owners.</p><p><strong>Important:</strong> This finding requires manual verification. If the owners are Tier-1 administrators and the blueprint has only limited effective privileges, this may be acceptable.</p>"
+                AffectedObjects = $agt017Affected
+            }
+        } else {
+            Write-Log -Level Verbose -Message "[AGT-017] Owners were found, but all resolvable owners are Tier-0 and therefore excluded."
+            Set-FindingOverride -FindingId "AGT-017" -Props $AGT017VariantProps.Secure
+            Set-FindingOverride -FindingId "AGT-017" -Props @{
+                Description = "<p>No blueprints with an impact score of at least $blueprintOwnerFindingMinImpact and non-Tier-0 owners were identified.</p>"
+            }
+        }
+    } else {
+        Write-Log -Level Verbose -Message "[AGT-017] No high-impact blueprints with owners found."
+        Set-FindingOverride -FindingId "AGT-017" -Props $AGT017VariantProps.Secure
     }
 
     # AGT-002: Apply result for enabled foreign agent identities with extensive application API permissions.
