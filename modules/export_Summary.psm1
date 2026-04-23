@@ -122,10 +122,8 @@ return @"
         if ([string]::IsNullOrWhiteSpace($Start) -or [string]::IsNullOrWhiteSpace($End)) { return "Unknown" }
 
         try {
-            $culture = [System.Globalization.CultureInfo]::InvariantCulture
-            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
-            $startTime = [datetime]::ParseExact($Start, "yyyyMMdd HH:mm", $culture, $styles)
-            $endTime = [datetime]::ParseExact($End, "yyyyMMdd HH:mm", $culture, $styles)
+            $startTime = ConvertTo-SummaryTimestampDateTime -Value $Start
+            $endTime = ConvertTo-SummaryTimestampDateTime -Value $End
             $duration = $endTime - $startTime
             if ($duration.TotalMinutes -lt 0) { return "Unknown" }
 
@@ -152,16 +150,26 @@ return @"
         if ([string]::IsNullOrWhiteSpace($Start) -or [string]::IsNullOrWhiteSpace($End)) { return $null }
 
         try {
-            $culture = [System.Globalization.CultureInfo]::InvariantCulture
-            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
-            $startTime = [datetime]::ParseExact($Start, "yyyyMMdd HH:mm", $culture, $styles)
-            $endTime = [datetime]::ParseExact($End, "yyyyMMdd HH:mm", $culture, $styles)
+            $startTime = ConvertTo-SummaryTimestampDateTime -Value $Start
+            $endTime = ConvertTo-SummaryTimestampDateTime -Value $End
             $duration = $endTime - $startTime
             if ($duration.TotalSeconds -lt 0) { return $null }
             return [int][math]::Round($duration.TotalSeconds)
         } catch {
             return $null
         }
+    }
+
+    function ConvertTo-SummaryTimestampDateTime {
+        param(
+            [string]$Value
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+        $culture = [System.Globalization.CultureInfo]::InvariantCulture
+        $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+        return [datetime]::ParseExact($Value, "yyyyMMdd HH:mm:ss", $culture, $styles)
     }
 
     function Get-IsoTimestamp {
@@ -172,12 +180,25 @@ return @"
         if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
 
         try {
-            $culture = [System.Globalization.CultureInfo]::InvariantCulture
-            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
-            $parsedTime = [datetime]::ParseExact($Value, "yyyyMMdd HH:mm", $culture, $styles)
+            $parsedTime = ConvertTo-SummaryTimestampDateTime -Value $Value
             return $parsedTime.ToString("o")
         } catch {
             return $null
+        }
+    }
+
+    function Get-TimestampDisplay {
+        param(
+            [string]$Value
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+
+        try {
+            $parsedTime = ConvertTo-SummaryTimestampDateTime -Value $Value
+            return $parsedTime.ToString("yyyyMMdd HH:mm")
+        } catch {
+            return $Value
         }
     }
 
@@ -444,7 +465,7 @@ return @"
 
     write-host "[*] Writing log files"
 
-    $GlobalAuditSummary.Time.End = Get-Date -Format "yyyyMMdd HH:mm"
+    $GlobalAuditSummary.Time.End = Get-Date -Format "yyyyMMdd HH:mm:ss"
 
     $MsAppsEnumerated = if ([bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps) {
         "True"
@@ -489,6 +510,8 @@ return @"
     $durationSeconds = Get-DurationSeconds -Start $GlobalAuditSummary.Time.Start -End $GlobalAuditSummary.Time.End
     $executionStartIso = Get-IsoTimestamp -Value $GlobalAuditSummary.Time.Start
     $executionEndIso = Get-IsoTimestamp -Value $GlobalAuditSummary.Time.End
+    $executionStartDisplay = Get-TimestampDisplay -Value $GlobalAuditSummary.Time.Start
+    $executionEndDisplay = Get-TimestampDisplay -Value $GlobalAuditSummary.Time.End
     $domainUserCount = Get-DomainUserCountLookup -Users $Users
     $defaultDomain = @($TenantDomains | Where-Object { $_.IsDefault } | Select-Object -First 1 -ExpandProperty Id)
     if ($defaultDomain.Count -eq 0) {
@@ -529,8 +552,8 @@ return @"
         -TenantId $GlobalAuditSummary.Tenant.ID `
         -TenantLicense $GlobalAuditSummary.TenantLicense.Name `
         -Subscriptions $SubscriptionCount `
-        -StartTime $GlobalAuditSummary.Time.Start `
-        -EndTime $GlobalAuditSummary.Time.End `
+        -StartTime $executionStartDisplay `
+        -EndTime $executionEndDisplay `
         -Duration $durationDisplay `
         -EntraFalconVersion $GlobalAuditSummary.EntraFalcon.Version `
         -PowerShellVersion $powerShellDisplay `
@@ -1705,8 +1728,8 @@ Execution Information:
     - Tenant ID:      $($GlobalAuditSummary.Tenant.ID)
     - Tenant License: $($GlobalAuditSummary.TenantLicense.Name)
     - Subscriptions:  $SubscriptionCount
-    - Start:          $($GlobalAuditSummary.Time.Start)
-    - End:            $($GlobalAuditSummary.Time.End)
+    - Start:          $executionStartDisplay
+    - End:            $executionEndDisplay
     - EntraFalcon:    $($GlobalAuditSummary.EntraFalcon.Version)
     - PowerShell:     $powerShellDisplay
     - UserAgent:      $($GlobalAuditSummary.UserAgent.Name)

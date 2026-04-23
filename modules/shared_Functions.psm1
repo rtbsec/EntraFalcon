@@ -8057,7 +8057,7 @@ function start-InitTasks {
     )
 
     $Global:GlobalAuditSummary = @{
-        Time                   = @{ Start = Get-Date -Format "yyyyMMdd HH:mm"; End = ""}
+        Time                   = @{ Start = Get-Date -Format "yyyyMMdd HH:mm:ss"; End = ""}
         Tenant                 = @{ Name = ""; Id = "" }
         EntraFalcon            = @{ Version = "$EntraFalconVersion"; Source = "https://github.com/CompassSecurity/EntraFalcon" }
         TenantLicense          = @{ Name = ""; Level = 0}
