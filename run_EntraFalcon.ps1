@@ -129,7 +129,7 @@ Param (
 )
 
 #Constants
-$EntraFalconVersion = "V20260422"
+$EntraFalconVersion = "V20260424"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -249,6 +249,8 @@ $CurrentTenant = Get-OrgInfo
 $StartTimestamp = Get-Date -Format "yyyyMMdd_HHmm"
 $GlobalAuditSummary.Tenant.Name = $CurrentTenant.DisplayName
 $GlobalAuditSummary.Tenant.Id = $CurrentTenant.Id
+$GlobalAuditSummary.Tenant.OnPremisesSyncEnabled = $CurrentTenant.OnPremisesSyncEnabled
+$GlobalAuditSummary.Tenant.OnPremisesLastSyncDateTime = $CurrentTenant.OnPremisesLastSyncDateTime
 
 $licenseResult = Get-EffectiveEntraLicense
 $GlobalAuditSummary.TenantLicense.Name  = $licenseResult.EntraIDLicencesString

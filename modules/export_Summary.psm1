@@ -202,6 +202,84 @@ return @"
         }
     }
 
+    function Get-OnPremisesSyncSummary {
+        param(
+            [object]$EnabledRaw,
+            [object]$LastSyncRaw,
+            [int]$StaleThresholdDays = 7
+        )
+
+        $enabled = $null
+        if ($null -ne $EnabledRaw) {
+            if ($EnabledRaw -is [bool]) {
+                $enabled = [bool]$EnabledRaw
+            } else {
+                $parsedBool = $false
+                if ([bool]::TryParse([string]$EnabledRaw, [ref]$parsedBool)) {
+                    $enabled = $parsedBool
+                }
+            }
+        }
+
+        $lastSyncUtc = $null
+        if ($null -ne $LastSyncRaw -and -not [string]::IsNullOrWhiteSpace([string]$LastSyncRaw)) {
+            try {
+                $dateTimeOffset = [datetimeoffset]$LastSyncRaw
+                $lastSyncUtc = $dateTimeOffset.UtcDateTime
+            } catch {
+                try {
+                    $dateTimeOffset = [datetimeoffset]::Parse([string]$LastSyncRaw, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal)
+                    $lastSyncUtc = $dateTimeOffset.UtcDateTime
+                } catch {
+                    $lastSyncUtc = $null
+                }
+            }
+        }
+
+        $lastSyncIso = $null
+        $lastSyncAgeDays = $null
+        $lastSyncDisplay = "-"
+        $hasLastSync = ($null -ne $lastSyncUtc)
+
+        if ($hasLastSync) {
+            $age = (Get-Date).ToUniversalTime() - $lastSyncUtc
+            $lastSyncAgeDays = [int][math]::Floor($age.TotalDays)
+            if ($lastSyncAgeDays -lt 0) { $lastSyncAgeDays = 0 }
+
+            $lastSyncIso = $lastSyncUtc.ToString("o")
+            $lastSyncDisplay = "{0} UTC ({1} days ago)" -f $lastSyncUtc.ToString("yyyy-MM-dd HH:mm:ss"), $lastSyncAgeDays
+        }
+
+        $status = "Never synced"
+
+        if ($null -eq $enabled) {
+            $status = "Never synced"
+        } elseif ($enabled) {
+            if (-not $hasLastSync) {
+                $status = "Enabled (no timestamp)"
+            } elseif ($lastSyncAgeDays -ge $StaleThresholdDays) {
+                $status = "Enabled (stale)"
+            } else {
+                $status = "Enabled"
+            }
+        } else {
+            if ($hasLastSync) {
+                $status = "Disabled (previously synced)"
+            } else {
+                $status = "Disabled"
+            }
+        }
+
+        return [pscustomobject]@{
+            EnabledRaw         = $EnabledRaw
+            Status             = $status
+            LastSyncIso        = $lastSyncIso
+            LastSyncAgeDays    = $lastSyncAgeDays
+            LastSyncDisplay    = $lastSyncDisplay
+            StaleThresholdDays = $StaleThresholdDays
+        }
+    }
+
     function Get-DomainUserCountLookup {
         param(
             [hashtable]$Users = @{}
@@ -260,6 +338,8 @@ return @"
             [string]$TenantName,
             [string]$TenantId,
             [string]$TenantLicense,
+            [string]$OnPremisesSync,
+            [string]$OnPremisesLastSync,
             [string]$Subscriptions,
             [string]$StartTime,
             [string]$EndTime,
@@ -277,6 +357,8 @@ return @"
             (New-GeneralField -Label "Tenant Name" -ValueHtml (ConvertTo-SummaryHtmlText $TenantName)),
             (New-GeneralField -Label "Tenant ID" -ValueHtml (ConvertTo-SummaryHtmlText $TenantId)),
             (New-GeneralField -Label "License" -ValueHtml (ConvertTo-SummaryHtmlText $TenantLicense)),
+            (New-GeneralField -Label "On-premises Sync" -ValueHtml (ConvertTo-SummaryHtmlText $OnPremisesSync)),
+            (New-GeneralField -Label "Last On-premises Sync" -ValueHtml (ConvertTo-SummaryHtmlText $OnPremisesLastSync)),
             (New-GeneralField -Label "Subscriptions" -ValueHtml (ConvertTo-SummaryHtmlText $Subscriptions))
         )
 
@@ -522,6 +604,11 @@ return @"
     $coverageWarnings = Get-CoverageWarnings -SubscriptionCountIncomplete $subscriptionCountIncomplete
     $summaryReportKey = "Summary"
     $summaryReportName = "EntraFalcon Enumeration Summary"
+    $onPremisesSyncSummary = Get-OnPremisesSyncSummary -EnabledRaw $GlobalAuditSummary.Tenant.OnPremisesSyncEnabled -LastSyncRaw $GlobalAuditSummary.Tenant.OnPremisesLastSyncDateTime
+    $onPremisesSyncStatus = $onPremisesSyncSummary.Status
+    $onPremisesLastSyncDisplay = $onPremisesSyncSummary.LastSyncDisplay
+    $onPremisesLastSyncIso = $onPremisesSyncSummary.LastSyncIso
+    $onPremisesLastSyncAgeDays = $onPremisesSyncSummary.LastSyncAgeDays
 
     $azureIamBadge = if ([bool]$GLOBALAzurePsChecks) {
         New-GeneralStatusBadge -Text "Collected" -Tone "success"
@@ -551,6 +638,8 @@ return @"
         -TenantName $GlobalAuditSummary.Tenant.Name `
         -TenantId $GlobalAuditSummary.Tenant.ID `
         -TenantLicense $GlobalAuditSummary.TenantLicense.Name `
+        -OnPremisesSync $onPremisesSyncStatus `
+        -OnPremisesLastSync $onPremisesLastSyncDisplay `
         -Subscriptions $SubscriptionCount `
         -StartTime $executionStartDisplay `
         -EndTime $executionEndDisplay `
@@ -1727,6 +1816,8 @@ Execution Information:
     - Tenant Name:    $($GlobalAuditSummary.Tenant.Name)
     - Tenant ID:      $($GlobalAuditSummary.Tenant.ID)
     - Tenant License: $($GlobalAuditSummary.TenantLicense.Name)
+    - On-premises Sync:      $onPremisesSyncStatus
+    - Last On-premises Sync: $onPremisesLastSyncDisplay
     - Subscriptions:  $SubscriptionCount
     - Start:          $executionStartDisplay
     - End:            $executionEndDisplay
@@ -1771,6 +1862,12 @@ Enumeration Results:
             license       = [ordered]@{
                 name  = $GlobalAuditSummary.TenantLicense.Name
                 level = $GlobalAuditSummary.TenantLicense.Level
+            }
+            onPremisesSync = [ordered]@{
+                enabled            = $GlobalAuditSummary.Tenant.OnPremisesSyncEnabled
+                status             = $onPremisesSyncStatus
+                lastSyncDateTime   = $onPremisesLastSyncIso
+                lastSyncAgeDays    = $onPremisesLastSyncAgeDays
             }
         }
         execution     = [ordered]@{

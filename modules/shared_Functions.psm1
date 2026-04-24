@@ -5541,7 +5541,7 @@ function ConvertTo-EntraFalconFileNameToken {
 #Get basic tenant info
 function Get-OrgInfo {
     $QueryParameters = @{
-        '$select' = "Id,DisplayName"
+        '$select' = "Id,DisplayName,onPremisesSyncEnabled,onPremisesLastSyncDateTime"
     }
     $OrgInfo = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/organization" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
     foreach ($tenant in @($OrgInfo)) {
@@ -8085,7 +8085,7 @@ function start-InitTasks {
 
     $Global:GlobalAuditSummary = @{
         Time                   = @{ Start = Get-Date -Format "yyyyMMdd HH:mm:ss"; End = ""}
-        Tenant                 = @{ Name = ""; Id = "" }
+        Tenant                 = @{ Name = ""; Id = ""; OnPremisesSyncEnabled = $null; OnPremisesLastSyncDateTime = $null }
         EntraFalcon            = @{ Version = "$EntraFalconVersion"; Source = "https://github.com/CompassSecurity/EntraFalcon" }
         TenantLicense          = @{ Name = ""; Level = 0}
         Subscriptions          = @{ Count = 0; Details = @() }
