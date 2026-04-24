@@ -5516,12 +5516,39 @@ function AuthCheckMSGraph {
     }
     return $result
 }
+#Return a tenant display name variant that is safe to use inside generated file names.
+function ConvertTo-EntraFalconFileNameToken {
+    param(
+        [AllowNull()][string]$Value,
+        [AllowNull()][string]$Fallback
+    )
+
+    $token = "$Value".Trim()
+    $token = $token -replace '[<>:"/\\|?*\x00-\x1F]', '_'
+    $token = $token.Trim().TrimEnd([char[]]@('.', ' '))
+    $token = $token -replace '_{2,}', '_'
+
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        $token = "$Fallback".Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        $token = "Tenant"
+    }
+
+    return $token
+}
+
 #Get basic tenant info
 function Get-OrgInfo {
     $QueryParameters = @{
         '$select' = "Id,DisplayName"
     }
     $OrgInfo = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/organization" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    foreach ($tenant in @($OrgInfo)) {
+        $fileSafeDisplayName = ConvertTo-EntraFalconFileNameToken -Value $tenant.DisplayName -Fallback $tenant.Id
+        $tenant | Add-Member -NotePropertyName FileSafeDisplayName -NotePropertyValue $fileSafeDisplayName -Force
+        $tenant | Add-Member -NotePropertyName FileSafeDisplayNameEncoded -NotePropertyValue ([System.Uri]::EscapeDataString($fileSafeDisplayName)) -Force
+    }
     return $OrgInfo
 }
 
@@ -7322,7 +7349,7 @@ function Initialize-TenantReportTabs {
         [Parameter(Mandatory)][pscustomobject]$TenantReports
     )
 
-    $tenantNameEscaped = [uri]::EscapeDataString($CurrentTenant.DisplayName)
+    $tenantNameEscaped = $CurrentTenant.FileSafeDisplayNameEncoded
 
     $defs = @(
         @{ Prop = 'Summary';                   Key = 'Summary';    Title = 'Summary';                   File = "_EntraFalconEnumerationSummary_${StartTimestamp}_${tenantNameEscaped}.html" }

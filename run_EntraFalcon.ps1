@@ -258,7 +258,7 @@ $TenantDomains = Get-TenantDomains
 
 #Define output folder if not defined
 if ($null -eq $OutputFolder -or "" -eq $OutputFolder) {
-    $OutputFolder = "Results_$($CurrentTenant.DisplayName)_$($StartTimestamp)"
+    $OutputFolder = "Results_$($CurrentTenant.FileSafeDisplayName)_$($StartTimestamp)"
 }
 # Create report directory
 if (-not (Test-Path -Path $OutputFolder)) {

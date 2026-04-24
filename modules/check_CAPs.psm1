@@ -1130,7 +1130,7 @@ function Invoke-CheckCaps {
             $ResolvedGUID = $($Users[$Guid].UPN)
 
             if ($Report -eq "HTML") {
-                $ResolvedGUIDLink = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
+                $ResolvedGUIDLink = "<a href=Users_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$Guid>$ResolvedGUID</a>"
                 return $ResolvedGUIDLink
             } elseif ($Report -eq "TXT") {
                 return $ResolvedGUID
@@ -1141,7 +1141,7 @@ function Invoke-CheckCaps {
             $ResolvedGUID = $($AllGroupsDetails[$Guid].DisplayName)
 
             if ($Report -eq "HTML") {
-                $ResolvedGUIDLink = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
+                $ResolvedGUIDLink = "<a href=Groups_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$Guid>$ResolvedGUID</a>"
                 return $ResolvedGUIDLink
             } elseif ($Report -eq "TXT") {
                 return $ResolvedGUID
@@ -1166,7 +1166,7 @@ function Invoke-CheckCaps {
         if ($RoleTemplatesHT.ContainsKey($Guid)) { 
             $ResolvedGUID = $($RoleTemplatesHT[$Guid])
             if ($Report -eq "HTML") {
-                $ResolvedGUIDLink = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString("=$ResolvedGUID"))&AssignmentType=Active&PrincipalType=User%7C%7CGroup>$ResolvedGUID</a>"
+                $ResolvedGUIDLink = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Role=$([System.Uri]::EscapeDataString("=$ResolvedGUID"))&AssignmentType=Active&PrincipalType=User%7C%7CGroup>$ResolvedGUID</a>"
                 return $ResolvedGUIDLink
             } elseif ($Report -eq "TXT") {
                 return $ResolvedGUID
@@ -2805,7 +2805,7 @@ $MissingPolicies
                 [pscustomobject]@{ 
                   "RoleName" = $($object.RoleName)
                   "RoleTier" = $($object.RoleTier)
-                  "AssignmentsLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))>$($object.Assignments)</a>"
+                  "AssignmentsLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))>$($object.Assignments)</a>"
                   "Assignments" = $($object.Assignments)
               }
             }
@@ -2831,7 +2831,7 @@ $MissingPolicies
                 [pscustomobject]@{ 
                   "RoleName" = $($object.RoleName)
                   "RoleTier" = $($object.RoleTier)
-                  "AssignmentsScopedLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))&Scope=$([System.Uri]::EscapeDataString("!(Tenant)"))>$($object.Assignments)</a>"
+                  "AssignmentsScopedLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))&Scope=$([System.Uri]::EscapeDataString("!(Tenant)"))>$($object.Assignments)</a>"
                   "AssignmentsScoped" = $($object.Assignments)
               }
             }
@@ -2996,19 +2996,19 @@ $headerHtml = @"
 "@
   
     #Write TXT and CSV files
-    $headerTXT | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
+    $headerTXT | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
     if ($AllPoliciesCount -gt 0 -and $Csv) { 
-        $tableOutput | select-object DisplayName,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $tableOutput | select-object DisplayName,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
     }
-    $tableOutput | format-table -Property DisplayName,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    if ($Warnings.count -ge 1) {$Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append} 
-    $DetailOutputTxt | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | format-table -Property DisplayName,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+    if ($Warnings.count -ge 1) {$Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append}
+    $DetailOutputTxt | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
 
 
     #Named location appendix
     If (($NamedLocations | Measure-Object).count -gt 0) {
-        $AppendixTitle | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $NamedLocations | format-table Id,Name,Trusted,Type,TargetedLocations,IncludedCAPs,ExcludedCAPs | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $AppendixTitle | Out-File -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $NamedLocations | format-table Id,Name,Trusted,Type,TargetedLocations,IncludedCAPs,ExcludedCAPs | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         $AppendixNetworkLocations += $NamedLocations | ConvertTo-Html Id,Name,Trusted,Type,TargetedLocations,@{Label="Included in CAPs"; Expression={$_.IncludedCAPsLinks}},@{Label="Excluded in CAPs"; Expression={$_.ExcludedCAPsLinks}} -Fragment -PreContent "<h2>Appendix: Network Location</h2>"
         #Remove the automated encoding
         $AppendixNetworkLocations  = $AppendixNetworkLocations -replace '&lt;', '<' -replace '&gt;', '>'
@@ -3017,10 +3017,10 @@ $headerHtml = @"
     $PostContentCombined = $GLOBALJavaScript + "`n" + $AppendixNetworkLocations
     #Write HTML
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML $MissingPoliciesHTML" -Head ("<title>EF - Conditional Access</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
-    $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
 
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
-    write-host "[+] Details of $AllPoliciesCount policies stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    write-host "[+] Details of $AllPoliciesCount policies stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
     
     #Add information to the enumeration summary
     $GlobalAuditSummary.ConditionalAccess.Count = $AllPoliciesCount
@@ -3040,4 +3040,3 @@ $headerHtml = @"
     Return $AllCapsHT
     
 }
-

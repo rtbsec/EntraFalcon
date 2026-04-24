@@ -321,7 +321,7 @@ return @"
         if (-not $Domains -or $Domains.Count -eq 0) { return "" }
 
         $domainUserCount = Get-DomainUserCountLookup -Users $Users
-        $escapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
+        $escapedTenantName = $CurrentTenant.FileSafeDisplayNameEncoded
         $userReportBase = "Users_$($StartTimestamp)_$($escapedTenantName).html"
 
         $displayDomains = @(
@@ -1950,8 +1950,8 @@ Enumeration Results:
     $PostContentCombined =  $Chartsection + "`n" + $domainsSectionHtml + "`n" + $subscriptionsSectionHtml + "`n" + $GLOBALJavaScript
     $CssCombined = "<title>EF - Summary</title>`n" + $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Head $CssCombined -PostContent $PostContentCombined
-    $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
-    $summaryJsonPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).json"
+    $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
+    $summaryJsonPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).json"
     $Report | Out-File $summaryHtmlPath
     $summaryJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryJsonPath -Encoding utf8
 

@@ -799,7 +799,7 @@ function Invoke-CheckAppRegistrations {
             "App Client-ID" = $($item.AppId)
             "App Object-ID" = $($item.Id)
             "CreationDate" = $($item.CreationDate)
-            "Enterprise App Link" = "<a href=EnterpriseApps_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($item.SPObjectId)>$($item.DisplayName)</a>"
+            "Enterprise App Link" = "<a href=EnterpriseApps_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($item.SPObjectId)>$($item.DisplayName)</a>"
             "Enabled" = $($item.Enabled)
             "SignInAudience" = $($item.SignInAudience)
             "RiskScore" = $($item.Risk)
@@ -878,7 +878,7 @@ function Invoke-CheckAppRegistrations {
                 $ReportingAppOwnersUser = foreach ($object in $($item.AppOwnerUsers)) {
                     [pscustomobject]@{ 
                         "UPN" = $($object.userPrincipalName)
-                        "UPNLink" = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.userPrincipalName)</a>"
+                        "UPNLink" = "<a href=Users_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.id)>$($object.userPrincipalName)</a>"
                         "Enabled" = $($object.accountEnabled)
                         "Type" = $($object.userType)
                         "OnPremSync" = $($object.onPremisesSyncEnabled)
@@ -907,9 +907,9 @@ function Invoke-CheckAppRegistrations {
             if ($($item.AppOwnerSPs | Measure-Object).count -ge 1) {
                 $ReportingAppOwnersSP = foreach ($object in $($item.AppOwnerSPs)) {
                     $ownerLink = switch ($object.TargetReport) {
-                        'AgentIdentities' { "<a href=AgentIdentities_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>" }
-                        'AgentIdentityBlueprintsPrincipals' { "<a href=AgentIdentityBlueprintsPrincipals_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>" }
-                        default { "<a href=EnterpriseApps_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>" }
+                        'AgentIdentities' { "<a href=AgentIdentities_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.id)>$($object.DisplayName)</a>" }
+                        'AgentIdentityBlueprintsPrincipals' { "<a href=AgentIdentityBlueprintsPrincipals_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.id)>$($object.DisplayName)</a>" }
+                        default { "<a href=EnterpriseApps_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.id)>$($object.DisplayName)</a>" }
                     }
                     [pscustomobject]@{ 
                         "DisplayName" = $($object.DisplayName)
@@ -958,7 +958,7 @@ function Invoke-CheckAppRegistrations {
                         "Scope" = $($object.Scope)
                         "AssignmentType"  = $($object.AssignmentType)
                         "UPN" = $($object.UPN)
-                        "UPNLink" = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.PrincipalId)>$($object.UPN)</a>"
+                        "UPNLink" = "<a href=Users_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.PrincipalId)>$($object.UPN)</a>"
                         "Enabled" = $($object.Enabled)
                         "Type" = $($object.userType)
                         "OnPremSync" = $($object.Onprem)
@@ -993,7 +993,7 @@ function Invoke-CheckAppRegistrations {
                         "Scope" = $($object.Scope)
                         "AssignmentType"  = $($object.AssignmentType)
                         "Name" = $($object.DisplayName)
-                        "NameLink" = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.PrincipalId)>$($object.DisplayName)</a>"
+                        "NameLink" = "<a href=Groups_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.PrincipalId)>$($object.DisplayName)</a>"
                         "OnPremSync" = $($object.OnPrem)
                         "Users" = $($object.Users)
                         "Guests" = $($object.Guests)
@@ -1025,7 +1025,7 @@ function Invoke-CheckAppRegistrations {
                         "Scope" = $($object.Scope)
                         "AssignmentType"  = $($object.AssignmentType)
                         "DisplayName" = $($object.DisplayName)
-                        "DisplayNameLink" = "<a href=EnterpriseApps_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>"
+                        "DisplayNameLink" = "<a href=EnterpriseApps_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.id)>$($object.DisplayName)</a>"
                         "PublisherName" = $($object.publisherName)
                         "Foreign" = $($object.Foreign)
                         "Owners" = $($object.OwnersCount)
@@ -1180,23 +1180,23 @@ $headerHtml = @"
 "@
 
     #Write TXT and CSV files
-    $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+    $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
     }
-    $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     $AppendixSecretsHTML = ""
     $AppsWithSecrets = $AppsWithSecrets | sort-object DisplayName | select-object AppName,Displayname,StartDateTime,EndDateTime,Expired
     if (($AppsWithSecrets | Measure-Object).count -ge 1) {
-        $AppendixClientSecrets  | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $AppsWithSecrets | Format-Table | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $AppendixClientSecrets  | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $AppsWithSecrets | Format-Table | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         $AppendixSecretsHTML += $AppsWithSecrets | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Apps With Secrets</h2>"
     }
 
     if (($AppAuthentication | Measure-Object).count -ge 1) {
-        $AppendixAppAuthSettings  | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $AppAuthentication | Format-Table | Out-File -Width 800 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $AppendixAppAuthSettings  | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $AppAuthentication | Format-Table | Out-File -Width 800 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         $AppendixSecretsHTML += $AppAuthentication | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Application Authentication Configuration</h2>"
     }
 
@@ -1205,10 +1205,10 @@ $headerHtml = @"
 
     #Write HTML
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Head ("<title>EF - App Registrations</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
-    $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
 
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
-    write-host "[+] Details of $($AllAppRegistrations.count) App Registrations stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+    write-host "[+] Details of $($AllAppRegistrations.count) App Registrations stored in output files ($OutputFormats): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
    
     #Add information to the enumeration summary
     $AppLock = 0

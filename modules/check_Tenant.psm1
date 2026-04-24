@@ -394,7 +394,7 @@ function Invoke-CheckTenant {
             $incUsersDisplay = if ($incUsersRaw.ToLowerInvariant() -eq "all") { "all" } else { "$(Get-IntSafe $policy.IncludedUsersEffective)" }
 
             $rowProps = [ordered]@{
-                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($policy.Id)`" target=`"_blank`">$($policy.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($policy.Id)`" target=`"_blank`">$($policy.DisplayName)</a>"
                 "Evaluation Result" = $evaluationResult
                 "State" = $policy.State
                 "Resources" = $policy.IncResources
@@ -3480,72 +3480,72 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $cap001SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap001HardIssueCounts = @{}
     $cap001SoftIssueCounts = @{}
-    $cap001ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap001HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthFlow=deviceCodeFlow&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap001ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AuthFlow=deviceCodeFlow&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap001HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AuthFlow=deviceCodeFlow&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap002Candidates = [System.Collections.Generic.List[object]]::new()
     $cap002HardPass = [System.Collections.Generic.List[object]]::new()
     $cap002SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap002HardIssueCounts = @{}
     $cap002SoftIssueCounts = @{}
-    $cap002ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn:user:registersecurityinfo&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap002HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregistersecurityinfo&State=enabled&GrantControls=block%7C%7CdomainJoinedDevice%7C%7CcompliantDevice&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap002ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?UserActions=urn:user:registersecurityinfo&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap002HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?UserActions=urn%3Auser%3Aregistersecurityinfo&State=enabled&GrantControls=block%7C%7CdomainJoinedDevice%7C%7CcompliantDevice&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap003Candidates = [System.Collections.Generic.List[object]]::new()
     $cap003HardPass = [System.Collections.Generic.List[object]]::new()
     $cap003SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap003HardIssueCounts = @{}
     $cap003SoftIssueCounts = @{}
-    $cap003ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap003HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppTypes=%3DexchangeActiveSync%2C+other&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap003ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AppTypes=%3DexchangeActiveSync%2C+other&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap003HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AppTypes=%3DexchangeActiveSync%2C+other&State=enabled&GrantControls=block&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap004Candidates = [System.Collections.Generic.List[object]]::new()
     $cap004HardPass = [System.Collections.Generic.List[object]]::new()
     $cap004SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap004HardIssueCounts = @{}
     $cap004SoftIssueCounts = @{}
-    $cap004ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap004HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap004ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?UserActions=urn%3Auser%3Aregisterdevice&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap004HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap005Candidates = [System.Collections.Generic.List[object]]::new()
     $cap005HardPass = [System.Collections.Generic.List[object]]::new()
     $cap005SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap005HardIssueCounts = @{}
     $cap005SoftIssueCounts = @{}
-    $cap005ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap005HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap005SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&ExcUsersViaGroups=%3C3&ExcUsers=%3C3&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap005SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AuthStrength=%21%3Dempty&AuthContext=%3D0&SignInRisk=%3D0&UserRisk=%3D0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=enabled&IncResources=all&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncRoles=%3E0&or_IncExternals=%3E0&ExcUsersViaGroups=%3C3&ExcUsers=%3C3&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap006Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap006ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+    $cap006ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SignInRisk=%3E0&UserRisk=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
     $cap007Candidates = [System.Collections.Generic.List[object]]::new()
     $cap007HardPass = [System.Collections.Generic.List[object]]::new()
     $cap007SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap007HardIssueCounts = @{}
     $cap007SoftIssueCounts = @{}
-    $cap007ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap007HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3E0&UserRisk=%3D0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap007ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SignInRisk=%3E0&UserRisk=%3D0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap007HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SignInRisk=%3E0&UserRisk=%3D0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap008Candidates = [System.Collections.Generic.List[object]]::new()
     $cap008HardPass = [System.Collections.Generic.List[object]]::new()
     $cap008SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap008HardIssueCounts = @{}
     $cap008SoftIssueCounts = @{}
-    $cap008ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap008HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SignInRisk=%3D0&UserRisk=%3E0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa%7C%7CpasswordChange%7C%7CriskRemediation&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap008ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SignInRisk=%3D0&UserRisk=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap008HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SignInRisk=%3D0&UserRisk=%3E0&State=%3Denabled&IncResources=all&or_GrantControls=block%7C%7Cmfa%7C%7CpasswordChange%7C%7CriskRemediation&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CSignInFrequencyInterval%2CAuthStrength%2CWarnings#conditional-access-policies-details"
 
     $cap009Candidates = [System.Collections.Generic.List[object]]::new()
     $cap009HardPass = [System.Collections.Generic.List[object]]::new()
     $cap009SoftPass = [System.Collections.Generic.List[object]]::new()
     $cap009HardIssueCounts = @{}
     $cap009SoftIssueCounts = @{}
-    $cap009ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
-    $cap009HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=%3Denabled&IncResources=%3DAll&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap009ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
+    $cap009HardPassReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?or_GrantControls=mfa&or_AuthStrength=%21%3Dempty&AuthContext=0&SignInRisk=0&UserRisk=0&AuthFlow=%3Dempty&UserActions=%3Dempty&State=%3Denabled&IncResources=%3DAll&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings#conditional-access-policies-details"
     $cap010Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap010ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E%3D5&Warnings=missing+used+roles&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
+    $cap010ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?State=enabled&IncRoles=%3E%3D5&Warnings=missing+used+roles&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
     $cap011Candidates = [System.Collections.Generic.List[object]]::new()
-    $cap011ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?State=enabled&IncRoles=%3E0&Warnings=scoped&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
+    $cap011ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?State=enabled&IncRoles=%3E0&Warnings=scoped&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
 
     if ($AllCaps) {
         write-host "[*] Analyzing Conditional Access Policies"
@@ -4116,7 +4116,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $cap004Summary = "<p>Policy evaluation summary: <strong>$($cap004Candidates.Count) candidates</strong> ($($cap004Eval.HardFailCount) hard-fail, $($cap004Eval.SoftFailCount) soft-fail, $($cap004Eval.PassCount) pass).</p>"
         $cap004HardIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap004HardIssueCounts -Title "Hard-check failures"
         $cap004SoftIssueSummary = Get-CapIssueSummaryHtml -IssueCounts $cap004SoftIssueCounts -Title "Soft-check failures"
-        $cap004SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
+        $cap004SecureReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?UserActions=urn%3Auser%3Aregisterdevice&State=enabled&or_IncUsers=%3E0%7C%7Call&or_IncGroups=%3E0&or_IncExternals=%3E0&or_IncRoles=%3E0&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CIncUsers%2CExcUsers%2CIncGroups%2CIncUsersViaGroups%2CExcGroups%2CExcUsersViaGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CWarnings#conditional-access-policies-details"
 
         if ($cap004Eval.PassCount -eq 0) {
             if ($cap004HardPass.Count -eq 0) {
@@ -4268,7 +4268,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $capAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($policy in $cap006Candidates) {
             $capAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($policy.Id)`" target=`"_blank`">$($policy.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($policy.Id)`" target=`"_blank`">$($policy.DisplayName)</a>"
                 "State" = $policy.State
                 "Sign-In Risk Configs" = $policy.SignInRisk
                 "UserRisk Risk Configs" = $policy.UserRisk
@@ -4505,7 +4505,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $cap010Affected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.DisplayName)</a>"
                 "State" = $object.State
                 "Grant Controls" = $object.GrantControls
                 "Included Roles" = $object.IncRoles
@@ -4567,7 +4567,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $cap011Affected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.DisplayName)</a>"
                 "State" = $object.State
                 "Grant Controls" = $object.GrantControls
                 "Included Roles" = $object.IncRoles
@@ -4614,7 +4614,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-001] Found $($entAppsWithSecrets.Count) enterprise apps with client credentials."
         Set-FindingOverride -FindingId "ENT-001" -Props $ENT001VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-001" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Credentials=%3E0&SAML=%3Dfalse&columns=DisplayName%2CPublisherName%2CForeign%2CSAML%2CCredentials%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings#enterprise-applications-details"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Credentials=%3E0&SAML=%3Dfalse&columns=DisplayName%2CPublisherName%2CForeign%2CSAML%2CCredentials%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings#enterprise-applications-details"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -4674,7 +4674,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $credentialDisplay = if ($credentialLines.Count -gt 0) { ($credentialLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $entAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Credential Count" = $app.Credentials
                 "Last sign-in (days)" = $app.LastSignInDays
                 "Credentials" = $credentialDisplay
@@ -4695,14 +4695,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-002] Found $($entAppsInactiveEnabled.Count) inactive enterprise apps that are enabled."
         Set-FindingOverride -FindingId "ENT-002" -Props $ENT002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-002" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2COwners%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2COwners%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
             AffectedSortKey = "Last sign-in (days)"
             AffectedSortDir = "DESC"
         }
         $entInactiveAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($app in $entAppsInactiveEnabled) {
             $entInactiveAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Inactive" = $app.Inactive
                 "Last sign-in (days)" = $app.LastSignInDays
                 "Foreign Application" = $app.Foreign
@@ -4735,7 +4735,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (-not $name) { $name = $owner.Id }
                     $label = "$name (User)"
                     if ($owner.Id) {
-                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)`" target=`"_blank`">$label</a>")
+                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)`" target=`"_blank`">$label</a>")
                     } else {
                         $ownerLinks.Add($label)
                     }
@@ -4753,11 +4753,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (Test-IsTier0OwnerId -OwnerId $ownerId -OwnerType $spTypeLabel) { continue }
                     if ($owner.servicePrincipalType -eq "Application") {
                         if ($owner.Id -and $enterpriseAppIds.ContainsKey($owner.Id)) {
-                            $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)"
+                            $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)"
                         }
                     } elseif ($owner.servicePrincipalType -eq "ManagedIdentity") {
                         if ($owner.Id) {
-                            $spLink = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)"
+                            $spLink = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)"
                         }
                     }
                     if ($spLink) {
@@ -4791,7 +4791,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $entOwnerAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Owners Count" = $nonTier0OwnerCount
                 "Owners" = $ownerDisplay
                 "App Impact Score" = $app.Impact
@@ -4801,7 +4801,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         if ($entOwnerAffected.Count -gt 0) {
             Set-FindingOverride -FindingId "ENT-003" -Props $ENT003VariantProps.Vulnerable
             Set-FindingOverride -FindingId "ENT-003" -Props @{
-                RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Owners=%3E0&Enabled=%3Dtrue&Impact=%3E%3D$ownerFindingMinImpact&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2COwners%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings"
+                RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Owners=%3E0&Enabled=%3Dtrue&Impact=%3E%3D$ownerFindingMinImpact&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2COwners%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings"
                 Description = "<p>$($entOwnerAffected.Count) enabled enterprise applications with an impact score of at least $ownerFindingMinImpact have one or more assigned non-Tier-0 owners.</p><p><strong>Important:</strong> This finding requires manual verification. If the owners are Tier-1 administrators and the application has only low privileges (low impact score), this may be acceptable.</p>"
                 AffectedObjects = $entOwnerAffected
                 AffectedSortKey = "App Impact Score"
@@ -4824,7 +4824,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-004] Found $($entAppsForeignExtensive.Count) foreign enterprise apps with extensive API permissions."
         Set-FindingOverride -FindingId "ENT-004" -Props $ENT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-004" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DTrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -4877,7 +4877,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
             $entForeignAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Inactive" = $app.Inactive
                 "Dangerous" = $app.ApiDangerous
@@ -4908,7 +4908,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-005] Found $($entAppsForeignDelegated.Count) foreign enterprise apps with extensive delegated permissions."
         Set-FindingOverride -FindingId "ENT-005" -Props $ENT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-005" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DTrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&or_ApiDelegatedMedium=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CApiDelegatedLow%2CApiDelegatedMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&or_ApiDelegatedMedium=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CApiDelegatedLow%2CApiDelegatedMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -4976,7 +4976,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
             $entDelegatedAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Inactive" = $app.Inactive
                 "Dangerous" = $app.ApiDelegatedDangerous
@@ -5007,7 +5007,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-006] Found $($entAppsForeignRoles.Count) foreign enterprise apps with Entra ID roles."
         Set-FindingOverride -FindingId "ENT-006" -Props $ENT006VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-006" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DTrue&EntraRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&EntraRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5095,7 +5095,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $entRoleAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Role Count" = $(if ($null -ne $app.EntraRolesEffective) { $app.EntraRolesEffective } else { $app.EntraRoles })
                 "Roles" = $roleDisplay
@@ -5124,7 +5124,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-007] Found $($entAppsForeignAzureRoles.Count) foreign enterprise apps with Azure roles."
         Set-FindingOverride -FindingId "ENT-007" -Props $ENT007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-007" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DTrue&AzureRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&AzureRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5221,7 +5221,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $roleCount = $azureRoleEntries.Count
             }
             $entAzureRoleAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Role Count" = $roleCount
                 "Roles" = $roleDisplay
@@ -5250,7 +5250,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-008] Found $($entAppsForeignOwningObjects.Count) foreign enterprise apps owning objects."
         Set-FindingOverride -FindingId "ENT-008" -Props $ENT008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-008" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Enabled=%3Dtrue&Foreign=%3Dtrue&or_GrpOwn=%3E0&or_AppOwn=%3E0&or_SpOwn=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2COwners%2CCredentials%2CAppRoles%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&Foreign=%3Dtrue&or_GrpOwn=%3E0&or_AppOwn=%3E0&or_SpOwn=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2COwners%2CCredentials%2CAppRoles%2CGrpMem%2CGrpOwn%2CAppOwn%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDelegated%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5261,7 +5261,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $appOwnValue = Get-IntSafe $app.AppOwn
             $spOwnValue = Get-IntSafe $app.SpOwn
             $entOwnershipAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Owned Groups" = $grpOwnValue
                 "Owned App Registrations" = $appOwnValue
@@ -5284,7 +5284,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-009] Found $($entAppsInternalExtensive.Count) internal enterprise apps with extensive API permissions."
         Set-FindingOverride -FindingId "ENT-009" -Props $ENT009VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-009" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DFalse&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&Enabled=%3Dtrue&DisplayName=%21%5EConnectSyncProvisioning_&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&Enabled=%3Dtrue&DisplayName=%21%5EConnectSyncProvisioning_&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5330,7 +5330,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
             $entInternalAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Inactive" = $app.Inactive
                 "Dangerous" = $app.ApiDangerous
                 "High" = $app.ApiHigh
@@ -5359,7 +5359,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-010] Found $($entAppsInternalDelegated.Count) internal enterprise apps with delegated extensive permissions."
         Set-FindingOverride -FindingId "ENT-010" -Props $ENT010VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-010" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DFalse&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CApiDelegatedLow%2CApiDelegatedMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CApiDelegatedLow%2CApiDelegatedMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5420,7 +5420,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
             $entInternalDelegatedAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Inactive" = $app.Inactive
                 "Dangerous" = $app.ApiDelegatedDangerous
                 "High" = $app.ApiDelegatedHigh
@@ -5449,7 +5449,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-011] Found $($entAppsInternalTier0.Count) internal enterprise apps with privileged Entra ID roles."
         Set-FindingOverride -FindingId "ENT-011" -Props $ENT011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-011" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DFalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5560,7 +5560,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $entTierAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Tier 0 Entra Roles" = $tier0Count
                 "Tier 1 Entra Roles" = $tier1Count
                 "Entra Roles" = $roleDisplay
@@ -5589,7 +5589,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-012] Found $($entAppsInternalAzureTier.Count) internal enterprise apps with privileged Azure roles."
         Set-FindingOverride -FindingId "ENT-012" -Props $ENT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5700,7 +5700,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $entAzureAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
                 "Azure Roles" = $roleDisplay
@@ -5725,7 +5725,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[APP-001] Found $($appRegsWithSecrets.Count) app registrations with secrets."
         Set-FindingOverride -FindingId "APP-001" -Props $APP001VariantProps.Vulnerable
         Set-FindingOverride -FindingId "APP-001" -Props @{
-            RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SecretsCount=%3E0&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwnerCount%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=SecretsCount&sortDir=desc"
+            RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SecretsCount=%3E0&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwnerCount%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=SecretsCount&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -5783,7 +5783,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $secretDisplay = if ($secretLines.Count -gt 0) { ($secretLines | Sort-Object -Unique) -join "<br>" } else { "" }
             $appAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Secrets" = $app.SecretsCount
                 "Secret Details" = $secretDisplay
                 "_SortImpact" = $app.Impact
@@ -5803,14 +5803,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[APP-002] Found $($appRegsMissingAppLock.Count) app registrations without app instance property lock."
         Set-FindingOverride -FindingId "APP-002" -Props $APP002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "APP-002" -Props @{
-            RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AppLock=%3Dfalse&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwnerCount%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AppLock=%3Dfalse&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwnerCount%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
         $appLockAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($app in $appRegsMissingAppLock) {
             $appLockAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "App Lock" = $app.AppLock
                 "Sign-in Audience" = $app.SignInAudience
                 "_SortImpact" = $app.Impact
@@ -5843,7 +5843,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (-not $name) { $name = $owner.Id }
                     $label = "$name (User)"
                     if ($owner.Id) {
-                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)`" target=`"_blank`">$label</a>")
+                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)`" target=`"_blank`">$label</a>")
                     } else {
                         $ownerLinks.Add("$label")
                     }
@@ -5869,7 +5869,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (Test-IsTier0OwnerId -OwnerId $ownerId -OwnerType $spType) { continue }
                     if ($spType -eq "ServicePrincipal") {
                         if ($owner.Id -and $enterpriseAppIds.ContainsKey($owner.Id)) {
-                            $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)"
+                            $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)"
                         }
                     }
                     $label = "$name ($spType)"
@@ -5904,7 +5904,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $appOwnerAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Owners Count" = $nonTier0OwnerCount
                 "Owners" = $ownerDisplay
                 "App Impact Score" = $app.Impact
@@ -5913,7 +5913,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         if ($appOwnerAffected.Count -gt 0) {
             Set-FindingOverride -FindingId "APP-003" -Props $APP003VariantProps.Vulnerable
             Set-FindingOverride -FindingId "APP-003" -Props @{
-                RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Owners=%3E0&Impact=%3E%3D$ownerFindingMinImpact&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwners%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                RelatedReportUrl = "AppRegistration_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Owners=%3E0&Impact=%3E%3D$ownerFindingMinImpact&columns=DisplayName%2CSignInAudience%2CAppLock%2CAppRoles%2COwners%2CCloudAppAdmins%2CAppAdmins%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
 		        AffectedSortKey = "App Impact Score"
                 AffectedSortDir = "DESC"
                 Description = "<p>$($appOwnerAffected.Count) app registrations with an impact score of at least $ownerFindingMinImpact have one or more assigned non-Tier-0 owners.</p><p><strong>Important:</strong> This finding requires manual verification. If the owners are Tier-1 administrators and the application has only low privileges (low impact score), this may be acceptable.</p>"
@@ -5949,7 +5949,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-001] Found $($agentBlueprintsWithSecrets.Count) agent identity blueprints with client secrets."
         Set-FindingOverride -FindingId "AGT-001" -Props $AGT001VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-001" -Props @{
-            RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html?SecretsCount=%3E0&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?SecretsCount=%3E0&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6006,7 +6006,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $secretDisplay = if ($secretLines.Count -gt 0) { $secretLines -join "<br>" } else { "" }
             $agtAffected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
                 "Secrets" = $blueprint.SecretsCount
                 "Secret Details" = $secretDisplay
                 "_SortRisk" = $blueprint.Risk
@@ -6043,7 +6043,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     if (-not $name) { $name = $owner.Id }
                     $label = "$name (User)"
                     if ($owner.Id) {
-                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)`" target=`"_blank`">$label</a>")
+                        $ownerLinks.Add("<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)`" target=`"_blank`">$label</a>")
                     } else {
                         $ownerLinks.Add("$label")
                     }
@@ -6065,7 +6065,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $ownerId = "$($owner.Id)".Trim()
                     if (Test-IsTier0OwnerId -OwnerId $ownerId -OwnerType $spType) { continue }
                     if ($spType -eq "ServicePrincipal" -and $owner.Id -and $enterpriseAppIds.ContainsKey($owner.Id)) {
-                        $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($owner.Id)"
+                        $spLink = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($owner.Id)"
                     }
                     $label = "$name ($spType)"
                     if ($spLink) {
@@ -6098,7 +6098,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $agt017Affected.Add([pscustomobject]@{
-                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($blueprint.Id)`" target=`"_blank`">$($blueprint.DisplayName)</a>"
                 "Owners Count" = $nonTier0OwnerCount
                 "Owners" = $ownerDisplay
                 "Blueprint Principals" = $blueprint.BlueprintPrincipals
@@ -6110,7 +6110,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         if ($agt017Affected.Count -gt 0) {
             Set-FindingOverride -FindingId "AGT-017" -Props $AGT017VariantProps.Vulnerable
             Set-FindingOverride -FindingId "AGT-017" -Props @{
-                RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Owners=%3E0&Impact=%3E%3D$blueprintOwnerFindingMinImpact&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CSponsors%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                RelatedReportUrl = "AgentIdentityBlueprints_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Owners=%3E0&Impact=%3E%3D$blueprintOwnerFindingMinImpact&columns=DisplayName%2CSignInAudience%2CBlueprintPrincipals%2CAgentIdentities%2CAgentUsers%2COwners%2CSponsors%2CInheritableScopes%2CInheritableRoles%2CFederatedCreds%2CSecretsCount%2CCertsCount%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
                 AffectedSortKey = "Impact Score"
                 AffectedSortDir = "DESC"
                 Description = "<p>$($agt017Affected.Count) blueprints with an impact score of at least $blueprintOwnerFindingMinImpact have one or more assigned non-Tier-0 owners.</p><p><strong>Important:</strong> This finding requires manual verification. If the owners are Tier-1 administrators and the blueprint has only limited effective privileges, this may be acceptable.</p>"
@@ -6136,7 +6136,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-002] Found $($foreignAgentIdentitiesWithExtensiveApi.Count) enabled foreign agent identities with extensive application API privileges."
         Set-FindingOverride -FindingId "AGT-002" -Props $AGT002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-002" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6222,11 +6222,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt002Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Publisher Name" = $agentIdentity.PublisherName
                 "Dangerous" = $agentIdentity.ApiDangerous
@@ -6264,7 +6264,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-003] Found $($foreignAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled foreign agent identities with extensive delegated API privileges."
         Set-FindingOverride -FindingId "AGT-003" -Props $AGT003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-003" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6362,11 +6362,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt003Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Publisher Name" = $agentIdentity.PublisherName
                 "Dangerous" = $agentIdentity.ApiDelegatedDangerous
@@ -6403,7 +6403,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6476,11 +6476,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt004Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Publisher Name" = $agentIdentity.PublisherName
                 "Tier 0 Entra Roles" = $tier0Count
@@ -6512,7 +6512,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with Azure roles."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6594,11 +6594,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt005Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Publisher Name" = $agentIdentity.PublisherName
                 "Tier 0 Azure Roles" = $tier0Count
@@ -6631,7 +6631,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-006] Found $($internalAgentIdentitiesWithExtensiveApi.Count) enabled internal agent identities with extensive application API privileges."
         Set-FindingOverride -FindingId "AGT-006" -Props $AGT006VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-006" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6714,11 +6714,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt006Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Dangerous" = $agentIdentity.ApiDangerous
                 "High" = $agentIdentity.ApiHigh
@@ -6753,7 +6753,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-007] Found $($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal agent identities with extensive delegated API privileges."
         Set-FindingOverride -FindingId "AGT-007" -Props $AGT007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-007" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6849,11 +6849,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt007Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Dangerous" = $agentIdentity.ApiDelegatedDangerous
                 "High" = $agentIdentity.ApiDelegatedHigh
@@ -6888,7 +6888,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-008] Found $($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-008" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -6992,11 +6992,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt008Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Tier 0 Entra Roles" = $tier0Count
                 "Tier 1 Entra Roles" = $tier1Count
@@ -7028,7 +7028,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-009] Found $($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities with privileged Azure roles."
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-009" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Foreign=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7154,11 +7154,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt009Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
@@ -7190,7 +7190,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-010] Found $($inactiveEnabledAgentIdentities.Count) inactive agent identities that are enabled."
         Set-FindingOverride -FindingId "AGT-010" -Props $AGT010VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-010" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
             AffectedSortKey = "Last sign-in (days)"
             AffectedSortDir = "DESC"
         }
@@ -7200,11 +7200,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
                 if (-not $parentPrincipalName) { $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalId }
-                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
+                $parentPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentPrincipalName</a>"
             }
 
             $agt010Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
+                "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Inactive" = $agentIdentity.Inactive
                 "Last sign-in (days)" = $agentIdentity.LastSignInDays
@@ -7228,7 +7228,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-011] Found $($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-011" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7254,18 +7254,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $agt011Affected.Add([pscustomobject][ordered]@{
-                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Entra Roles" = $user.EntraRoles
@@ -7297,7 +7297,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with Azure roles."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7323,18 +7323,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $agt012Affected.Add([pscustomobject][ordered]@{
-                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "UPN" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
@@ -7366,7 +7366,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-013] Found $($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-013" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7388,18 +7388,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $agt013Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Entra Roles" = $user.EntraRoles
@@ -7431,7 +7431,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with privileged Azure roles."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7453,18 +7453,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $agt014Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
@@ -7496,7 +7496,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-015] Found $($agentUsersOwningCapRelatedGroups.Count) enabled agent users owning CAP-related groups."
         Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-015" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7523,14 +7523,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $ownedGroupDisplay = foreach ($group in $ownedCapGroups) {
@@ -7541,11 +7541,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                         $groupDisplayName = $matchingGroup.DisplayName
                     }
                 }
-                "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($group.Id)`" target=`"_blank`">$groupDisplayName</a> (CAPs: $(Get-IntSafe $group.CAPs))"
+                "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($group.Id)`" target=`"_blank`">$groupDisplayName</a> (CAPs: $(Get-IntSafe $group.CAPs))"
             }
 
             $agt015Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
@@ -7571,7 +7571,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-016] Found $($inactiveEnabledAgentUsers.Count) enabled inactive agent users."
         Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-016" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
             AffectedSortKey = "_SortLastSignInDays"
             AffectedSortDir = "DESC"
         }
@@ -7593,14 +7593,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentBlueprintPrincipalId)")) {
                 $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentBlueprintPrincipalName")) { $parentBlueprintPrincipalName = $user.ParentBlueprintPrincipalId }
-                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
+                $parentBlueprintPrincipal = "<a href=`"AgentIdentityBlueprintsPrincipals_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentBlueprintPrincipalId)`" target=`"_blank`">$parentBlueprintPrincipalName</a>"
             }
 
             $parentAgentIdentity = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($user.ParentAgentIdentityId)")) {
                 $parentAgentIdentityName = $user.ParentAgentIdentityDisplayName
                 if ([string]::IsNullOrWhiteSpace("$parentAgentIdentityName")) { $parentAgentIdentityName = $user.ParentAgentIdentityId }
-                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
+                $parentAgentIdentity = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($user.ParentAgentIdentityId)`" target=`"_blank`">$parentAgentIdentityName</a>"
             }
 
             $sortLastSignInDays = -1
@@ -7610,7 +7610,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $agt016Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
@@ -7639,7 +7639,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[MAI-001] Found $($managedIdentitiesWithApi.Count) managed identities with API privileges."
         Set-FindingOverride -FindingId "MAI-001" -Props $MAI001VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-001" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CAzureRoles%2CApiDangerous%2CApiHigh%2CApiMedium%2CApiLow%2CApiMisc%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -7685,7 +7685,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $permissionDisplay = if ($permissions.Count -gt 0) { ($permissions | Sort-Object -Unique) -join "<br>" } else { "" }
 
             $maiAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Dangerous" = $app.ApiDangerous
                 "High" = $app.ApiHigh
                 "Medium" = $app.ApiMedium
@@ -7720,7 +7720,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[MAI-002] Found $($managedIdentitiesWithPrivRoles.Count) managed identities with privileged Entra ID roles."
         Set-FindingOverride -FindingId "MAI-002" -Props $MAI002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-002" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -7812,7 +7812,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $roleDisplay = if ($roles.Count -gt 0) { ($roles | Sort-Object -Unique) -join "<br>" } else { "" }
 
             $maiRoleAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Role Count" = $roleCount
                 "Roles" = $roleDisplay
                 "_SortImpact" = $app.Impact
@@ -7842,7 +7842,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[MAI-003] Found $($managedIdentitiesWithAzurePrivRoles.Count) managed identities with privileged Azure roles."
         Set-FindingOverride -FindingId "MAI-003" -Props $MAI003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -7930,7 +7930,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $roleDisplay = if ($roles.Count -gt 0) { ($roles | Sort-Object -Unique) -join "<br>" } else { "" }
 
             $maiAzureAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
+                "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Role Count" = $roleCount
                 "Roles (>= Tier 1)" = $roleDisplay
                 "_SortImpact" = $app.Impact
@@ -7982,7 +7982,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 default { 9 }
             }
             $pimEligibleAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Users" = $object.Eligible
                 "_SortTier" = $tierSortRank
@@ -7992,7 +7992,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-001" -Props @{
             Status = "NotVulnerable"
             Description = "<p>Privileged Identity Management (PIM) for Entra ID roles is in use. There are $($pimRolesWithEligibleAssignments.Count) roles with eligible assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedSortKey = "_SortTier"
             AffectedSortDir = "ASC"
             AffectedObjects = $pimEligibleAffected
@@ -8027,11 +8027,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 if ($Users.ContainsKey($principalId)) {
                     $principalType = "User"
                     $principalDisplayName = $Users[$principalId].UPN
-                    $principalLink = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$principalId"
+                    $principalLink = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$principalId"
                 } elseif ($AllGroupsDetails.ContainsKey($principalId)) {
                     $principalType = "Group"
                     $principalDisplayName = $AllGroupsDetails[$principalId].DisplayName
-                    $principalLink = "Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$principalId"
+                    $principalLink = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$principalId"
                 } else {
                     continue
                 }
@@ -8091,7 +8091,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
             $reportRoleFilter = [System.Uri]::EscapeDataString("$($sampleEntry.Role)")
             $reportScopeFilter = [System.Uri]::EscapeDataString("$($sampleEntry.Scope)")
-            $reportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Role=$reportRoleFilter&Scope=$reportScopeFilter&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+            $reportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Role=$reportRoleFilter&Scope=$reportScopeFilter&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
 
             $pim002Violations.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"$reportUrl`" target=`"_blank`">$($sampleEntry.Role)</a>"
@@ -8104,7 +8104,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
         if ($pim002Violations.Count -gt 0) {
             Write-Log -Level Verbose -Message "[PIM-002] Found $($pim002Violations.Count) Tier-0 roles with active user/group assignments that are not activated via PIM."
-            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
             Set-FindingOverride -FindingId "PIM-002" -Props @{
                 Status = "Vulnerable"
                 Description = "<p>There are $($pim002Violations.Count) Tier-0 Entra roles with active user or group assignments that are not activated via PIM.</p>"
@@ -8113,7 +8113,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
         } else {
             Write-Log -Level Verbose -Message "[PIM-002] No Tier-0 roles found with disallowed active user/group assignments outside PIM activation."
-            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
             Set-FindingOverride -FindingId "PIM-002" -Props @{
                 Status = "NotVulnerable"
                 Description = "<p>No Tier-0 Entra roles identified with disallowed active user or group assignments outside PIM activation.</p><p><strong>Allowed exception:</strong> the Global Administrator role may have up to two directly assigned users or one directly assigned group.</p>"
@@ -8138,7 +8138,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0LongActivationAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0LongActivationDuration) {
             $pimTier0LongActivationAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Activation Duration" = "$($object.ActivationDuration) $($object.ActivationDurationUnit)"
@@ -8147,7 +8147,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-003" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0LongActivationDuration.Count) Tier-0 roles with eligible assignments and a maximum activation duration greater than 4 hours.</p><p><strong>Note:</strong> Users may choose a shorter activation duration during role activation.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&Eligible=%3E0&ActivationDuration=%3E4&columns=Role%2CTier%2CEligible%2CActivationDuration%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&Eligible=%3E0&ActivationDuration=%3E4&columns=Role%2CTier%2CEligible%2CActivationDuration%2CWarnings"
             AffectedObjects = $pimTier0LongActivationAffected
         }
     } else {
@@ -8174,7 +8174,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0MissingJustificationAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0MissingJustificationOrTicketing) {
             $pimTier0MissingJustificationAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Require Justification" = $object.ActivationJustification
@@ -8184,7 +8184,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-004" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0MissingJustificationOrTicketing.Count) Tier-0 roles with eligible assignments that do not require justification or ticketing information on activation.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&Eligible=%3E0&ActivationJustification=%3Dfalse&ActivationTicketing=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&Eligible=%3E0&ActivationJustification=%3Dfalse&ActivationTicketing=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0MissingJustificationAffected
         }
     } else {
@@ -8211,7 +8211,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0PermanentActiveAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0AllowPermanentActiveAssignments) {
             $pimTier0PermanentActiveAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Direct Assignments" = $object.Direct
@@ -8221,7 +8221,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-005" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0AllowPermanentActiveAssignments.Count) Tier-0 roles, excluding Global Administrator, that allow permanent active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveExpiration=%3Dfalse&Role=%21Global+Administrator&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&ActiveExpiration=%3Dfalse&Role=%21Global+Administrator&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0PermanentActiveAffected
         }
     } else {
@@ -8248,7 +8248,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0WithoutActiveJustificationAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0WithoutActiveAssignmentJustification) {
             $pimTier0WithoutActiveJustificationAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Direct Assignments" = $object.Direct
@@ -8258,7 +8258,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-006" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutActiveAssignmentJustification.Count) Tier-0 roles that do not require justification on active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignJustification=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CActiveAssignJustification%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&ActiveAssignJustification=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CActiveAssignJustification%2CWarnings"
             AffectedObjects = $pimTier0WithoutActiveJustificationAffected
         }
     } else {
@@ -8285,7 +8285,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0WithoutActiveMfaAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0WithoutActiveAssignmentMfa) {
             $pimTier0WithoutActiveMfaAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Direct Assignments" = $object.Direct
@@ -8295,7 +8295,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-007" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutActiveAssignmentMfa.Count) Tier-0 roles that do not require MFA on active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignMFA=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&ActiveAssignMFA=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0WithoutActiveMfaAffected
         }
     } else {
@@ -8322,7 +8322,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $pimTier0WithoutNotificationsAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($object in $pimTier0WithoutAllNotifications) {
             $pimTier0WithoutNotificationsAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Notify on Eligible Assignments" = $object.AlertAssignEligible
                 "Notify on Active Assignments" = $object.AlertAssignActive
@@ -8332,7 +8332,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-008" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutAllNotifications.Count) Tier-0 roles that do not have all notifications enabled.</p><p><strong>Important:</strong> This finding requires manual verification. If these events are already monitored by another solution (for example, a SIEM ingesting audit logs), this finding may be considered not applicable.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&or_AlertAssignEligible=false&or_AlertAssignActive=false&or_AlertActivation=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CAlertAssignEligible%2CAlertAssignActive%2CAlertActivation%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Tier=%3DTier-0&or_AlertAssignEligible=false&or_AlertAssignActive=false&or_AlertActivation=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CAlertAssignEligible%2CAlertAssignActive%2CAlertActivation%2CWarnings"
             AffectedObjects = $pimTier0WithoutNotificationsAffected
         }
     } else {
@@ -8375,7 +8375,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $capName = "$($capDetail.DisplayName)"
                     if ([string]::IsNullOrWhiteSpace($capName)) { $capName = "$($capDetail.Id)" }
                     if (-not [string]::IsNullOrWhiteSpace("$($capDetail.Id)")) {
-                        $linkedCapLinks.Add("<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($capDetail.Id)`" target=`"_blank`">$capName</a>")
+                        $linkedCapLinks.Add("<a href=`"ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($capDetail.Id)`" target=`"_blank`">$capName</a>")
                     } elseif (-not [string]::IsNullOrWhiteSpace($capName)) {
                         $linkedCapLinks.Add($capName)
                     }
@@ -8402,7 +8402,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $issuesDisplay = if ($linkedCapIssues.Count -gt 0) { $linkedCapIssues -join "<br>" } else { "" }
 
             $pimTier0WeakActivationControlsAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
+                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
                 "Require Approval" = $object.ActivationApproval
@@ -8417,7 +8417,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Status = "Vulnerable"
             Confidence = $pim009Confidence
             Description = "<p>There are $($pimTier0WithoutApprovalAndStrongReauth.Count) Tier-0 roles with eligible assignments that do not require approval, do not enforce re-authentication with MFA using an Authentication Context, or have issues or gaps in the linked Conditional Access policies.</p><p>Important: The setting <code>On activation, require: Azure MFA</code> does not require the user to provide MFA again if he authenticated with strong credentials or provided multifactor authentication earlier in the session.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_Warnings=CAP&or_ActivationAuthContext=false&Tier=%3DTier-0&ActivationApproval=%3Dfalse&Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationApproval%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?or_Warnings=CAP&or_ActivationAuthContext=false&Tier=%3DTier-0&ActivationApproval=%3Dfalse&Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationApproval%2CWarnings"
             AffectedObjects = $pimTier0WeakActivationControlsAffected
         }
     } else {
@@ -8984,7 +8984,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr005Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Type" = $user.UserType
                 "Inactive" = $user.Inactive
                 "Last sign-in (days)" = $user.LastSignInDays
@@ -9000,7 +9000,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Set-FindingOverride -FindingId "USR-005" -Props @{
             Description = "<p>There are $($inactiveEnabledUsers.Count) inactive users.</p><ul><li>Internal users: $inactiveMembers</li><li>Guest users: $inactiveGuests</li></ul><p><strong>Note:</strong> Users are considered inactive if they have no successful sign-in for 180 days or if they never signed in and were created more than 180 days ago.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2CEntraRoles%2CAzureRoles%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Inactive=%3Dtrue&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2CEntraRoles%2CAzureRoles%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr005Affected
@@ -9027,7 +9027,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr006Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Entra Roles" = $user.EntraRoles
                 "Entra Max Tier" = $user.EntraMaxTier
                 "Impact" = $user.Impact
@@ -9037,7 +9037,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
         $usr006Props = @{
             Description = "<p>There are $usr006Count users with a Tier-0 Entra ID role assigned (directly or through groups).</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?EntraMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CEntraRoles%2CEntraMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?EntraMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CEntraRoles%2CEntraMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr006Affected
@@ -9069,7 +9069,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr007Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "OnPrem" = $user.OnPrem
                 "Entra Roles" = $user.EntraRoles
                 "Entra Max Tier" = $user.EntraMaxTier
@@ -9081,7 +9081,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-007" -Props $USR007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-007" -Props @{
             Description = "<p>There are $($enabledTier0OnPremUsers.Count) hybrid (on-premises synchronized) users with a Tier-0 Entra ID role assigned (directly or through groups)</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?EntraMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CEntraRoles%2CEntraMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?EntraMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CEntraRoles%2CEntraMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr007Affected
@@ -9104,7 +9104,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr008Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "OnPrem" = $user.OnPrem
                 "Azure Roles" = $user.AzureRoles
                 "Azure Max Tier" = $user.AzureMaxTier
@@ -9116,7 +9116,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-008" -Props @{
             Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid (on-premises synchronized) users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr008Affected
@@ -9147,7 +9147,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $displayName = "$($user.UPN)"
                 if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
                 $usr009Affected.Add([pscustomobject][ordered]@{
-                    "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                    "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                     "Azure Roles" = $user.AzureRoles
                     "Azure Max Tier" = $user.AzureMaxTier
                     "Impact" = $user.Impact
@@ -9158,7 +9158,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Vulnerable
             Set-FindingOverride -FindingId "USR-009" -Props @{
                 Description = "<p>There are $usr009Count users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
-                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
                 AffectedSortKey = "Impact"
                 AffectedSortDir = "DESC"
                 AffectedObjects = $usr009Affected
@@ -9176,7 +9176,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr010Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Protected" = $user.Protected
                 "Entra Roles" = $user.EntraRoles
                 "Entra Max Tier" = $user.EntraMaxTier
@@ -9188,7 +9188,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-010" -Props $USR010VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-010" -Props @{
             Description = "<p>There are $($enabledTier0UnprotectedUsers.Count) users with a Tier-0 Entra ID role assigned (through groups) who are not protected against modifications by lower-tier administrators or applications. They are considered unprotected because they are:</p><ul><li>Not direct members of a privileged role</li><li>Not members of a role-assignable group</li><li>Not members of a Restricted Management Administrative Unit</li></ul><p>This situation commonly occurs when non-role-assignable groups are eligible members of groups with Tier-0 roles (PIM for Groups).</p><p><strong>Important:</strong> This finding requires manual verification. Exploitability also depends on additional factors (for example, password hash synchronization or password write-back configuration).</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Protected=%3Dfalse&Enabled=%3Dtrue&Agent=%3Dfalse&EntraMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&Agent=%3Dfalse&EntraMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr010Affected
@@ -9211,7 +9211,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr011Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Protected" = $user.Protected
                 "Azure Roles" = $user.AzureRoles
                 "Azure Max Tier" = $user.AzureMaxTier
@@ -9223,7 +9223,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-011" -Props @{
             Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with Tier-0 Azure roles assigned (directly or through groups) who are not protected against modifications by lower-tier administrators or applications. They are considered unprotected because they are:</p><ul><li>Not direct members of a privileged role</li><li>Not members of a role-assignable group</li><li>Not members of a Restricted Management Administrative Unit</li></ul><p><strong>Important:</strong> This finding requires manual verification. Exploitability also depends on additional factors (for example, password hash synchronization or password write-back configuration). Furthermore, the Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr011Affected
@@ -9244,7 +9244,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr012Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "MFA Capable" = $user.MfaCap
                 "Type" = $user.UserType
                 "Entra Max Tier" = $user.EntraMaxTier
@@ -9273,7 +9273,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "USR-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Enabled=%3Dtrue&Agent=%3Dfalse&MfaCap=false&Warnings=%21Sync&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&Agent=%3Dfalse&MfaCap=false&Warnings=%21Sync&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr012Affected
@@ -9295,7 +9295,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr013Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
+                "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "OnPrem" = $user.OnPrem
                 "CreatedDays" = $user.CreatedDays
                 "Last sign-in (days)" = $user.LastSignInDays
@@ -9305,7 +9305,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-013" -Props $USR013VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-013" -Props @{
             Description = "<p>$($enabledOnPremNeverSignedInOlderThan90Users.Count) enabled accounts are synchronized from on-premises Active Directory to Entra ID even though they appear not to be used in the cloud.</p><p>These accounts have all of the following characteristics:</p><ul><li>Synchronized from on-premises Active Directory</li><li>Enabled</li><li>Older than three months</li><li>No recorded authentication to Entra ID</li></ul><p>This indicates that these accounts are likely not required for cloud services, but are still exposed through the cloud identity plane.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Enabled=%3Dtrue&OnPrem=%3Dtrue&LastSignInDays=%3D-&CreatedDays=%3E90&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CLicenseStatus%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CLastSignInDays%2CCreatedDays%2CMfaCap%2CPerUserMfa%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&OnPrem=%3Dtrue&LastSignInDays=%3D-&CreatedDays=%3E90&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CLicenseStatus%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CLastSignInDays%2CCreatedDays%2CMfaCap%2CPerUserMfa%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "CreatedDays"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr013Affected
@@ -9378,7 +9378,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $groupDisplayName = "$($group.DisplayName)"
             if ([string]::IsNullOrWhiteSpace($groupDisplayName)) { $groupDisplayName = "$($entry.Id)" }
             $grp003Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
+                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
                 "Type" = $group.Type
                 "Visibility" = $group.Visibility
                 "Security Enabled" = $group.SecurityEnabled
@@ -9389,7 +9389,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "GRP-003" -Props $GRP003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "GRP-003" -Props @{
             Description = "<p>There are $($publicM365Groups.Count) public M365 groups.</p>"
-            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Visibility=%3DPublic&Type=%3DM365+Group&Dynamic=%3Dfalse&columns=DisplayName%2CType%2CSecurityEnabled%2CVisibility%2CUsers%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Visibility=%3DPublic&Type=%3DM365+Group&Dynamic=%3Dfalse&columns=DisplayName%2CType%2CSecurityEnabled%2CVisibility%2CUsers%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = $grp003Affected
@@ -9410,7 +9410,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $groupDisplayName = "$($group.DisplayName)"
             if ([string]::IsNullOrWhiteSpace($groupDisplayName)) { $groupDisplayName = "$($entry.Id)" }
             $grp004Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
+                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
                 "Dynamic" = $group.Dynamic
                 "Membership Rule" = $group.MembershipRule
                 "Warnings" = $group.Warnings
@@ -9443,7 +9443,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Set-FindingOverride -FindingId "GRP-004" -Props @{
             Description = "<p>There are $($dynamicGroupsWithDangerousRules.Count) dynamic groups with potentially dangerous membership rules.</p><p>Used potentially dangerous attributes:</p>$attributeSummaryHtml<p><strong>Important:</strong> This finding requires manual verification. Whether a rule using one of these manipulable attributes is exploitable depends on the operator used, the assigned values, and how it is combined with other conditions in the rule.</p>"
-            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Dynamic=%3Dtrue&Warnings=dangerous+query&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CUsers%2CDevices%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Dynamic=%3Dtrue&Warnings=dangerous+query&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CUsers%2CDevices%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = $grp004Affected
@@ -9473,7 +9473,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if ($entry.HasEntraRolesUsage) { $groupsUsedInEntraRoles += 1 }
 
             $grp005Affected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
+                "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
                 "Protected" = $group.Protected
                 "Entra Roles" = $group.EntraRoles
                 "Entra Tier" = $group.EntraMaxTier
@@ -9488,7 +9488,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "GRP-005" -Props $GRP005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "GRP-005" -Props @{
             Description = "<p>There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul><li>$groupsUsedInCaps groups are used in Conditional Access policies</li><li>$groupsUsedInAzureRoles groups are used for Azure role assignments</li><li>$groupsUsedInEntraRoles groups are used for Entra ID role assignments</li></ul><p><strong>Important:</strong> This finding requires manual verification. Assess the impact if a lower-tier administrator or application can manage the membership of these groups.</p>"
-            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureRoles=%3E0&or_CAPs=%3E0&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CDevices%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureRoles=%3E0&or_CAPs=%3E0&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CDevices%2CNestedInGroups%2CAppRoles%2CCAPs%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = $grp005Affected
@@ -14740,7 +14740,7 @@ $FindingsJson
     $global:GlobalAuditSummary.SecurityFindings.Skipped = $statusCounts.Skipped
     $global:GlobalAuditSummary.SecurityFindings.Total = $Findings.Count
 
-    $reportPath = Join-Path $OutputFolder "$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    $reportPath = Join-Path $OutputFolder "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
     Write-Log -Level Debug -Message "Writing report file: $reportPath"
 
     $Report = ConvertTo-HTML -Body $headerHtml -Head $HeadCombined -PostContent $PostContentCombined

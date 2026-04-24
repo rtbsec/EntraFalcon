@@ -880,9 +880,9 @@ Execution Warnings = $($WarningList -join ' / ')
 <h2>$Title Overview</h2>
 "@
 
-        $txtPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
-        $csvPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv"
-        $htmlPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+        $txtPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
+        $csvPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv"
+        $htmlPath = "$OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
 
         $headerTXT | Out-File -Width 512 -FilePath $txtPath -Append
         $TableOutput | Format-Table -Property $TxtColumns | Out-File -Width 512 $txtPath -Append
@@ -917,7 +917,7 @@ Execution Warnings = $($WarningList -join ' / ')
         $Report | Out-File $htmlPath
 
         $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
-        Write-Host "[+] Details of $($TableOutput.Count) $Title objects stored in output files ($OutputFormats): $OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+        Write-Host "[+] Details of $($TableOutput.Count) $Title objects stored in output files ($OutputFormats): $OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
     }
 
     function Add-ObjectDetails {
@@ -944,7 +944,7 @@ Execution Warnings = $($WarningList -join ' / ')
     if ($null -eq $AgentIdentityBlueprintsPrincipals) { $AgentIdentityBlueprintsPrincipals = @{} }
     if ($null -eq $AgentIdentityBlueprints)           { $AgentIdentityBlueprints = @{} }
 
-    $EscapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
+    $EscapedTenantName = $CurrentTenant.FileSafeDisplayNameEncoded
     $AgentUsersLookup = Get-AgentUserLookup -Users $Users
     $PrincipalLookup = Get-PrincipalLookupByBlueprintId -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals
     $BlueprintLookupByAppId = Get-BlueprintLookupByAppId -AgentIdentityBlueprints $AgentIdentityBlueprints
@@ -2019,7 +2019,7 @@ Appendix: Agent Identity Blueprints with Client Secrets
         $BlueprintAppendixTxt += "`n" + (($BlueprintSecretsAppendix | Format-Table | Out-String).TrimEnd())
         $BlueprintAppendixHtml = $BlueprintSecretsAppendix | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Blueprints With Secrets</h2>"
         $BlueprintAdditionalCsvExports += @{
-            Path = "$OutputFolder\AgentIdentityBlueprints_Secrets_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv"
+            Path = "$OutputFolder\AgentIdentityBlueprints_Secrets_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv"
             Data = $BlueprintSecretsAppendix
         }
     }
