@@ -1187,7 +1187,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-001",
     "Title": "Blueprints With Client Secrets",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 1,
     "Description": "",
     "Threat": "",
@@ -1199,7 +1199,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-002",
     "Title": "Foreign Agent Identities with Extensive API Privileges (as Application)",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
     "Threat": "",
@@ -1211,7 +1211,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-003",
     "Title": "Foreign Agent Identities with Extensive API Privileges (Delegated)",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1223,7 +1223,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-004",
     "Title": "Foreign Agent Identities with Entra ID Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
     "Threat": "",
@@ -1235,7 +1235,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-005",
     "Title": "Foreign Agent Identities with Azure Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
     "Threat": "",
@@ -1247,7 +1247,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-006",
     "Title": "Internal Agent Identities with Extensive API Privileges (as Application)",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1259,7 +1259,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-007",
     "Title": "Internal Agent Identities with Extensive API Privileges (Delegated)",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1271,7 +1271,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-008",
     "Title": "Internal Agent Identities with Privileged Entra ID Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1283,7 +1283,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-009",
     "Title": "Internal Agent Identities with Privileged Azure Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1295,7 +1295,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-010",
     "Title": "Inactive Agent Identities",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1307,7 +1307,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-011",
     "Title": "Foreign Agent Users with Entra ID Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
     "Threat": "",
@@ -1319,7 +1319,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-012",
     "Title": "Foreign Agent Users with Azure Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
     "Threat": "",
@@ -1331,7 +1331,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-013",
     "Title": "Internal Agent Users with Privileged Entra ID Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1343,7 +1343,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-014",
     "Title": "Internal Agent Users with Privileged Azure Roles",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1355,7 +1355,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-015",
     "Title": "Agent Users Owning CAP-Related Groups",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1367,7 +1367,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-016",
     "Title": "Inactive Agent Users",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
@@ -1379,7 +1379,7 @@ function Invoke-CheckTenant {
   {
     "FindingId": "AGT-017",
     "Title": "Blueprints with Non-Tier-0 Owner",
-    "Category": "Agent Identity",
+    "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
     "Threat": "",
