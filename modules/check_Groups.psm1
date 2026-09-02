@@ -1608,7 +1608,7 @@ function Invoke-CheckGroups {
 
     $GroupsWithNestings = $AllGroupsDetails | Where-Object { $_.NestedGroups -ge 1 }
 
-    $GroupsWithNestingsCount = $($GroupsWithNestings.Count)
+    $GroupsWithNestingsCount = @($GroupsWithNestings).Count
     Write-Log -Level Debug -Message "Processing $GroupsWithNestingsCount groups with nesting"
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($GroupsWithNestingsCount / 10), 1)
     Write-Log -Level Debug -Message "Status: Processing group 1 of $GroupsWithNestingsCount (updates every $StatusUpdateInterval groups)..."
@@ -1648,7 +1648,7 @@ function Invoke-CheckGroups {
                 $userOwners = $matchingGroup.BaseOwnerUserDetails
                 $spOwners   = $matchingGroup.BaseOwnerSpDetails
 
-                if ($userOwners.Count -ge 1) {
+                if (@($userOwners).Count -ge 1) {
                     $targetGroup.NestedOwnerUserDetails.AddRange($userOwners)
 
                     # Count on-prem owners only once
@@ -1656,13 +1656,14 @@ function Invoke-CheckGroups {
                     foreach ($u in $userOwners) {
                         if ($u.onPremisesSyncEnabled) { $onPremCount++ }
                     }
-                    $targetGroup.NestedOwners += $userOwners.Count
+                    $targetGroup.NestedOwners += @($userOwners).Count
                     $targetGroup.OwnersSynced += $onPremCount
                 }
 
-                if ($spOwners.Count -ge 1) {
+                # Wrap in @() because a single SP owner is a bare object, which has no Count on PowerShell 5.1
+                if (@($spOwners).Count -ge 1) {
                     $targetGroup.NestedOwnerSPDetails += $spOwners
-                    $targetGroup.NestedOwners += $spOwners.Count
+                    $targetGroup.NestedOwners += @($spOwners).Count
                 }
             }
 
