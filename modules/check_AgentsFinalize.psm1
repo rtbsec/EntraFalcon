@@ -1643,7 +1643,8 @@ Execution Warnings = $($WarningList -join ' / ')
     $AgentIdentityApiReference = Get-ApiPermissionReferenceData -Items $AgentIdentityItems -PermissionProperty 'EffectiveAppApiPermission'
     $AgentIdentityAppendixTxt = ""
     $AgentIdentityAppendixHtml = ""
-    if ($AgentIdentityApiReference.Count -ge 1) {
+    # Wrap in @() because a single reference row is a bare object, which has no Count on PowerShell 5.1
+    if (@($AgentIdentityApiReference).Count -ge 1) {
         $AgentIdentityAppendixTxt = @"
 
 =======================================================================================================================
@@ -1894,7 +1895,7 @@ Appendix: Used API Permission Reference
     $PrincipalApiReference = Get-ApiPermissionReferenceData -Items $PrincipalItems
     $PrincipalAppendixTxt = ""
     $PrincipalAppendixHtml = ""
-    if ($PrincipalApiReference.Count -ge 1) {
+    if (@($PrincipalApiReference).Count -ge 1) {
         $PrincipalAppendixTxt = @"
 
 =======================================================================================================================
@@ -2100,7 +2101,7 @@ Appendix: Used API Permission Reference
     $BlueprintAppendixTxt = ""
     $BlueprintAppendixHtml = ""
     $BlueprintAdditionalCsvExports = @()
-    if ($BlueprintSecretsAppendix.Count -ge 1) {
+    if (@($BlueprintSecretsAppendix).Count -ge 1) {
         $BlueprintAppendixTxt = @"
 
 ===============================================================================================================================================

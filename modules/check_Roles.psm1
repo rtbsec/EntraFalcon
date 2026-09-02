@@ -674,7 +674,8 @@ $headerHtml = @"
     
 
 
-    if ($SortedAzureRoles.count -ge 1) {
+    # Wrap in @() because a single assignment is a bare object, which has no Count on PowerShell 5.1
+    if (@($SortedAzureRoles).count -ge 1) {
         Set-GlobalReportManifest -CurrentReportKey 'RoleAz' -CurrentReportName 'Role Assignments Azure IAM'
         $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Head ("<title>EF - Role Assignments (Azure)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
@@ -683,7 +684,7 @@ $headerHtml = @"
         if ($Csv) {
             $SortedAzureRoles | select-object Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
         }
-        write-host "[+] Details of $($SortedAzureRoles.count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
+        write-host "[+] Details of $(@($SortedAzureRoles).count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
         
         #Add information to the enumeration summary
         $AzureEligibleCount = 0
@@ -730,7 +731,7 @@ $headerHtml = @"
         }
 
         #Add information to the enumeration summary
-        $GlobalAuditSummary.AzureRoleAssignments.Count = $SortedAzureRoles.count
+        $GlobalAuditSummary.AzureRoleAssignments.Count = @($SortedAzureRoles).count
         $GlobalAuditSummary.AzureRoleAssignments.Eligible = $AzureEligibleCount
         $GlobalAuditSummary.AzureRoleAssignments.BuiltIn = $AssignmentsBuiltInRoles
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.User = $AssignmentPrincipalTypUsers

@@ -2220,7 +2220,8 @@ function Invoke-CheckCaps {
                 $MissingRolesWarning = "missing used roles (" + ($parts -join " / ") + ")"
             }
         }
-        $MissingRolesCount = $MissingRolesTable.count
+        # Wrap in @() because a single missing role is a bare object, which has no Count on PowerShell 5.1
+        $MissingRolesCount = @($MissingRolesTable).count
 
         # Build the warning text for missing privileged-role coverage.
         if ($ScopedRolesCount -gt 0) {
