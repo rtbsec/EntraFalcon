@@ -34,11 +34,25 @@ function Add-ApiQueryParameters {
     }
 
     $queryString = ($pairs -join '&')
-    if ($Uri -match '\?') {
-        return "$Uri&$queryString"
+    $fragmentIndex = $Uri.IndexOf('#')
+
+    if ($fragmentIndex -ge 0) {
+        $baseUri = $Uri.Substring(0, $fragmentIndex)
+        $fragment = $Uri.Substring($fragmentIndex)
+    }
+    else {
+        $baseUri = $Uri
+        $fragment = ''
     }
 
-    return "$Uri`?$queryString"
+    if ($baseUri -match '\?') {
+        $separator = if ($baseUri.EndsWith('?') -or $baseUri.EndsWith('&')) { '' } else { '&' }
+    }
+    else {
+        $separator = '?'
+    }
+
+    return "$baseUri$separator$queryString$fragment"
 }
 
 function Get-ApiErrorDetails {
@@ -72,7 +86,9 @@ function Get-ApiErrorDetails {
         }
 
         try {
-            if ($response -is [System.Net.Http.HttpResponseMessage]) {
+            # Compare by type name: [System.Net.Http.HttpResponseMessage] is not a
+            # resolvable type literal on Windows PowerShell 5.1 and would throw here.
+            if ($response.GetType().FullName -eq 'System.Net.Http.HttpResponseMessage') {
                 $rawBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             }
             elseif ($response.PSObject.Methods.Name -contains 'GetResponseStream') {
@@ -93,6 +109,7 @@ function Get-ApiErrorDetails {
                 }
             }
         } catch {
+            Write-Debug "Error body extraction failed: $($_.Exception.Message)"
         }
     }
 
@@ -182,7 +199,7 @@ function Send-ApiRequest {
         HTTP method to use: GET, POST, PATCH, PUT, DELETE.
 
     .PARAMETER Uri
-        Absolute or relative request URI.
+        Absolute request URI.
 
     .PARAMETER AccessToken
         Optional bearer token. If provided, Authorization header is set to "Bearer <token>".
@@ -324,11 +341,21 @@ function Send-ApiRequest {
             }
 
             if ($null -ne $requestBody) {
-                if ($requestBody -is [string]) {
+                if ($requestBody -is [byte[]]) {
                     $irmParams['Body'] = $requestBody
                 }
                 else {
-                    $irmParams['Body'] = ($requestBody | ConvertTo-Json -Depth $JsonDepthRequest -Compress)
+                    if ($requestBody -is [string]) {
+                        $bodyString = $requestBody
+                    }
+                    else {
+                        $bodyString = ($requestBody | ConvertTo-Json -Depth $JsonDepthRequest -Compress)
+                    }
+
+                    # Send pre-encoded UTF-8 bytes. Windows PowerShell 5.1 otherwise encodes a
+                    # string body using the system ANSI code page, corrupting non-ASCII content
+                    # (a charset in the Headers hashtable is ignored by that runtime).
+                    $irmParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($bodyString)
                 }
             }
 
@@ -377,7 +404,7 @@ function Send-ApiRequest {
                     (Get-ApiErrorCategory -StatusCode $statusCode),
                     $currentUri
                 )
-                Write-Error $errorRecord
+                Write-Error -ErrorRecord $errorRecord
                 return
             }
         } while ($retryCount -le $MaxRetries)
@@ -386,11 +413,28 @@ function Send-ApiRequest {
             return
         }
 
-        if ($response.PSObject.Properties.Name -contains 'value') {
+        $valueProperty = $response.PSObject.Properties |
+            Where-Object { $_.Name -ceq 'value' } |
+            Select-Object -First 1
+
+        $isODataCollection = $false
+        if ($valueProperty -and -not ($response -is [System.Xml.XmlNode])) {
+            $value = $valueProperty.Value
+            $isODataCollection = (
+                $null -eq $value -or (
+                    $value -is [System.Collections.IEnumerable] -and
+                    -not ($value -is [string]) -and
+                    -not ($value -is [System.Collections.IDictionary]) -and
+                    -not ($value -is [System.Xml.XmlNode])
+                )
+            )
+        }
+
+        if ($isODataCollection) {
             $sawValueResponse = $true
 
-            if ($null -ne $response.value) {
-                foreach ($item in @($response.value)) {
+            if ($null -ne $value) {
+                foreach ($item in @($value)) {
                     $results.Add($item)
                 }
             }
@@ -433,7 +477,16 @@ function Send-ApiRequest {
     }
 
     if ($RawJson) {
-        return $output | ConvertTo-Json -Depth $JsonDepthResponse
+        if ($results.Count -eq 0) {
+            return '[]'
+        }
+
+        if ($sawValueResponse) {
+            return ConvertTo-Json -InputObject $output -Depth $JsonDepthResponse
+        }
+
+        $jsonOutput = $output | ConvertTo-Json -Depth $JsonDepthResponse
+        return $jsonOutput
     }
 
     return $output
