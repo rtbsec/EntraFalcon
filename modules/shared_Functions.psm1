@@ -7241,23 +7241,17 @@ function Export-EntraFalconDebugObjectDump {
     }
 }
 
-# Check if MS Graph is authenticated; if not, call the function for interactive sign-in
+# Authenticate to MS Graph. A token left over from an earlier run in the same session is never
+# reused, so that a changed -Tenant or credential always takes effect.
 function EnsureAuthMsGraph {
     $result = $false
-    if (AuthCheckMSGraph) {
-        write-host "[+] MS Graph session OK"
+    if (AuthenticationMSGraph) {
+        write-host "[+] MS Graph successfully authenticated"
         $result = $true
-        
     } else {
-        if (AuthenticationMSGraph) {
-            write-host "[+] MS Graph successfully authenticated"
-            $result = $true
-        } else {
-            if (-not $GLOBALAuthParameters['Tenant']) {write-host "[i] Maybe try to specify the tenant: -Tenant"}
-            Write-host "[!] Aborting"
-            $result = $false
-            
-        }
+        if (-not $GLOBALAuthParameters['Tenant']) {write-host "[i] Maybe try to specify the tenant: -Tenant"}
+        Write-host "[!] Aborting"
+        $result = $false
     }
     Return $result
 }
@@ -7283,11 +7277,37 @@ function EnsureAuthAzurePsNative {
 function AuthCheckMSGraph {
     $result = $true
     Write-host "[*] Checking session MS Graph"
-    if ($null -ne $GLOBALMsGraphAccessToken.access_token) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$GLOBALMsGraphAccessToken.access_token)) {
         try {
-            Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/organization?$select=id' -erroraction Stop -UserAgent $($GlobalAuditSummary.UserAgent.Name) | out-null
+            $queryParameters = @{
+                '$select' = 'id'
+            }
+            Send-ApiRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization' -QueryParameters $queryParameters -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Silent -ErrorAction Stop | Out-Null
         } catch {
-            write-host "[!] Auth error: $($_.Exception.Message -split '\n')"
+            $errorMessage = [string]$_.Exception.Message
+            $isCaeChallenge = $errorMessage -match '(?i)Continuous access evaluation resulted in challenge|LocationConditionEvaluationSatisfied|TokenCreatedWithOutdatedPolicies|TokenIssuedBeforeRevocationTimestamp'
+            $isCaeLocationChallenge = $errorMessage -match '(?i)LocationConditionEvaluationSatisfied'
+            $isUnauthorized = $_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::AuthenticationError -or $errorMessage -match '(?i)status\s+401\b'
+            $isForbidden = $_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::PermissionDenied -or $errorMessage -match '(?i)status\s+403\b'
+
+            if ($isCaeChallenge) {
+                Write-Host '[!] Microsoft Graph rejected the access token due to a Continuous Access Evaluation (CAE) challenge.'
+                Write-Host "[i] Graph response: $errorMessage"
+                $disableCaeEnabled = $null -ne $GLOBALAuthParameters -and $GLOBALAuthParameters.ContainsKey('DisableCAE') -and [bool]$GLOBALAuthParameters['DisableCAE']
+                if ($disableCaeEnabled) {
+                    Write-Host '[i] -DisableCAE is already enabled. Review applicable Conditional Access policies and the Entra sign-in logs.'
+                } elseif ($isCaeLocationChallenge) {
+                    Write-Host '[i] Retry EntraFalcon with -DisableCAE.'
+                } else {
+                    Write-Host '[i] Authenticate again to obtain a fresh token. If the challenge repeats, retry EntraFalcon with -DisableCAE.'
+                }
+            } elseif ($isUnauthorized) {
+                Write-Host '[!] Microsoft Graph rejected the access token (401). The token may be expired, revoked, invalid, or intended for another resource.'
+            } elseif ($isForbidden) {
+                Write-Host '[!] Microsoft Graph authentication succeeded, but the token is not authorized for the organization check (403).'
+            } else {
+                Write-Host "[!] Microsoft Graph session check failed: $errorMessage"
+            }
             $result = $false
         }
     } else {
@@ -8988,22 +9008,16 @@ function Get-ConditionalAccessPolicies {
 #Authenticate using an refresh token and get a new token for PIM
 function Invoke-MsGraphAuthPIM {
 
-    Invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra @GLOBALAuthMethods
-    
-    #Abort if error
-    if ($GLOBALPIMsGraphAccessToken) {
-        if (AuthCheckMSGraph) {
-            write-host "[+] MS Graph session OK"
-            $result = $true
-            $global:GLOBALGraphExtendedChecks = $true
-            
-        } else {
-            Write-host "[!] Authentication with Managed Meeting Rooms client failed"
-            $result = $false
-            $global:GLOBALGraphExtendedChecks = $false
-        }
+    $PimAuthResult = Invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra @GLOBALAuthMethods
+
+    # PIM failures, including a missing premium licence, are classified in Get-EntraPIMRoleAssignments.
+    # Only the token acquisition is validated here.
+    if ($PimAuthResult -and -not [string]::IsNullOrWhiteSpace($GLOBALPIMsGraphAccessToken.access_token)) {
+        write-host "[+] PIM token acquired"
+        $global:GLOBALGraphExtendedChecks = $true
+        $result = $true
     } else {
-        write-host "[!] PIM Data will not be collected"
+        write-host "[!] PIM authentication failed. PIM Data will not be collected"
         $global:GLOBALGraphExtendedChecks = $false
         $result = $false
     }
