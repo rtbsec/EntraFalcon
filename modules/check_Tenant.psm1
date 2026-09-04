@@ -14,6 +14,7 @@ function Invoke-CheckTenant {
         [Parameter(Mandatory=$true)][hashtable]$EnterpriseApps,
         [Parameter(Mandatory=$true)][hashtable]$AppRegistrations,
         [Parameter(Mandatory=$true)][hashtable]$AllCaps,
+        [Parameter(Mandatory=$false)][bool]$CapsAssessmentAvailable = $true,
         [Parameter(Mandatory=$true)][hashtable]$ManagedIdentities,
         [Parameter(Mandatory=$true)][hashtable]$PimforEntraRoles,
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
@@ -2126,6 +2127,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Threat = '<p>Accounts without a registered MFA factor can be an indicator of missing MFA enforcement or that unnecessary accounts are synced to Entra ID.</p>'
             Remediation = '<p>Review why these users do not have any MFA methods registered and verify whether MFA enrollment and enforcement are configured correctly, and whether these users are required to exist in Entra ID.</p>'
         }
+        VulnerableCapUnknown = @{
+            Status = "Vulnerable"
+            Severity = 2
+            Confidence = "Requires Verification"
+            Threat = '<p>Accounts without a registered MFA factor can be an indicator of missing MFA enforcement or that unnecessary accounts are synced to Entra ID.</p><p>Whether an attacker who compromises such an account can register their own MFA factor depends on the Conditional Access policy managing security information registration, which could not be assessed for this report.</p>'
+            Remediation = '<p>Review why these users do not have any MFA methods registered and verify whether MFA enrollment and enforcement are configured correctly, and whether these users are required to exist in Entra ID.</p><p>Additionally, verify manually that a Conditional Access policy restricts under which conditions users can register security information.</p>'
+        }
         Secure = @{
             Status = "NotVulnerable"
             Description = "<p>No enabled users without MFA capability were identified.</p>"
@@ -2360,6 +2368,15 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Status = "NotVulnerable"
             Description = "<p>No enabled Conditional Access policies were identified that target roles with scoped assignments.</p>"
         }
+    }
+    # Shared result applied to every CAP finding when the policies could not be retrieved.
+    # RelatedReportUrl is cleared because the Conditional Access report is not written in that case.
+    $capUnavailableReasonText = ConvertTo-EntraFalconHtmlText -Value $GLOBALCapsUnavailableReason -DefaultValue "The Microsoft Graph request for Conditional Access policies did not succeed."
+    $capSkippedProps = @{
+        Status = "Skipped"
+        Description = "<p>Check skipped because the Conditional Access policies could not be retrieved. Conditional Access was not evaluated for this report.</p><p>$capUnavailableReasonText</p>"
+        AffectedObjects = @()
+        RelatedReportUrl = ""
     }
     #endregion
     #region ENT VariantProps
@@ -4138,7 +4155,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $cap011Candidates = [System.Collections.Generic.List[object]]::new()
     $cap011ReportUrl = "ConditionalAccessPolicies_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?State=enabled&IncRoles=%3E0&Warnings=scoped&columns=DisplayName%2CUserCoverage%2CState%2CIncResources%2CExcResources%2CAuthContext%2CIncUsers%2CExcUsers%2CIncGroups%2CExcGroups%2CIncRoles%2CIncUsersViaRoles%2CExcRoles%2CExcUsersViaRoles%2CIncExternals%2CExcExternals%2CDeviceFilter%2CIncPlatforms%2CExcPlatforms%2CSignInRisk%2CUserRisk%2CIncNw%2CExcNw%2CAppTypes%2CAuthFlow%2CUserActions%2CGrantControls%2CSessionControls%2CAuthStrength%2CWarnings"
 
-    if ($AllCaps) {
+    if ($AllCaps -and $CapsAssessmentAvailable) {
         write-host "[*] Analyzing Conditional Access Policies"
         foreach ($entry in $AllCaps.GetEnumerator()) {
             $policy = $entry.Value
@@ -5180,19 +5197,28 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         "CAP-001","CAP-002","CAP-003","CAP-004","CAP-005","CAP-006",
         "CAP-007","CAP-008","CAP-009","CAP-010","CAP-011"
     )
-    foreach ($capFindingId in $capFindingIds) {
-        if (-not $FindingsById.ContainsKey($capFindingId)) { continue }
-        $capFinding = $FindingsById[$capFindingId]
-        $affectedObjects = @($capFinding.AffectedObjects)
-        if ($affectedObjects.Count -gt 0 -and @($affectedObjects | Where-Object { $_.PSObject.Properties.Name -contains "_SortEvaluationRank" }).Count -gt 0) {
-            Set-FindingOverride -FindingId $capFindingId -Props @{
-                AffectedSortKey = "_SortEvaluationRank"
-                AffectedSortDir = "ASC"
-            }
+    if (-not $CapsAssessmentAvailable) {
+        # Without policy data every check above fell through its "no matching policy" branch,
+        # which would report a permission gap as a tenant-wide Conditional Access failure.
+        Write-Log -Level Verbose -Message ("[CAP] Conditional Access policies were not retrieved; marking all CAP findings as skipped. {0}" -f $GLOBALCapsUnavailableReason)
+        foreach ($capFindingId in $capFindingIds) {
+            Set-FindingOverride -FindingId $capFindingId -Props $capSkippedProps
         }
-        if ($affectedObjects.Count -eq 0) {
-            Set-FindingOverride -FindingId $capFindingId -Props @{
-                RelatedReportUrl = ""
+    } else {
+        foreach ($capFindingId in $capFindingIds) {
+            if (-not $FindingsById.ContainsKey($capFindingId)) { continue }
+            $capFinding = $FindingsById[$capFindingId]
+            $affectedObjects = @($capFinding.AffectedObjects)
+            if ($affectedObjects.Count -gt 0 -and @($affectedObjects | Where-Object { $_.PSObject.Properties.Name -contains "_SortEvaluationRank" }).Count -gt 0) {
+                Set-FindingOverride -FindingId $capFindingId -Props @{
+                    AffectedSortKey = "_SortEvaluationRank"
+                    AffectedSortDir = "ASC"
+                }
+            }
+            if ($affectedObjects.Count -eq 0) {
+                Set-FindingOverride -FindingId $capFindingId -Props @{
+                    RelatedReportUrl = ""
+                }
             }
         }
     }
@@ -10228,13 +10254,23 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     Write-Log -Level Verbose -Message "[PAS-005] Authorization policy allowedToUseSSPR: $allowedToUseSspr"
     if ($allowedToUseSspr) {
         $cap002IsVulnerable = $false
+        $cap002IsSkipped = $false
         if ($FindingsById.ContainsKey("CAP-002")) {
             $cap002Status = "$($FindingsById["CAP-002"].Status)".Trim().ToLowerInvariant()
             $cap002IsVulnerable = $cap002Status -eq "vulnerable"
+            $cap002IsSkipped = $cap002Status -eq "skipped"
         }
 
         Set-FindingOverride -FindingId "PAS-005" -Props $PAS005VariantProps.Vulnerable
-        if ($cap002IsVulnerable) {
+        if ($cap002IsSkipped) {
+            # CAP-002 could not be assessed, so the mitigating policy must not be assumed to exist.
+            Set-FindingOverride -FindingId "PAS-005" -Props @{
+                Severity = 2
+                Confidence = "Requires Verification"
+                Description = "<p>Users who are members of one of the 27 administrator roles are, by default, enabled for Self-Service Password Reset (SSPR). They must use two of the following authentication methods to reset their password:</p><ul><li>Email</li><li>SMS</li><li>Mobile phone call</li><li>Office phone call</li><li>Microsoft Authenticator app (code or notification)</li></ul><p><strong>Note:</strong> The email addresses and phone numbers used for SSPR can be configured by the user. This allows administrator accounts to register private email addresses or phone numbers as SSPR methods.</p><p>Additionally, multiple authentication methods can be registered on the same device (for example, email access and SMS on a single mobile phone), which reduces the practical security benefit of requiring two separate factors.</p><p><strong>Note:</strong> The Conditional Access policies that define the conditions for registering MFA methods could not be assessed for this report (see <a href=`"#CAP-002`">CAP-002</a>). Verify manually whether such a policy is in place.</p>"
+                AffectedObjects = @()
+            }
+        } elseif ($cap002IsVulnerable) {
             Set-FindingOverride -FindingId "PAS-005" -Props @{
                 Severity = 2
                 Confidence = "Sure"
@@ -10749,12 +10785,20 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         $cap002IsVulnerable = $false
+        $cap002IsSkipped = $false
         if ($FindingsById.ContainsKey("CAP-002")) {
             $cap002Status = "$($FindingsById["CAP-002"].Status)".Trim().ToLowerInvariant()
             $cap002IsVulnerable = $cap002Status -eq "vulnerable"
+            $cap002IsSkipped = $cap002Status -eq "skipped"
         }
 
-        if ($cap002IsVulnerable) {
+        if ($cap002IsSkipped) {
+            # CAP-002 could not be assessed, so neither the issue nor the mitigation can be claimed.
+            Set-FindingOverride -FindingId "USR-012" -Props $USR012VariantProps.VulnerableCapUnknown
+            Set-FindingOverride -FindingId "USR-012" -Props @{
+                Description = "<p>There are $usr012PopulationText without any registered MFA methods in Entra ID.</p>$usr012CoverageText<p><strong>Note:</strong> The Conditional Access policies that set the conditions for registering MFA methods could not be assessed for this report (see <a href=`"#CAP-002`">CAP-002</a>). Whether an attacker could register an MFA method on these accounts requires manual verification.</p>"
+            }
+        } elseif ($cap002IsVulnerable) {
             Set-FindingOverride -FindingId "USR-012" -Props $USR012VariantProps.VulnerableCapIssues
             Set-FindingOverride -FindingId "USR-012" -Props @{
                 Description = "<p>There are $usr012PopulationText without any registered MFA methods in Entra ID.</p>$usr012CoverageText<p>Additionally, issues were identified with the Conditional Access policies that set the conditions for registering MFA methods (check <a href=`"#CAP-002`">CAP-002</a>).</p><p><strong>Important:</strong> This finding requires manual verification.</p>"

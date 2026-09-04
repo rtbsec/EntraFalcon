@@ -915,8 +915,8 @@ function Invoke-AgentIdentities {
         }
 
 
-        #Check if it is one of the MS default SPs
-        if (($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId) -or $item.DisplayName -eq "O365 LinkedIn Connection" -and $item.DisplayName -ne "P2P Server") {
+        #Check if the agent identity is owned by a Microsoft tenant
+        if ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId) {
             $DefaultMS = $true
         } else {
             $DefaultMS = $false

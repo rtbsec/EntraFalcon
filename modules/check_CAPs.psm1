@@ -1417,7 +1417,21 @@ function Invoke-CheckCaps {
 
     #Omit oData to avoid having odata in the sub-properties
     $headers = @{ 'Accept' = 'application/json; odata.metadata=none' }
-    $AllPolicies = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -AdditionalHeaders $headers -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # Bail out before any report file is written if the policies cannot be retrieved.
+    # A report built from data that was never received would look complete but be wrong.
+    try {
+        $AllPolicies = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -AdditionalHeaders $headers -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        $global:GLOBALCapsDataAvailable = $false
+        $global:GLOBALCapsUnavailableReason = Format-CapGraphError -ErrorRecord $_
+        Write-Host "[!] Conditional Access policies could not be retrieved. $($global:GLOBALCapsUnavailableReason)"
+        Write-Host "[!] Skipping the Conditional Access report and findings."
+        Write-Log -Level Debug -Message ("[CAP] Policy retrieval failed: {0}" -f $_.Exception.Message)
+        return @{}
+    }
+
+    $global:GLOBALCapsDataAvailable = $true
+    $global:GLOBALCapsUnavailableReason = ""
 
     $AllPoliciesCount = @($AllPolicies).count
     write-host "[+] Got $AllPoliciesCount policies"

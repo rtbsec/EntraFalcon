@@ -8974,11 +8974,45 @@ function Get-AdministrativeUnitsWithMembers {
     Return $AdminUnitWithMembers
 }
 
+# Turn a Conditional Access Graph failure into a short reason for the console and report text.
+# The full error record goes to the debug log, so this stays a single readable sentence.
+function Format-CapGraphError {
+    param([Parameter(Mandatory = $true)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+
+    $message = [string]$ErrorRecord.Exception.Message
+    $statusCode = 0
+    if ($message -match "(?i)status[:\s]+(\d{3})") { $statusCode = [int]$Matches[1] }
+
+    switch ($statusCode) {
+        401 { return "HTTP 401 (Unauthorized): the access token was rejected." }
+        403 { return "HTTP 403 (Forbidden): Global Reader or equivalent permissions are required." }
+        404 { return "HTTP 404 (Not Found): the endpoint is not available in this tenant." }
+        429 { return "HTTP 429: the request was throttled." }
+    }
+    if ($statusCode -gt 0) { return "HTTP $statusCode." }
+    return "The Microsoft Graph request failed."
+}
+
 # Get Conditional Access Policies with user and group relations
 function Get-ConditionalAccessPolicies {
 
     Write-Host "[*] Get Conditional Access Policies"
-    $Caps = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # A failed request and a tenant without any policy both return nothing, so the
+    # request outcome has to be captured separately from the result.
+    try {
+        $Caps = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/identity/conditionalAccess/policies" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        $global:GLOBALCapsDataAvailable = $false
+        $global:GLOBALCapsUnavailableReason = Format-CapGraphError -ErrorRecord $_
+        $global:GLOBALPermissionForCaps = $false
+        Write-Host "[!] Conditional Access policies could not be retrieved. $($global:GLOBALCapsUnavailableReason)"
+        Write-Log -Level Debug -Message ("[CAP] Policy retrieval failed: {0}" -f $_.Exception.Message)
+        return
+    }
+
+    $global:GLOBALCapsDataAvailable = $true
+    $global:GLOBALCapsUnavailableReason = ""
+
     if ($Caps) {
         $CapsCount = $($Caps | Measure-Object).Count
         Write-Host "[+] Got $CapsCount Conditional Access Policies"
@@ -10417,6 +10451,10 @@ function start-InitTasks {
         Domains                = @{ Count = 0; Federated = 0; Verified = 0; Default = 0; AdminManaged = 0 }
         Errors                 = @()
     }
+
+    # Default to available so an unset flag can never silently skip the Conditional Access checks.
+    $global:GLOBALCapsDataAvailable = $true
+    $global:GLOBALCapsUnavailableReason = ""
 }
 
 
@@ -11146,6 +11184,8 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALDelegatedApiPermissionCategorizationList -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALMsTenantIds -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPermissionForCaps -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALCapsDataAvailable -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALCapsUnavailableReason -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsChecked -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALUserSignInActivityAvailable -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALUserAuthMethodsAvailable -ErrorAction SilentlyContinue
@@ -11483,4 +11523,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

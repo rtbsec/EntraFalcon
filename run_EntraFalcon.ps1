@@ -194,7 +194,7 @@ Param (
 )
 
 #Constants
-$EntraFalconVersion = "V20260824"
+$EntraFalconVersion = "V20260904_PRE"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -637,7 +637,8 @@ if ($TenantReports.PimForGroups) {
 
 write-host "`n********************************** [17/18] Enumerating Security Findings **********************************"
 $AccessPackagesAssessmentAvailable = ($RawAccessPackages.IsAvailable -and -not $RawAccessPackages.IsSkipped)
-$SecurityFindings = Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -AgentIdentityBlueprints $AgentIdentityBlueprints -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -AccessPackages $AccessPackages -AccessPackagesAssessmentAvailable $AccessPackagesAssessmentAvailable -AccessPackagesAssessmentApplicable $AccessPackagesApplicable -CatalogAssessment $CatalogAssessment
+$CapsAssessmentAvailable = [bool]$GLOBALCapsDataAvailable
+$SecurityFindings = Invoke-CheckTenant -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -EnterpriseApps $EnterpriseApps -AppRegistrations $AppRegistrations -ManagedIdentities $ManagedIdentities -AllCaps $AllCaps -CapsAssessmentAvailable $CapsAssessmentAvailable -PimforEntraRoles $PimforEntraRoles -AllGroupsDetails $AllGroupsDetails -Users $Users -Devices $Devices -TenantRoleAssignments $TenantRoleAssignments -TenantPimForGroupsAssignments $TenantPimForGroupsAssignments -AgentIdentityBlueprints $AgentIdentityBlueprints -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -AccessPackages $AccessPackages -AccessPackagesAssessmentAvailable $AccessPackagesAssessmentAvailable -AccessPackagesAssessmentApplicable $AccessPackagesApplicable -CatalogAssessment $CatalogAssessment
 
 write-host "`n********************************** [18/18] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
@@ -666,6 +667,11 @@ if ($ExportDataJson) {
         Domains                            = $TenantDomains
         AdministrativeUnits                = $AdminUnitWithMembers
         Subscriptions                      = $GlobalAuditSummary.Subscriptions.Details
+    }
+
+    # Do not fall back to an empty dataset for Conditional Access if the policies were never retrieved.
+    if (-not $CapsAssessmentAvailable) {
+        $fallbackDataJsonExports.Remove('ConditionalAccessPolicies')
     }
 
     foreach ($fallbackExport in $fallbackDataJsonExports.GetEnumerator()) {

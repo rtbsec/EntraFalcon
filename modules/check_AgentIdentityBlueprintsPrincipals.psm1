@@ -703,8 +703,8 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
 
         $OwnersCount = $OwnerUserDetails.count + $OwnerSPDetails.count
 
-        #Check if it is one of the MS default SPs
-        if ($GLOBALMsTenantIds -contains $item.AppOwnerOrganizationId -or $item.DisplayName -eq "O365 LinkedIn Connection" -and $item.DisplayName -ne "P2P Server") {
+        #Check if the blueprint principal is owned by a Microsoft tenant
+        if ($item.AppOwnerOrganizationId -and $GLOBALMsTenantIds -contains $item.AppOwnerOrganizationId) {
             $DefaultMS = $true
         } else {
             $DefaultMS = $false
