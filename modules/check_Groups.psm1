@@ -1570,26 +1570,26 @@ function Invoke-CheckGroups {
             $group.Risk = [math]::Ceiling($group.Impact * $group.Likelihood)
     
             # Add role/CAP counts
-            if ($highValueGroup.CAPs)       { $group.CAPs       += $highValueGroup.CAPs }
+            if ($highValueGroup.CAPs -and $group.CAPs -is [int])             { $group.CAPs       += $highValueGroup.CAPs }
             if ($highValueGroup.EntraRoles) { $group.EntraRoles += $highValueGroup.EntraRoles }
-            if ($highValueGroup.AzureRoles) { $group.AzureRoles += $highValueGroup.AzureRoles }
+            if ($highValueGroup.AzureRoles -and $group.AzureRoles -is [int]) { $group.AzureRoles += $highValueGroup.AzureRoles }
             if ($highValueGroup.IntuneRoles -and $group.IntuneRoles -is [int]) { $group.IntuneRoles += $highValueGroup.IntuneRoles }
     
             # Update owned group (fast lookup through)
             if ($group.PfGOwnedGroupsById.ContainsKey($highValueGroup.GroupID)) {
                 $ownedGroup = $group.PfGOwnedGroupsById[$highValueGroup.GroupID]
-                if ($highValueGroup.CAPs)       { $ownedGroup.CAPs       += $highValueGroup.CAPs }
+                if ($highValueGroup.CAPs -and $ownedGroup.CAPs -is [int])             { $ownedGroup.CAPs       += $highValueGroup.CAPs }
                 if ($highValueGroup.EntraRoles) { $ownedGroup.EntraRoles += $highValueGroup.EntraRoles }
-                if ($highValueGroup.AzureRoles) { $ownedGroup.AzureRoles += $highValueGroup.AzureRoles }
+                if ($highValueGroup.AzureRoles -and $ownedGroup.AzureRoles -is [int]) { $ownedGroup.AzureRoles += $highValueGroup.AzureRoles }
                 if ($highValueGroup.IntuneRoles -and $ownedGroup.IntuneRoles -is [int]) { $ownedGroup.IntuneRoles += $highValueGroup.IntuneRoles }
             }
     
             # Update parent group (fast lookup through HT)
             if ($group.NestedInGroupsById.ContainsKey($highValueGroup.GroupID)) {
                 $parentGroup = $group.NestedInGroupsById[$highValueGroup.GroupID]
-                if ($highValueGroup.CAPs)       { $parentGroup.CAPs       += $highValueGroup.CAPs }
+                if ($highValueGroup.CAPs -and $parentGroup.CAPs -is [int])             { $parentGroup.CAPs       += $highValueGroup.CAPs }
                 if ($highValueGroup.EntraRoles) { $parentGroup.EntraRoles += $highValueGroup.EntraRoles }
-                if ($highValueGroup.AzureRoles) { $parentGroup.AzureRoles += $highValueGroup.AzureRoles }
+                if ($highValueGroup.AzureRoles -and $parentGroup.AzureRoles -is [int]) { $parentGroup.AzureRoles += $highValueGroup.AzureRoles }
                 if ($highValueGroup.IntuneRoles -and $parentGroup.IntuneRoles -is [int]) { $parentGroup.IntuneRoles += $highValueGroup.IntuneRoles }
             }
     

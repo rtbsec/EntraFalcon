@@ -1050,7 +1050,8 @@ function Invoke-CheckEnterpriseApps {
                         $TotalInheritedHighValue += $OwnedGroup.InheritedHighValue
                     }
 
-                    $TotalCAPs += $OwnedGroup.CAPs
+                    # Use the parsed count: CAPs is "?" when Conditional Access was not enumerated.
+                    $TotalCAPs += $groupCapCount
                 }
                 $EntraRolesThroughGroupOwnership = $TotalAssignedRoleCount
                 if ($GLOBALAzurePsChecks) {
