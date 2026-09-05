@@ -2650,7 +2650,7 @@ function Write-EntraFalconUsersReport {
         }
 
         ############### Azure Roles
-        if (@($item.AzureRoleDetails).Count -ge 1 ) {
+        if ($null -ne $item.AzureRoleDetails -and @($item.AzureRoleDetails).Count -ge 1) {
             $ReportingAzureRoles = foreach ($object in $($item.AzureRoleDetails)) {
                 [pscustomobject]@{ 
                     "Role name" = $object.RoleName
