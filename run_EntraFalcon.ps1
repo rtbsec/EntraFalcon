@@ -348,6 +348,9 @@ $GlobalAuditSummary.Tenant.Id = $CurrentTenant.Id
 $GlobalAuditSummary.Tenant.OnPremisesSyncEnabled = $CurrentTenant.OnPremisesSyncEnabled
 $GlobalAuditSummary.Tenant.OnPremisesLastSyncDateTime = $CurrentTenant.OnPremisesLastSyncDateTime
 
+# Capture the assessing identity 
+Set-AssessmentIdentity -AuthFlow $AuthFlow
+
 $licenseResult = Get-EffectiveEntraLicense
 $GlobalAuditSummary.TenantLicense.Name  = $licenseResult.EntraIDLicencesString
 $GlobalAuditSummary.TenantLicense.Level = $licenseResult.EntraIDLicencesInt

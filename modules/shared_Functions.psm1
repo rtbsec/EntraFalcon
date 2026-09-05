@@ -10429,6 +10429,7 @@ function start-InitTasks {
         Time                   = @{ Start = Get-Date -Format "yyyyMMdd HH:mm:ss"; End = ""}
         Tenant                 = @{ Name = ""; Id = ""; OnPremisesSyncEnabled = $null; OnPremisesLastSyncDateTime = $null }
         EntraFalcon            = @{ Version = "$EntraFalconVersion"; Source = "https://github.com/CompassSecurity/EntraFalcon" }
+        Identity               = @{ Resolved = $false; Type = ""; Name = ""; ObjectId = ""; ClientAppId = ""; ClientAppName = ""; AuthFlow = "" }
         TenantLicense          = @{ Name = ""; Level = 0}
         Subscriptions          = @{ Count = 0; Details = @() }
         UserAgent              = @{ Name = $UserAgent}
@@ -10455,6 +10456,81 @@ function start-InitTasks {
     # Default to available so an unset flag can never silently skip the Conditional Access checks.
     $global:GLOBALCapsDataAvailable = $true
     $global:GLOBALCapsUnavailableReason = ""
+}
+
+# Decodes the claims of an access token. Returns $null for missing, encrypted (JWE) or malformed
+# tokens. Never throws and never writes to the console, since this is only used for reporting.
+function Get-AccessTokenClaims {
+    Param (
+        [Parameter(Mandatory=$false)][string]$AccessToken
+    )
+
+    if ([string]::IsNullOrWhiteSpace($AccessToken)) { return $null }
+    if (-not $AccessToken.StartsWith("eyJ")) { return $null }
+    if (@($AccessToken -split '\.').Count -ne 3) { return $null }
+
+    try {
+        return Invoke-ParseJwt -Jwt $AccessToken -ErrorAction Stop
+    } catch {
+        Write-Log -Level Debug -Message "[Identity] Failed to parse access token claims: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+#Function to determine the identity used for the assessment based on the main MS Graph token
+function Set-AssessmentIdentity {
+    Param (
+        [Parameter(Mandatory=$false)][string]$AuthFlow
+    )
+
+    if ($null -eq $GlobalAuditSummary -or $null -eq $GlobalAuditSummary.Identity) {
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($AuthFlow) -and $null -ne $GLOBALAuthMethods) {
+        $AuthFlow = [string]$GLOBALAuthMethods.AuthFlow
+    }
+    $GlobalAuditSummary.Identity.AuthFlow = $AuthFlow
+
+    $Claims = Get-AccessTokenClaims -AccessToken $GLOBALMsGraphAccessToken.access_token
+    if ($null -eq $Claims) {
+        Write-Log -Level Debug -Message "[Identity] Assessment identity is unavailable because the access token could not be parsed."
+        return
+    }
+
+    $IsAppOnly = ($Claims.idtyp -eq "app")
+
+    $UserClaimValue = ""
+    foreach ($ClaimName in @("upn", "unique_name", "preferred_username", "name")) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$Claims.$ClaimName)) {
+            $UserClaimValue = [string]$Claims.$ClaimName
+            break
+        }
+    }
+
+    # Without any user claim the token type is ambiguous, so the auth flow decides
+    if (-not $IsAppOnly -and [string]::IsNullOrWhiteSpace($UserClaimValue)) {
+        $IsAppOnly = ($AuthFlow -eq "ServicePrincipal")
+    }
+
+    if ($IsAppOnly) {
+        $IdentityType = "Service Principal"
+        $IdentityName = [string]$Claims.app_displayname
+        if ([string]::IsNullOrWhiteSpace($IdentityName)) { $IdentityName = [string]$Claims.appid }
+    } else {
+        $IdentityType = "User"
+        $IdentityName = $UserClaimValue
+        if ([string]::IsNullOrWhiteSpace($IdentityName)) { $IdentityName = [string]$Claims.oid }
+    }
+
+    $GlobalAuditSummary.Identity.Type = $IdentityType
+    $GlobalAuditSummary.Identity.Name = $IdentityName
+    $GlobalAuditSummary.Identity.ObjectId = [string]$Claims.oid
+    $GlobalAuditSummary.Identity.ClientAppId = [string]$Claims.appid
+    $GlobalAuditSummary.Identity.ClientAppName = [string]$Claims.app_displayname
+    $GlobalAuditSummary.Identity.Resolved = -not [string]::IsNullOrWhiteSpace($IdentityName)
+
+    Write-Log -Level Verbose -Message "[Identity] Assessment executed as $IdentityType`: $IdentityName"
 }
 
 
@@ -11523,4 +11599,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

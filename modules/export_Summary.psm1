@@ -74,6 +74,13 @@ return @"
         return [System.Net.WebUtility]::HtmlEncode([string]$Value)
     }
 
+    # Keeps a JSON key present but null instead of exporting an empty string
+    function ConvertTo-SummaryNullableString {
+        param($Value)
+        if ([string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
+        return [string]$Value
+    }
+
     function New-GeneralField {
         param(
             [string]$Label,
@@ -365,6 +372,7 @@ return @"
             [string]$EntraFalconVersion,
             [string]$PowerShellVersion,
             [string]$UserAgent,
+            [string]$Identity,
             [string]$AzureIamBadge,
             [string]$PimRolesBadge,
             [string]$PimGroupsBadge,
@@ -383,7 +391,15 @@ return @"
         $executionRows = @(
             (New-GeneralField -Label "Start Time" -ValueHtml (ConvertTo-SummaryHtmlText $StartTime)),
             (New-GeneralField -Label "End Time" -ValueHtml (ConvertTo-SummaryHtmlText $EndTime)),
-            (New-GeneralField -Label "Duration" -ValueHtml (ConvertTo-SummaryHtmlText $Duration)),
+            (New-GeneralField -Label "Duration" -ValueHtml (ConvertTo-SummaryHtmlText $Duration))
+        )
+
+        # Only shown when the identity could be determined from the access token
+        if (-not [string]::IsNullOrWhiteSpace($Identity)) {
+            $executionRows += (New-GeneralField -Label "Identity" -ValueHtml (ConvertTo-SummaryHtmlText $Identity))
+        }
+
+        $executionRows += @(
             (New-GeneralField -Label "EntraFalcon Version" -ValueHtml (ConvertTo-SummaryHtmlText $EntraFalconVersion)),
             (New-GeneralField -Label "PowerShell Version" -ValueHtml (ConvertTo-SummaryHtmlText $PowerShellVersion)),
             (New-GeneralField -Label "UserAgent" -ValueHtml (ConvertTo-SummaryHtmlText $UserAgent))
@@ -626,6 +642,21 @@ return @"
     } else {
         $defaultDomain = $defaultDomain[0]
     }
+    # Stays empty when the identity could not be resolved or the dump predates the identity node
+    $identityDisplay = ""
+    if ($GlobalAuditSummary.Identity -and -not [string]::IsNullOrWhiteSpace([string]$GlobalAuditSummary.Identity.Name)) {
+        $identityDisplay = [string]$GlobalAuditSummary.Identity.Name
+    }
+    $identityDetails = $GlobalAuditSummary.Identity
+    $identityJson = [ordered]@{
+        resolved      = [bool]$identityDetails.Resolved
+        type          = ConvertTo-SummaryNullableString $identityDetails.Type
+        name          = ConvertTo-SummaryNullableString $identityDetails.Name
+        objectId      = ConvertTo-SummaryNullableString $identityDetails.ObjectId
+        clientAppId   = ConvertTo-SummaryNullableString $identityDetails.ClientAppId
+        clientAppName = ConvertTo-SummaryNullableString $identityDetails.ClientAppName
+        authFlow      = ConvertTo-SummaryNullableString $identityDetails.AuthFlow
+    }
     $coverageWarnings = Get-CoverageWarnings -SubscriptionCountIncomplete $subscriptionCountIncomplete
     $mfaUnknownCount = Get-MfaUnknownCount
     $mfaNotCapableCount = [Math]::Max(0, ([int]$GlobalAuditSummary.Users.Count - [int]$GlobalAuditSummary.Users.MfaCapable - $mfaUnknownCount))
@@ -674,6 +705,7 @@ return @"
         -EntraFalconVersion $GlobalAuditSummary.EntraFalcon.Version `
         -PowerShellVersion $powerShellDisplay `
         -UserAgent $GlobalAuditSummary.UserAgent.Name `
+        -Identity $identityDisplay `
         -AzureIamBadge $azureIamBadge `
         -PimRolesBadge $pimRolesBadge `
         -PimGroupsBadge $pimGroupsBadge `
@@ -1842,6 +1874,12 @@ body.dark-mode .summary-kpi-card {
 "@
 
 
+# Carries its own leading newline so an unresolved identity leaves no empty line
+$identityLine = ""
+if (-not [string]::IsNullOrWhiteSpace($identityDisplay)) {
+    $identityLine = "`n    - Identity:          $identityDisplay"
+}
+
 $OutputCLI = @"
 Execution Information:
     - Tenant Name:       $($GlobalAuditSummary.Tenant.Name)
@@ -1851,7 +1889,7 @@ Execution Information:
     - Last Sync:         $onPremisesLastSyncDisplay
     - Subscriptions:     $SubscriptionCount
     - Start:             $executionStartDisplay
-    - End:               $executionEndDisplay
+    - End:               $executionEndDisplay$identityLine
     - EntraFalcon:       $($GlobalAuditSummary.EntraFalcon.Version)
     - PowerShell:        $powerShellDisplay
     - UserAgent:         $($GlobalAuditSummary.UserAgent.Name)
@@ -1911,6 +1949,7 @@ Enumeration Results:
             powershellVersion  = $PSVersionTable.PSVersion.ToString()
             hostOs             = $hostOs
             userAgent          = $GlobalAuditSummary.UserAgent.Name
+            identity           = $identityJson
         }
         coverage      = [ordered]@{
             azureIamCollected         = [bool]$GLOBALAzurePsChecks
