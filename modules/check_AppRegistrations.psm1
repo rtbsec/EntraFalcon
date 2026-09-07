@@ -1138,13 +1138,13 @@ $ObjectsDetailsHEAD = @'
                 <div class="details-search-help-popover hidden">
                     <div class="search-help-title">Search guide</div>
                     <ul class="search-help-list">
-                        <li><code>term</code> — substring match anywhere in object</li>
-                        <li><code>!term</code> — exclude objects containing term</li>
-                        <li><code>=value</code> — exact field value match</li>
-                        <li><code>^prefix</code> — field value starts with</li>
-                        <li><code>$suffix</code> — field value ends with</li>
-                        <li><code>a && b</code> — both must match</li>
-                        <li><code>a || b</code> — either must match</li>
+                        <li><code>term</code> &mdash; substring match anywhere in object</li>
+                        <li><code>!term</code> &mdash; exclude objects containing term</li>
+                        <li><code>=value</code> &mdash; exact field value match</li>
+                        <li><code>^prefix</code> &mdash; field value starts with</li>
+                        <li><code>$suffix</code> &mdash; field value ends with</li>
+                        <li><code>a && b</code> &mdash; both must match</li>
+                        <li><code>a || b</code> &mdash; either must match</li>
                     </ul>
                 </div>
             </div>
