@@ -95,9 +95,12 @@ $global:GLOBALMainTableDetailsHEAD = @'
   <div class="page-size-wrapper">
     <span class="page-size-icon">&#x2630;</span>
     <select id="pageSize">
+      <option value="100">100 rows</option>
+      <option value="250">250 rows</option>
+      <option value="500">500 rows</option>
       <option value="1000">1000 rows</option>
       <option value="5000">5000 rows</option>
-      <option value="10000">10000 rows</option>
+      <option value="all">All</option>
     </select>
   </div>
   <div id="tableWrapper"></div>
@@ -2031,8 +2034,72 @@ $global:GLOBALJavaScript_Table = @'
             const pageSizeSelector = container.querySelector("#pageSize");
             const pagination = container.querySelector("#paginationControls");
 
+            const pageSizeStorageKey = "EntraFalcon_pageSize";
+            const pageSizeOptions = Array.prototype.map.call(pageSizeSelector.options, opt => opt.value);
+
+            const allPageSizeOption = pageSizeSelector.querySelector('option[value="all"]');
+            if (allPageSizeOption) allPageSizeOption.textContent = "All (" + data.length + ")";
+
+            // Reports are opened over file://, where Firefox partitions localStorage per file.
+            // Mirrors the storage selection used by the theme toggle in the nav script.
+            function canUsePageSizeStorage(storage) {
+                if (!storage) return false;
+                try {
+                    const probeKey = "__ef_pagesize_probe__";
+                    storage.setItem(probeKey, "1");
+                    storage.removeItem(probeKey);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function getPageSizeStorage() {
+                const ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent : "";
+                const preferred = /firefox/i.test(ua) ? window.sessionStorage : window.localStorage;
+                if (canUsePageSizeStorage(preferred)) return preferred;
+                const fallback = preferred === window.localStorage ? window.sessionStorage : window.localStorage;
+                if (canUsePageSizeStorage(fallback)) return fallback;
+                return { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+            }
+
+            const pageSizeStorage = getPageSizeStorage();
+
+            // Reports at or below this size stay on a single page, so browser find keeps
+            // working as before. Larger reports page so filtering and sorting stay responsive.
+            const singlePageRowLimit = 1000;
+
+            function getDefaultPageSizeValue() {
+                return data.length <= singlePageRowLimit ? "all" : "250";
+            }
+
+            function isValidPageSizeValue(value) {
+                return value != null && pageSizeOptions.indexOf(String(value)) !== -1;
+            }
+
+            function readStoredPageSizeValue() {
+                try { return pageSizeStorage.getItem(pageSizeStorageKey); } catch (e) { return null; }
+            }
+
+            // URL parameter wins over the stored preference, which wins over the default.
+            function resolveInitialPageSizeValue() {
+                const fromUrl = getURLParams().rows;
+                if (isValidPageSizeValue(fromUrl)) return String(fromUrl);
+                const stored = readStoredPageSizeValue();
+                if (isValidPageSizeValue(stored)) return String(stored);
+                return getDefaultPageSizeValue();
+            }
+
             let currentPage = 1;
-            let rowsPerPage = parseInt(pageSizeSelector.value);
+            let pageSizeValue = resolveInitialPageSizeValue();
+            pageSizeSelector.value = pageSizeValue;
+
+            function getRowsPerPage() {
+                if (pageSizeValue === "all") return Math.max(1, viewData.length);
+                const parsed = parseInt(pageSizeValue, 10);
+                return parsed > 0 ? parsed : 100;
+            }
+
             let filteredData = [...data];
             let viewData = [...data];
             let currentSort = { column: null, asc: true };
@@ -2102,6 +2169,14 @@ $global:GLOBALJavaScript_Table = @'
             function resetColumnsToDefault() {
                 hiddenColumns = new Set();
                 defaultHidden.forEach(col => hiddenColumns.add(col));
+            }
+
+            // Reset View returns to full defaults, so the stored preference is dropped too.
+            function resetPageSizeToDefault() {
+                pageSizeValue = getDefaultPageSizeValue();
+                pageSizeSelector.value = pageSizeValue;
+                currentPage = 1;
+                try { pageSizeStorage.removeItem(pageSizeStorageKey); } catch (e) {}
             }
 
             container.addEventListener("input", (e) => {
@@ -2397,6 +2472,7 @@ $global:GLOBALJavaScript_Table = @'
                 columnFilters = {};
                 hiddenRowKeys.clear();
                 resetColumnsToDefault();
+                resetPageSizeToDefault();
                 applyDefaultSort();
                 filterData();
                 createColumnSelector();
@@ -2583,10 +2659,18 @@ $global:GLOBALJavaScript_Table = @'
                     url.searchParams.set("sortDir", currentSort.asc ? "asc" : "desc");
                 }
 
+                // Add page size and position so the recipient sees the same rows
+                if (pageSizeValue !== getDefaultPageSizeValue()) {
+                    url.searchParams.set("rows", pageSizeValue);
+                }
+                if (currentPage > 1) {
+                    url.searchParams.set("page", String(currentPage));
+                }
+
                 // Copy to clipboard
                 const copyValue = (event && (event.ctrlKey || event.metaKey)) ? url.search : url.toString();
                 navigator.clipboard.writeText(copyValue).then(() => {
-                    showToast("View (Filter, Columns, Sorting) link copied to clipboard");
+                    showToast("View (Filter, Columns, Sorting, Paging) link copied to clipboard");
                 }).catch(err => {
                     console.error("Clipboard write failed", err);
                     showToast("\u{26A0} Failed to copy URL", 4000);
@@ -2602,6 +2686,7 @@ $global:GLOBALJavaScript_Table = @'
         // Renders main table
         function renderTable() {
             applyHiddenRows();
+            const rowsPerPage = getRowsPerPage();
             let start = (currentPage - 1) * rowsPerPage;
             let end = start + rowsPerPage;
             let pageData = viewData.slice(start, end);
@@ -2751,6 +2836,12 @@ $global:GLOBALJavaScript_Table = @'
             const pageIds = pageData
                 .map(row => extractAnchorIdAndText(row[columns[0]]).id)
                 .filter(Boolean);
+
+            // Whole filter result, so the details search can cover rows beyond the current page
+            window.__filteredDetailIds = viewData
+                .map(row => extractAnchorIdAndText(row[columns[0]]).id)
+                .filter(Boolean);
+
             if (window.__syncDetailsForCurrentPage) {
                 window.__syncDetailsForCurrentPage(pageIds);
             } else {
@@ -2777,20 +2868,83 @@ $global:GLOBALJavaScript_Table = @'
         }
 
         
+        function getTotalPages() {
+            return Math.max(1, Math.ceil(viewData.length / getRowsPerPage()));
+        }
+
+        // Page numbers around the current page, with ellipses for the gaps.
+        function getPageWindow(current, totalPages) {
+            const pages = [];
+            const first = 1;
+            const last = totalPages;
+            const from = Math.max(first, current - 2);
+            const to = Math.min(last, current + 2);
+
+            if (from > first) {
+                pages.push(first);
+                if (from > first + 1) pages.push("gap");
+            }
+            for (let page = from; page <= to; page++) pages.push(page);
+            if (to < last) {
+                if (to < last - 1) pages.push("gap");
+                pages.push(last);
+            }
+            return pages;
+        }
+
         //Pagination for the main table
         function renderPagination() {
-            const totalPages = Math.max(1, Math.ceil(viewData.length / rowsPerPage));
-            let html = '';
+            const totalPages = getTotalPages();
 
-            if (currentPage > 1) {
-                html += `<button onclick="goToPage(${currentPage - 1})">Previous</button>`;
+            // A single page needs no controls at all.
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
             }
-            html += `<span> Page ${Math.min(currentPage, totalPages)} of ${totalPages} </span>`;
 
-            if (currentPage < totalPages) {
-                html += `<button onclick="goToPage(${currentPage + 1})">Next</button>`;
+            const page = Math.min(Math.max(1, currentPage), totalPages);
+            let html = '<div class="pager">';
+
+            html += `<button type="button" class="pager-btn" onclick="goToPage(1)"${page === 1 ? " disabled" : ""}>&laquo; First</button>`;
+            html += `<button type="button" class="pager-btn" onclick="goToPage(${page - 1})"${page === 1 ? " disabled" : ""}>Previous</button>`;
+
+            getPageWindow(page, totalPages).forEach(entry => {
+                if (entry === "gap") {
+                    html += '<span class="pager-gap">&hellip;</span>';
+                    return;
+                }
+                const isCurrent = entry === page;
+                html += `<button type="button" class="pager-btn pager-page${isCurrent ? " active" : ""}" onclick="goToPage(${entry})"${isCurrent ? ' aria-current="page"' : ""}>${entry}</button>`;
+            });
+
+            html += `<button type="button" class="pager-btn" onclick="goToPage(${page + 1})"${page === totalPages ? " disabled" : ""}>Next</button>`;
+            html += `<button type="button" class="pager-btn" onclick="goToPage(${totalPages})"${page === totalPages ? " disabled" : ""}>Last &raquo;</button>`;
+
+            if (totalPages > 10) {
+                html += '<span class="pager-jump">';
+                html += `<label for="pagerJumpInput">Go to</label>`;
+                html += `<input id="pagerJumpInput" type="number" min="1" max="${totalPages}" value="${page}" />`;
+                html += `<span class="pager-jump-total">of ${totalPages}</span>`;
+                html += '</span>';
             }
+
+            html += '</div>';
             pagination.innerHTML = html;
+
+            const jumpInput = pagination.querySelector("#pagerJumpInput");
+            if (jumpInput) {
+                const commitJump = () => {
+                    const requested = parseInt(jumpInput.value, 10);
+                    if (!isNaN(requested) && requested !== currentPage) window.goToPage(requested);
+                };
+                jumpInput.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitJump();
+                    }
+                });
+                jumpInput.addEventListener("change", commitJump);
+            }
         }
 
         
@@ -2845,7 +2999,9 @@ $global:GLOBALJavaScript_Table = @'
         }
 
         window.goToPage = function (page) {
-            currentPage = page;
+            const requested = parseInt(page, 10);
+            if (isNaN(requested)) return;
+            currentPage = Math.min(Math.max(1, requested), getTotalPages());
             renderTable();
         };
         
@@ -3130,7 +3286,18 @@ $global:GLOBALJavaScript_Table = @'
 
         // Event: Page size change
         pageSizeSelector.addEventListener("change", () => {
-            rowsPerPage = parseInt(pageSizeSelector.value);
+            const previous = pageSizeValue;
+            const selected = pageSizeSelector.value;
+
+            // Rendering many thousands of rows at once is slow; make it a deliberate choice.
+            const projectedRows = selected === "all" ? viewData.length : parseInt(selected, 10);
+            if (projectedRows > 5000 && !confirm(`Rendering ${projectedRows} rows at once may slow down the page.\n\nDo you want to continue?`)) {
+                pageSizeSelector.value = previous;
+                return;
+            }
+
+            pageSizeValue = selected;
+            try { pageSizeStorage.setItem(pageSizeStorageKey, pageSizeValue); } catch (e) {}
             currentPage = 1;
             renderTable();
         });
@@ -3216,6 +3383,14 @@ $global:GLOBALJavaScript_Table = @'
         }
 
         filterData();
+
+        // Applied after filterData(), which resets the page to 1
+        if (urlParams.page) {
+            const requestedPage = parseInt(urlParams.page, 10);
+            if (!isNaN(requestedPage) && requestedPage > 1) {
+                window.goToPage(requestedPage);
+            }
+        }
         })();
 
         // ###################################### SECTION for DETAILS ######################################
@@ -3724,6 +3899,14 @@ $global:GLOBALJavaScript_Table = @'
                     });
                 }
 
+                // "Filtered" scope means the whole filter result, not just the visible page.
+                // Falls back to the synced page IDs before the table has rendered once.
+                function getFilteredDetailPool() {
+                    const filtered = window.__filteredDetailIds;
+                    if (Array.isArray(filtered) && filtered.length) return filtered;
+                    return window.__lastSyncedDetailIds || [];
+                }
+
                 function runDetailSearch() {
                     const query  = searchInput.value.trim();
                     const infoEl = document.getElementById('details-info');
@@ -3736,7 +3919,7 @@ $global:GLOBALJavaScript_Table = @'
 
                     const pool = window.__detailSearchMode === "global"
                         ? (window.__objectsById ? Array.from(window.__objectsById.keys()) : [])
-                        : window.__lastSyncedDetailIds;
+                        : getFilteredDetailPool();
 
                     const matchingIds = filterIds(pool, query);
                     _origSync(matchingIds);
@@ -3761,12 +3944,13 @@ $global:GLOBALJavaScript_Table = @'
                         return;
                     }
 
-                    // Re-apply current-mode search against the updated id set
+                    // Re-apply current-mode search against the updated filter result
                     if (searchInput.value.trim() && window.__detailSearchMode === "current") {
-                        const matchingIds = filterIds(uniqueIds, searchInput.value.trim());
+                        const pool = getFilteredDetailPool();
+                        const matchingIds = filterIds(pool, searchInput.value.trim());
                         _origSync(matchingIds);
                         const infoEl = document.getElementById('details-info');
-                        if (infoEl) infoEl.textContent = matchingIds.length + " of " + uniqueIds.length + " match";
+                        if (infoEl) infoEl.textContent = matchingIds.length + " of " + pool.length + " match";
                         return;
                     }
 
@@ -4870,6 +5054,79 @@ $global:GLOBALCss = @"
 
     #paginationControls {
         margin-top: 16px;
+    }
+
+    /* Theme-neutral tints, matching the .info-chip approach */
+    .pager {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .pager-btn {
+        appearance: none;
+        -webkit-appearance: none;
+        min-width: 30px;
+        height: 26px;
+        padding: 0 8px;
+        margin: 0;
+        font-size: 12px;
+        font-family: inherit;
+        line-height: 1;
+        border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.28);
+        background: rgba(128,128,128,0.10);
+        color: inherit;
+        cursor: pointer;
+        box-sizing: border-box;
+    }
+
+    .pager-btn:hover:not(:disabled) {
+        background: rgba(26,74,122,0.16);
+        border-color: rgba(26,74,122,0.48);
+    }
+
+    .pager-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+    }
+
+    .pager-btn.active {
+        font-weight: 700;
+        background: rgba(26,74,122,0.22);
+        border-color: rgba(26,74,122,0.55);
+    }
+
+    .pager-gap {
+        padding: 0 2px;
+        opacity: 0.6;
+        font-size: 12px;
+    }
+
+    .pager-jump {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: 8px;
+        font-size: 12px;
+    }
+
+    .pager-jump input {
+        width: 64px;
+        height: 26px;
+        padding: 0 6px;
+        font-size: 12px;
+        font-family: inherit;
+        border-radius: 6px;
+        border: 1px solid rgba(128,128,128,0.28);
+        background: transparent;
+        color: inherit;
+        box-sizing: border-box;
+    }
+
+    .pager-jump-total {
+        opacity: 0.7;
     }
 
     #loadingOverlay {
