@@ -10456,6 +10456,10 @@ function start-InitTasks {
     # Default to available so an unset flag can never silently skip the Conditional Access checks.
     $global:GLOBALCapsDataAvailable = $true
     $global:GLOBALCapsUnavailableReason = ""
+
+    # Default to available so only an actual retrieval failure marks the PIM settings as unassessed.
+    $global:GLOBALPimSettingsAvailable = $true
+    $global:GLOBALPimSettingsUnavailableReason = ""
 }
 
 # Decodes the claims of an access token. Returns $null for missing, encrypted (JWE) or malformed
@@ -11262,6 +11266,8 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALPermissionForCaps -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALCapsDataAvailable -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALCapsUnavailableReason -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALPimSettingsAvailable -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALPimSettingsUnavailableReason -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsChecked -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALUserSignInActivityAvailable -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALUserAuthMethodsAvailable -ErrorAction SilentlyContinue

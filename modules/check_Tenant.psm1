@@ -9410,11 +9410,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
     }
     $pimLicensedForEntraRoles = ($global:GLOBALPIMForEntraRolesChecked -eq $true)
+    $pimSettingsAvailable = ($global:GLOBALPimSettingsAvailable -ne $false)
+    $pimSkipReasonHtml = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
     if (-not $pimLicensedForEntraRoles) {
         Write-Log -Level Verbose -Message "[PIM-001] PIM license check failed. Marking finding as vulnerable."
         Set-FindingOverride -FindingId "PIM-001" -Props @{
             Status = "Vulnerable"
             Description = "<p>Privileged Identity Management (PIM) is not in use because the required licenses are not assigned in the tenant.</p>"
+            AffectedObjects = @()
+            RelatedReportUrl = ""
+        }
+        $skipAdditionalPimChecks = $true
+    } elseif (-not $pimSettingsAvailable) {
+        # The role settings were never retrieved, so whether PIM is in use is unknown and must not be asserted.
+        Write-Log -Level Verbose -Message "[PIM-001] PIM role settings unavailable. Marking finding as skipped."
+        $pimSkipReasonHtml = "<p>Check skipped because the current permissions or license do not allow retrieval of the PIM role settings. The use of Privileged Identity Management for Entra ID roles could not be evaluated.</p>"
+        Set-FindingOverride -FindingId "PIM-001" -Props @{
+            Status = "Skipped"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9461,7 +9474,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-002] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-002" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9605,7 +9618,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-003] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-003" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9641,7 +9654,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-004] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-004" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9678,7 +9691,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-005] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-005" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9715,7 +9728,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-006] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-006" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9752,7 +9765,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-007] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-007" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9789,7 +9802,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-008] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-008" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
@@ -9826,7 +9839,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[PIM-009] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-009" -Props @{
             Status = "Skipped"
-            Description = "<p>Check skipped because Privileged Identity Management (PIM) is not in use.</p>"
+            Description = $pimSkipReasonHtml
             AffectedObjects = @()
             RelatedReportUrl = ""
         }

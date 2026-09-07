@@ -87,33 +87,45 @@ function Invoke-CheckPIM {
     $Title = "PIM"
 
     write-host "[*] Get PIM settings"
-    # Get all Entra Roles PIM Policies
-    $QueryParameters = @{ 
-        '$filter' = "scopeId eq '/' and scopeType eq 'DirectoryRole'"
-        '$expand' = 'rules'
-        '$select' = "Id,scopeId,scopeType,rules"
-    }
-    $AllPimEntraPolicies = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/policies/roleManagementPolicies' -QueryParameters $QueryParameters -BetaAPI
-    
-    $PimPoliciesCount = $($AllPimEntraPolicies.count)
-    write-host "[+] Got $PimPoliciesCount PIM settings"
+    # A failed request and a tenant without any PIM policy both return nothing, so the
+    # request outcome has to be captured separately from the result.
+    $PimPoliciesCount = 0
+    try {
+        # Get all Entra Roles PIM Policies
+        $QueryParameters = @{
+            '$filter' = "scopeId eq '/' and scopeType eq 'DirectoryRole'"
+            '$expand' = 'rules'
+            '$select' = "Id,scopeId,scopeType,rules"
+        }
+        $AllPimEntraPolicies = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/policies/roleManagementPolicies' -QueryParameters $QueryParameters -BetaAPI -ErrorAction Stop
 
-    # Get all Entra Roles PIM Role/Policie relations
-    $QueryParameters = @{ 
-        '$filter' = "scopeId eq '/' and scopeType eq 'DirectoryRole'"
-        '$select' = "policyId,scopeId,scopeType,roleDefinitionId"
-    }
-    $AllPimEntraPoliciesAssignments = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/policies/roleManagementPolicyAssignments' -QueryParameters $QueryParameters -BetaAPI
+        $PimPoliciesCount = $($AllPimEntraPolicies.count)
+        write-host "[+] Got $PimPoliciesCount PIM settings"
 
-    Write-Log -Level Verbose -Message "Got $($AllPimEntraPoliciesAssignments.count) PIM settings relations"
+        # Get all Entra Roles PIM Role/Policie relations
+        $QueryParameters = @{
+            '$filter' = "scopeId eq '/' and scopeType eq 'DirectoryRole'"
+            '$select' = "policyId,scopeId,scopeType,roleDefinitionId"
+        }
+        $AllPimEntraPoliciesAssignments = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/policies/roleManagementPolicyAssignments' -QueryParameters $QueryParameters -BetaAPI -ErrorAction Stop
 
-    # Get all role names
-    $QueryParameters = @{ 
-        '$select' = "id,displayName"
+        Write-Log -Level Verbose -Message "Got $($AllPimEntraPoliciesAssignments.count) PIM settings relations"
+
+        # Get all role names
+        $QueryParameters = @{
+            '$select' = "id,displayName"
+        }
+        $EntraRolesDefinition = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/roleManagement/directory/roleDefinitions' -QueryParameters $QueryParameters -BetaAPI -ErrorAction Stop
+
+        Write-Log -Level Verbose -Message "Got $($EntraRolesDefinition.count) Entra role definitions"
+    } catch {
+        # Without the settings the report is empty. Marking them unavailable keeps the PIM findings
+        # from presenting missing data as "PIM is not in use".
+        $global:GLOBALPimSettingsAvailable = $false
+        $global:GLOBALPimSettingsUnavailableReason = Format-CapGraphError -ErrorRecord $_
+        Write-Host "[!] PIM role settings could not be retrieved. $($global:GLOBALPimSettingsUnavailableReason)"
+        Write-Log -Level Debug -Message ("[PIM] Role settings retrieval failed: {0}" -f $_.Exception.Message)
     }
-    $EntraRolesDefinition = Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri '/roleManagement/directory/roleDefinitions' -QueryParameters $QueryParameters -BetaAPI 
-    
-    Write-Log -Level Verbose -Message "Got $($EntraRolesDefinition.count) Entra role definitions"   
 
     # Create a lookup for role display names
     $RoleIdToNameMap = @{}
@@ -619,7 +631,8 @@ function Invoke-CheckPIM {
     
     #Create HTML main table
     $mainTable = $tableOutput | select-object -Property @{Name = "Role"; Expression = { $_.RoleLink}},Tier,Eligible,Direct,Activated,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings
-    $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
+    # An empty pipeline produces no JSON at all, which breaks JSON.parse in the report
+    $mainTableJson = if (@($mainTable).Count -eq 0) { '[]' } else { $mainTable | ConvertTo-Json -Depth 5 -Compress }
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
     #Define stringbuilder to avoid performance impact
@@ -864,7 +877,11 @@ $ObjectsDetailsHEAD = @'
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
 
     # Set generic information which get injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'PIM' -CurrentReportName 'PIM Enumeration'
+    $PimReportWarnings = @()
+    if (-not $global:GLOBALPimSettingsAvailable) {
+        $PimReportWarnings = @("PIM role settings could not be retrieved. $($global:GLOBALPimSettingsUnavailableReason) The table below is therefore empty and does not indicate that PIM is unused.")
+    }
+    Set-GlobalReportManifest -CurrentReportKey 'PIM' -CurrentReportName 'PIM Enumeration' -Warnings $PimReportWarnings
 
 
     # HTML header below the navbar

@@ -339,6 +339,8 @@ return @"
         }
         if (-not [bool]$GLOBALGraphExtendedChecks) {
             $warnings.Add("PIM role data not collected.")
+        } elseif ($global:GLOBALPimSettingsAvailable -eq $false) {
+            $warnings.Add("PIM role settings not collected. $($global:GLOBALPimSettingsUnavailableReason) PIM role setting findings could not be evaluated.")
         }
         if (-not [bool]$GLOBALPimForGroupsChecked) {
             $warnings.Add("PIM group data not collected.")
@@ -673,7 +675,9 @@ return @"
     } else {
         New-GeneralStatusBadge -Text "Not Collected" -Tone "neutral"
     }
-    $pimRolesBadge = if ([bool]$GLOBALGraphExtendedChecks) {
+    # A PIM token alone is not coverage: the role settings must have been retrieved as well.
+    $pimRoleDataCollected = ([bool]$GLOBALGraphExtendedChecks -and $global:GLOBALPimSettingsAvailable -ne $false)
+    $pimRolesBadge = if ($pimRoleDataCollected) {
         New-GeneralStatusBadge -Text "Collected" -Tone "success"
     } else {
         New-GeneralStatusBadge -Text "Not Collected" -Tone "neutral"
@@ -1953,7 +1957,7 @@ Enumeration Results:
         }
         coverage      = [ordered]@{
             azureIamCollected         = [bool]$GLOBALAzurePsChecks
-            pimRoleDataCollected      = [bool]$GLOBALGraphExtendedChecks
+            pimRoleDataCollected      = [bool]$pimRoleDataCollected
             pimGroupDataCollected     = [bool]$GLOBALPimForGroupsChecked
             defaultMicrosoftSpCollected = [bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps
             coverageWarnings          = @($coverageWarnings)
