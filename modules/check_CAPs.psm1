@@ -2071,7 +2071,7 @@ function Invoke-CheckCaps {
             $csvFilePath = Join-Path $CapUncoveredUsersOutputFolder "$safePolicyName`_$shortPolicyId.csv"
             Write-Log -Level Debug -Message "CAP uncovered-users export summary for '$($policy.DisplayName)' [$($policy.Id)]: includedTargeted=$($includedTargetUserIds.Count) excludedTargeted=$($excludedTargetUserIds.Count) netTargeted=$($netTargetUserIds.Count) potentialViaPim=$($includedPotentialPimUserIds.Count) uncovered=$($capUncoveredUsersRows.Count) reasons=(Excluded=$excludedReasonCount, PotentialViaPIM=$potentialViaPimReasonCount, NotTargeted=$notTargetedReasonCount)"
             if ($capUncoveredUsersRows.Count -gt 0) {
-                $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -Path $csvFilePath -NoTypeInformation -Encoding UTF8
+                $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -LiteralPath $csvFilePath -NoTypeInformation -Encoding UTF8
                 $capUncoveredExportFilesWritten++
                 $capUncoveredExportRows += $capUncoveredUsersRows.Count
             } else {
