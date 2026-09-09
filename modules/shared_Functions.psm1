@@ -1081,7 +1081,8 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Eligible Assignments",
                     filters: {
                         AssignmentType: "=Eligible"
-                    }
+                    },
+                    sort: { column: "Impact", direction: "desc" }
                 },
                 {
                     id: "PVRA-002",
@@ -1090,7 +1091,8 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Active Assignments",
                     filters: {
                         AssignmentType: "Active"
-                    }
+                    },
+                    sort: { column: "Impact", direction: "desc" }
                 },
                 {
                     id: "PVRA-003",
@@ -1099,7 +1101,8 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Service Principal Assignments",
                     filters: {
                         PrincipalType: "ServicePrincipal||Enterprise Application||Agent Identity||Agent Identity Blueprint Principal||Managed Identity"
-                    }
+                    },
+                    sort: { column: "Impact", direction: "desc" }
                 },
                 {
                     id: "PVRA-004",
@@ -1108,7 +1111,8 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Additional Conditions",
                     filters: {
                         Conditions: "=true"
-                    }
+                    },
+                    sort: { column: "Impact", direction: "desc" }
                 },
                 {
                     id: "PVRA-005",
@@ -1117,7 +1121,31 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Custom Roles",
                     filters: {
                         RoleType: "=CustomRole"
-                    }
+                    },
+                    sort: { column: "Impact", direction: "desc" }
+                },
+                {
+                    id: "PVRA-006",
+                    group: "Scope & Impact",
+                    description: "Tier-0 roles assigned at tenant root, management group, or subscription scope",
+                    label: "Tier-0 at Broad Scope",
+                    filters: {
+                        RoleTier: "=Tier-0",
+                        ScopeType: "=Root||=ManagementGroup||=Subscription"
+                    },
+                    columns: ["Scope", "Role", "RoleTier", "Impact", "ScopeType", "Environment", "Resources", "AssignmentType", "PrincipalType", "Principal"],
+                    sort: { column: "Impact", direction: "desc" }
+                },
+                {
+                    id: "PVRA-007",
+                    group: "Scope & Impact",
+                    description: "Assignments on scopes classified as likely production by name",
+                    label: "Production Scopes",
+                    filters: {
+                        Environment: "=Production"
+                    },
+                    columns: ["Scope", "Role", "RoleTier", "Impact", "ScopeType", "Environment", "Resources", "AssignmentType", "PrincipalType", "Principal"],
+                    sort: { column: "Impact", direction: "desc" }
                 }
             ],
             "PIM": [
@@ -1837,13 +1865,14 @@ $global:GLOBALJavaScript_Table = @'
                 laptop: {
                     maxWidth: 1600,
                     columns: [
-                        "Scope", "Role", "RoleTier", "Conditions", "AssignmentType", "ActivatedViaPIM", "PrincipalType", "Principal"
+                        "Scope", "Role", "RoleTier", "Impact", "Environment", "Resources",
+                        "AssignmentType", "ActivatedViaPIM", "PrincipalType", "Principal"
                     ]
                 },
                 compact: {
                     maxWidth: 1200,
                     columns: [
-                        "Scope", "Role", "RoleTier", "AssignmentType", "PrincipalType", "Principal"
+                        "Scope", "Role", "RoleTier", "Impact", "Environment", "AssignmentType", "Principal"
                     ]
                 }
             },
@@ -1899,6 +1928,8 @@ $global:GLOBALJavaScript_Table = @'
             "Risk": "Calculation: Impact x Likelihood",
             "OnPrem": "Objects synced from on-prem AD",
             "AzureRoles": "Directly or indirectly assigned Azure IAM roles",
+            "ScopeType": "Azure scope level of the assignment: tenant root, management group, subscription, resource group, or individual resource.",
+            "Environment": "Environment inferred from scope names such as prod, dev, test. Verify manually.",
             "EntraRoles": "Directly or indirectly assigned Entra ID roles",
             "SAML": "SAML as preferred SSO method",
             "CAPs": "Number of Conditional Access Policies the group is used in",
@@ -1996,6 +2027,12 @@ $global:GLOBALJavaScript_Table = @'
 
             if (manifest && manifest.currentReportKey === "Catalogs") {
                 ["NewAPConfigurable", "ConfiguredResources"].forEach(col => {
+                    if (!defaultHidden.includes(col)) defaultHidden.push(col);
+                });
+            }
+
+            if (manifest && manifest.currentReportKey === "RoleAz") {
+                ["ScopeType"].forEach(col => {
                     if (!defaultHidden.includes(col)) defaultHidden.push(col);
                 });
             }
@@ -8378,11 +8415,65 @@ $global:GLOBALImpactScore = @{
     "EntraRoleTier2"            = 80
     "EntraRoleTier?Privileged"  = 100
     "EntraRoleTier?"            = 80
-    "AzureRoleTier0"            = 200
-    "AzureRoleTier1"            = 70
+    "AzureRoleTier0"            = 300
+    "AzureRoleTier1"            = 100
     "AzureRoleTier2"            = 50
     "AzureRoleTier3"            = 10
     "AzureRoleTier?"            = 50
+}
+
+$global:GLOBALAzureRoleImpactPolicy = @{
+    Version = "2.4"
+    MaximumAssignmentFactor = 1.20
+    ScopeFactors = @{
+        Root            = 1.20
+        ManagementGroup = 0.90
+        Subscription    = 0.80
+        ResourceGroup   = 0.50
+        Resource        = 0.25
+        Unknown         = 1.00
+    }
+    EnvironmentFactors = @{
+        Production    = 1.10
+        Nonproduction = 0.60
+        Mixed         = 1.00
+        Unknown       = 1.00
+        NotApplicable = 1.00
+    }
+    SizeThresholds = @{
+        ResourceGroup = @{
+            Medium = 100
+            Large  = 1000
+        }
+        Subscription = @{
+            Medium = 100
+            Large  = 1000
+        }
+        ManagementGroup = @{
+            Medium = 1000
+            Large  = 10000
+        }
+    }
+    SizeFactors = @{
+        Empty  = 0.50
+        Normal = 1.00
+        Medium = 1.10
+        Large  = 1.20
+    }
+    ProductionTokens = @("prod", "prd", "production")
+    NonproductionTokens = @("dev", "development", "test", "tst", "qa", "uat", "sandbox", "lab")
+    SensitiveResourceTypes = @(
+        "microsoft.compute/virtualmachines",
+        "microsoft.compute/virtualmachinescalesets",
+        "microsoft.keyvault/vaults",
+        "microsoft.managedidentity/userassignedidentities",
+        "microsoft.automation/automationaccounts",
+        "microsoft.containerservice/managedclusters",
+        "microsoft.kubernetes/connectedclusters",
+        "microsoft.hybridcompute/machines",
+        "microsoft.containerregistry/registries"
+    )
+    SensitiveResourceMinimumScopeFactor = 0.50
 }
 
 $global:GLOBALApiPermissionCategorizationList= @{
@@ -8613,6 +8704,307 @@ function Invoke-EntraRoleProcessing {
 }
 
 #Function to rate Entra ID role assignments and generate the warning message
+function Get-AzureRoleBaseImpact {
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$RoleTier
+    )
+
+    switch ([string]$RoleTier) {
+        { $_ -in @("0", "Tier-0") } { return [int]$GLOBALImpactScore["AzureRoleTier0"] }
+        { $_ -in @("1", "Tier-1") } { return [int]$GLOBALImpactScore["AzureRoleTier1"] }
+        { $_ -in @("2", "Tier-2") } { return [int]$GLOBALImpactScore["AzureRoleTier2"] }
+        { $_ -in @("3", "Tier-3") } { return [int]$GLOBALImpactScore["AzureRoleTier3"] }
+        default { return [int]$GLOBALImpactScore["AzureRoleTier?"] }
+    }
+}
+
+function Get-AzureRoleEnvironmentClassification {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string[]]$Names
+    )
+
+    $candidateText = (@($Names | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join " | ")
+    if ([string]::IsNullOrWhiteSpace($candidateText)) {
+        return "Unknown"
+    }
+
+    $nonproductionPrefixPattern = "non[-_ ]?(?:prod|prd|production)"
+    $nonproductionPattern = "(?i)(^|[^a-z0-9])(?:$nonproductionPrefixPattern|" + (($GLOBALAzureRoleImpactPolicy.NonproductionTokens | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")(?=$|[^a-z0-9])"
+    $hasNonproduction = [regex]::IsMatch($candidateText, $nonproductionPattern)
+    $productionCandidate = [regex]::Replace($candidateText, "(?i)(^|[^a-z0-9])$nonproductionPrefixPattern(?=$|[^a-z0-9])", " ")
+    $productionPattern = "(?i)(^|[^a-z0-9])(?:" + (($GLOBALAzureRoleImpactPolicy.ProductionTokens | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")(?=$|[^a-z0-9])"
+    $hasProduction = [regex]::IsMatch($productionCandidate, $productionPattern)
+
+    if ($hasProduction -and $hasNonproduction) { return "Mixed" }
+    if ($hasProduction) { return "Production" }
+    if ($hasNonproduction) { return "Nonproduction" }
+    return "Unknown"
+}
+
+function Get-AzureRoleContextValue {
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$Map,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Key
+    )
+
+    if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) { return $null }
+    if ($Map -is [System.Collections.IDictionary]) { return $Map[$Key] }
+    $property = $Map.PSObject.Properties[$Key]
+    if ($property) { return $property.Value }
+    return $null
+}
+
+function Get-AzureRoleAssignmentImpact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$RoleTier,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoleName = "Azure role",
+
+        [Parameter(Mandatory = $false)]
+        [string]$RawScope,
+
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    $baseImpact = Get-AzureRoleBaseImpact -RoleTier $RoleTier
+    $policyVersion = [string]$GLOBALAzureRoleImpactPolicy.Version
+    $scopeType = "Unknown"
+    $scopeFactor = [double]$GLOBALAzureRoleImpactPolicy.ScopeFactors.Unknown
+    $environment = "Unknown"
+    $environmentFactor = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Unknown
+    $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Normal
+    $observedResources = $null
+    $inventoryStatus = "Unavailable"
+    $subscriptionId = $null
+    $resourceGroupName = $null
+    $managementGroupKey = $null
+    $contextNames = New-Object System.Collections.Generic.List[string]
+
+    $storedScoring = $null
+    $storedContext = $null
+    if ($GlobalAuditSummary -and $GlobalAuditSummary.AzureRoleAssignments -and $GlobalAuditSummary.AzureRoleAssignments.ContextualScoring) {
+        $storedScoring = $GlobalAuditSummary.AzureRoleAssignments.ContextualScoring
+        $storedContext = $storedScoring.Context
+    }
+
+    $subscriptionNameMap = $GLOBALAzureSubscriptionScopeMap
+    $managementGroupNameMap = $GLOBALAzureManagementGroupScopeMap
+    $subscriptionResourceCountMap = $GLOBALAzureSubscriptionResourceCountMap
+    $resourceGroupResourceCountMap = $GLOBALAzureResourceGroupResourceCountMap
+    $managementGroupResourceCountMap = $GLOBALAzureManagementGroupResourceCountMap
+    $rootResourceCount = $GLOBALAzureRootResourceCount
+    $resourceInventoryStatus = [string]$GLOBALAzureResourceInventoryStatus
+    $managementGroupHierarchyStatus = [string]$GLOBALAzureManagementGroupHierarchyStatus
+
+    if ($storedContext) {
+        if (-not $subscriptionNameMap) { $subscriptionNameMap = $storedContext.SubscriptionNames }
+        if (-not $managementGroupNameMap) { $managementGroupNameMap = $storedContext.ManagementGroupNames }
+        if (-not $subscriptionResourceCountMap) { $subscriptionResourceCountMap = $storedContext.SubscriptionResourceCounts }
+        if (-not $resourceGroupResourceCountMap) { $resourceGroupResourceCountMap = $storedContext.ResourceGroupResourceCounts }
+        if (-not $managementGroupResourceCountMap) { $managementGroupResourceCountMap = $storedContext.ManagementGroupResourceCounts }
+        if ($null -eq $rootResourceCount) { $rootResourceCount = $storedContext.RootResourceCount }
+    }
+    if ([string]::IsNullOrWhiteSpace($resourceInventoryStatus) -and $storedScoring) {
+        $resourceInventoryStatus = [string]$storedScoring.InventoryStatus
+    }
+    if ([string]::IsNullOrWhiteSpace($managementGroupHierarchyStatus) -and $storedScoring) {
+        $managementGroupHierarchyStatus = [string]$storedScoring.HierarchyStatus
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RoleName)) { $RoleName = "Azure role" }
+    if ([string]::IsNullOrWhiteSpace($RawScope)) {
+        return [pscustomobject]@{
+            BaseImpact             = $baseImpact
+            ScopeType             = $scopeType
+            ScopeFactor           = $scopeFactor
+            Environment           = $environment
+            EnvironmentFactor     = $environmentFactor
+            ObservedResources = $observedResources
+            InventoryStatus       = $inventoryStatus
+            SizeFactor            = $sizeFactor
+            AssignmentImpact      = $baseImpact
+            ImpactExplanation     = "$RoleName $baseImpact; contextual scope unavailable = $baseImpact"
+            ScoringPolicyVersion   = $policyVersion
+        }
+    }
+
+    $normalizedScope = $RawScope.Trim()
+    if ($normalizedScope.Length -gt 1) { $normalizedScope = $normalizedScope.TrimEnd('/') }
+    if ($normalizedScope -eq "/") {
+        $scopeType = "Root"
+    } elseif ($normalizedScope -imatch '^/providers/Microsoft\.Management/managementGroups/([^/]+)$') {
+        $managementGroupId = [string]$Matches[1]
+        if ([string]::IsNullOrWhiteSpace($TenantId) -and $GlobalAuditSummary -and $GlobalAuditSummary.Tenant) {
+            $TenantId = [string]$GlobalAuditSummary.Tenant.Id
+        }
+        if (-not [string]::IsNullOrWhiteSpace($TenantId) -and $managementGroupId -ieq $TenantId) {
+            $scopeType = "Root"
+        } else {
+            $scopeType = "ManagementGroup"
+        }
+        $managementGroupKey = $managementGroupId.ToLowerInvariant()
+        $managementGroupName = Get-AzureRoleContextValue -Map $managementGroupNameMap -Key $managementGroupKey
+        if (-not [string]::IsNullOrWhiteSpace([string]$managementGroupName)) {
+            [void]$contextNames.Add([string]$managementGroupName)
+        }
+    } elseif ($normalizedScope -imatch '^/subscriptions/([^/]+)$') {
+        $scopeType = "Subscription"
+        $subscriptionId = [string]$Matches[1]
+    } elseif ($normalizedScope -imatch '^/subscriptions/([^/]+)/resourceGroups/([^/]+)$') {
+        $scopeType = "ResourceGroup"
+        $subscriptionId = [string]$Matches[1]
+        $resourceGroupName = [string]$Matches[2]
+        [void]$contextNames.Add($resourceGroupName)
+    } elseif ($normalizedScope -imatch '^/subscriptions/([^/]+)/(.+)$') {
+        $scopeType = "Resource"
+        $subscriptionId = [string]$Matches[1]
+        $scopeSegments = @($normalizedScope.Trim('/') -split '/')
+        for ($segmentIndex = 0; $segmentIndex -lt $scopeSegments.Count; $segmentIndex++) {
+            if ($scopeSegments[$segmentIndex] -ieq "resourceGroups" -and ($segmentIndex + 1) -lt $scopeSegments.Count) {
+                [void]$contextNames.Add([string]$scopeSegments[$segmentIndex + 1])
+            }
+            if ($scopeSegments[$segmentIndex] -ieq "providers") {
+                for ($nameIndex = $segmentIndex + 3; $nameIndex -lt $scopeSegments.Count; $nameIndex += 2) {
+                    [void]$contextNames.Add([string]$scopeSegments[$nameIndex])
+                }
+            }
+        }
+    }
+
+    $scopeFactor = [double]$GLOBALAzureRoleImpactPolicy.ScopeFactors[$scopeType]
+    $subscriptionKey = if (-not [string]::IsNullOrWhiteSpace($subscriptionId)) { $subscriptionId.ToLowerInvariant() } else { $null }
+    $subscriptionName = Get-AzureRoleContextValue -Map $subscriptionNameMap -Key $subscriptionKey
+    if (-not [string]::IsNullOrWhiteSpace([string]$subscriptionName)) {
+        $contextNames.Insert(0, [string]$subscriptionName)
+    }
+
+    $environment = Get-AzureRoleEnvironmentClassification -Names $contextNames.ToArray()
+    $environmentFactor = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors[$environment]
+
+    if ($scopeType -eq "Resource" -and $normalizedScope -imatch '/providers/([^/]+)/([^/]+)') {
+        $resourceType = ("$($Matches[1])/$($Matches[2])").ToLowerInvariant()
+        if ($GLOBALAzureRoleImpactPolicy.SensitiveResourceTypes -contains $resourceType) {
+            $scopeFactor = [Math]::Max($scopeFactor, [double]$GLOBALAzureRoleImpactPolicy.SensitiveResourceMinimumScopeFactor)
+        }
+    }
+
+    switch ($scopeType) {
+        "Root" {
+            $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
+            if ($inventoryStatus -eq "Complete" -and $null -ne $rootResourceCount) { $observedResources = [int]$rootResourceCount }
+        }
+        "ManagementGroup" {
+            if ($resourceInventoryStatus -eq "Complete" -and $managementGroupHierarchyStatus -eq "Complete") {
+                $inventoryStatus = "Complete"
+                $managementGroupCount = Get-AzureRoleContextValue -Map $managementGroupResourceCountMap -Key $managementGroupKey
+                if ($null -ne $managementGroupCount) { $observedResources = [int]$managementGroupCount }
+            } elseif ($resourceInventoryStatus -eq "Partial" -or $managementGroupHierarchyStatus -eq "Partial") {
+                $inventoryStatus = "Partial"
+            } else {
+                $inventoryStatus = "Unavailable"
+            }
+        }
+        "Subscription" {
+            $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
+            if ($inventoryStatus -eq "Complete") {
+                $subscriptionCount = Get-AzureRoleContextValue -Map $subscriptionResourceCountMap -Key $subscriptionKey
+                if ($null -ne $subscriptionCount) { $observedResources = [int]$subscriptionCount }
+            }
+        }
+        "ResourceGroup" {
+            $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
+            if ($inventoryStatus -eq "Complete") {
+                $resourceGroupKey = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionId, $resourceGroupName).ToLowerInvariant()
+                $resourceGroupCount = Get-AzureRoleContextValue -Map $resourceGroupResourceCountMap -Key $resourceGroupKey
+                if ($null -ne $resourceGroupCount) { $observedResources = [int]$resourceGroupCount }
+            }
+        }
+        "Resource" {
+            $observedResources = 1
+            $inventoryStatus = "NotApplicable"
+        }
+        default { $inventoryStatus = "Unavailable" }
+    }
+
+    if ($scopeType -in @("ResourceGroup", "Subscription", "ManagementGroup") -and $null -ne $observedResources) {
+        $scopeThresholds = $GLOBALAzureRoleImpactPolicy.SizeThresholds[$scopeType]
+        if ($observedResources -eq 0) {
+            $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Empty
+        } elseif ($observedResources -ge [int]$scopeThresholds.Large) {
+            $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Large
+        } elseif ($observedResources -ge [int]$scopeThresholds.Medium) {
+            $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Medium
+        }
+    }
+
+    if ($scopeType -eq "Root") {
+        $environment = "NotApplicable"
+        $environmentFactor = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.NotApplicable
+        $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Normal
+    } elseif ($scopeType -eq "Unknown") {
+        $environment = "Unknown"
+        $environmentFactor = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Unknown
+        $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Normal
+    }
+
+    $calculatedImpact = [Math]::Round(($baseImpact * $scopeFactor * $environmentFactor * $sizeFactor), 0, [MidpointRounding]::AwayFromZero)
+    $maximumAssignmentImpact = [Math]::Round(($baseImpact * [double]$GLOBALAzureRoleImpactPolicy.MaximumAssignmentFactor), 0, [MidpointRounding]::AwayFromZero)
+    $assignmentImpact = [int][Math]::Min($maximumAssignmentImpact, [Math]::Max(1, $calculatedImpact))
+    $scopeLabel = switch ($scopeType) {
+        "ManagementGroup" { "Management group" }
+        "ResourceGroup" { "Resource group" }
+        default { $scopeType }
+    }
+    $explanationParts = New-Object System.Collections.Generic.List[string]
+    [void]$explanationParts.Add("$RoleName $baseImpact")
+    [void]$explanationParts.Add("$scopeLabel $($scopeFactor.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture))")
+    [void]$explanationParts.Add("$environment $($environmentFactor.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture))")
+    if ($scopeType -eq "Resource") {
+        [void]$explanationParts.Add("Scoped resource count (1) 1.00")
+    } elseif ($scopeType -in @("Root", "ManagementGroup", "Subscription", "ResourceGroup")) {
+        $scopeThresholds = if ($GLOBALAzureRoleImpactPolicy.SizeThresholds.ContainsKey($scopeType)) { $GLOBALAzureRoleImpactPolicy.SizeThresholds[$scopeType] } else { $null }
+        if ($inventoryStatus -eq "Partial") {
+            $sizeLabel = "Inventory partial"
+        } elseif ($inventoryStatus -ne "Complete") {
+            $sizeLabel = "Inventory unavailable"
+        } elseif ($null -eq $observedResources) {
+            $sizeLabel = "Inventory complete; scope count unavailable"
+        } elseif ($observedResources -eq 0) {
+            $sizeLabel = "Empty inventory (0; complete)"
+        } elseif ($scopeThresholds -and $observedResources -ge [int]$scopeThresholds.Large) {
+            $sizeLabel = "Large inventory ($observedResources; complete)"
+        } elseif ($scopeThresholds -and $observedResources -ge [int]$scopeThresholds.Medium) {
+            $sizeLabel = "Medium inventory ($observedResources; complete)"
+        } else {
+            $sizeLabel = "Inventory ($observedResources; complete)"
+        }
+        [void]$explanationParts.Add("$sizeLabel $($sizeFactor.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture))")
+    }
+
+    return [pscustomobject]@{
+        BaseImpact             = $baseImpact
+        ScopeType             = $scopeType
+        ScopeFactor           = $scopeFactor
+        Environment           = $environment
+        EnvironmentFactor     = $environmentFactor
+        ObservedResources = $observedResources
+        InventoryStatus       = $inventoryStatus
+        SizeFactor            = $sizeFactor
+        AssignmentImpact      = $assignmentImpact
+        ImpactExplanation     = (($explanationParts.ToArray() -join " x ") + " = $assignmentImpact")
+        ScoringPolicyVersion   = $policyVersion
+    }
+}
+
 function Invoke-AzureRoleProcessing {
     [CmdletBinding()]
     param (
@@ -8660,6 +9052,14 @@ function Invoke-AzureRoleProcessing {
                 }
             }
 
+            if ($Role.PSObject.Properties["AssignmentImpact"] -and $null -ne $Role.AssignmentImpact) {
+                $contextualImpact = 0
+                if ([int]::TryParse([string]$Role.AssignmentImpact, [ref]$contextualImpact) -and $contextualImpact -ge 1) {
+                    $maximumRoleImpact = [Math]::Round(($RoleImpact * [double]$GLOBALAzureRoleImpactPolicy.MaximumAssignmentFactor), 0, [MidpointRounding]::AwayFromZero)
+                    $RoleImpact = [Math]::Min($maximumRoleImpact, $contextualImpact)
+                }
+            }
+
             $ImpactScore += $RoleImpact
             if ($Role.AssignmentType -eq "Eligible") {
                 $EligibleImpactScore += $RoleImpact
@@ -8690,6 +9090,112 @@ function Invoke-AzureRoleProcessing {
         }
 }
 
+
+# Execute an Azure Resource Graph query with a fixed request budget. Partial rows are exposed only for non-scoring metadata.
+function Invoke-AzureResourceGraphPagedQuery {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Query,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateRange(1, 10)]
+        [int]$MaxPages = 10,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateRange(1, 1000)]
+        [int]$PageSize = 1000,
+
+        [Parameter(Mandatory = $false)]
+        [scriptblock]$RequestInvoker
+    )
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seenSkipTokens = New-Object System.Collections.Generic.HashSet[string]
+    $skipToken = $null
+    $pagesRetrieved = 0
+    if (-not $RequestInvoker) {
+        $RequestInvoker = {
+            param($RequestUri, $RequestBody)
+            Send-ApiRequest -Method POST -Uri $RequestUri -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Body $RequestBody -Silent -ErrorAction Stop
+        }
+    }
+
+    try {
+        while ($pagesRetrieved -lt $MaxPages) {
+            $options = @{
+                resultFormat = "objectArray"
+                '$top'       = $PageSize
+            }
+            if (-not [string]::IsNullOrWhiteSpace($skipToken)) {
+                $options['$skipToken'] = $skipToken
+            }
+
+            $body = @{
+                query   = $Query
+                options = $options
+            }
+            $response = & $RequestInvoker $Uri $body
+            if ($null -eq $response) { throw "Azure Resource Graph returned no response." }
+
+            $responseEntries = @($response)
+            if ($responseEntries.Count -ne 1 -or -not $responseEntries[0].PSObject.Properties['data']) {
+                throw "Azure Resource Graph returned an unexpected response shape."
+            }
+
+            $envelope = $responseEntries[0]
+            foreach ($row in @($envelope.data)) {
+                if ($null -ne $row) { [void]$rows.Add($row) }
+            }
+            $pagesRetrieved++
+
+            $nextSkipToken = $null
+            $skipTokenProperty = $envelope.PSObject.Properties['$skipToken']
+            if (-not $skipTokenProperty) { $skipTokenProperty = $envelope.PSObject.Properties['skipToken'] }
+            if ($skipTokenProperty) { $nextSkipToken = [string]$skipTokenProperty.Value }
+
+            $resultTruncated = $false
+            if ($envelope.PSObject.Properties['resultTruncated']) {
+                $resultTruncated = ([string]$envelope.resultTruncated -match '^(?i:true|1)$')
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($nextSkipToken)) {
+                if ($pagesRetrieved -ge $MaxPages) {
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
+                }
+                if (-not $seenSkipTokens.Add($nextSkipToken)) {
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Repeated skip token." }
+                }
+                $skipToken = $nextSkipToken
+                continue
+            }
+
+            if ($resultTruncated) {
+                return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Truncated response without a skip token." }
+            }
+
+            if ($envelope.PSObject.Properties['totalRecords']) {
+                $totalRecords = 0L
+                if (-not [long]::TryParse([string]$envelope.totalRecords, [ref]$totalRecords) -or $totalRecords -lt 0) {
+                    throw "Azure Resource Graph returned an invalid totalRecords value."
+                }
+                if ($rows.Count -ne $totalRecords) {
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Returned row count does not match totalRecords." }
+                }
+            }
+
+            return [pscustomobject]@{ Status = "Complete"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = $null }
+        }
+    } catch {
+        $status = if ($pagesRetrieved -gt 0) { "Partial" } else { "Unavailable" }
+        return [pscustomobject]@{ Status = $status; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = $_.Exception.Message }
+    }
+
+    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
+}
 
 # Function to get Azure IAM assignments
 function Get-AllAzureIAMAssignmentsNative {
@@ -8728,78 +9234,198 @@ function Get-AllAzureIAMAssignmentsNative {
     }
     $global:GLOBALAzureSubscriptionScopeMap = $subscriptionScopeMap
 
-    $managementGroupScopeMap = @{}
-    try {
-        # Query Resource Graph for management group IDs and display names via the subscription.
-        $url = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
-        $body = @{
-            query = "ResourceContainers| where type =~ 'microsoft.resources/subscriptions'| mv-expand mg = properties.managementGroupAncestorsChain| project ResourceId = tostring(mg.name),DisplayName = tostring(mg.displayName),tenantId | summarize DisplayName = any(DisplayName) by ResourceId"
-            options = @{
-                resultFormat = "objectArray"
-            }
-        }
-        $resourceGraphResponse = Send-ApiRequest -Method POST -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Body $body -Silent -ErrorAction Stop
+    $resourceGraphUrl = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01"
+    $hierarchyQuery = "ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | extend ancestors = properties.managementGroupAncestorsChain | mv-expand with_itemindex=AncestorIndex mg = ancestors | project RowType = 'SubscriptionAncestor', subscriptionId = tostring(subscriptionId), ResourceId = tostring(mg.name), DisplayName = tostring(mg.displayName), ParentId = tostring(ancestors[toint(AncestorIndex) + 1].name), IsDirectParent = (AncestorIndex == 0) | union (ResourceContainers | where type =~ 'microsoft.management/managementgroups' | project RowType = 'ManagementGroup', subscriptionId = '', ResourceId = tostring(name), DisplayName = tostring(properties.displayName), ParentId = tostring(properties.details.managementGroupAncestorsChain[0].name), IsDirectParent = false)"
+    $inventoryQuery = "Resources | summarize Count=count() by subscriptionId, resourceGroup=tolower(resourceGroup) | union (ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project subscriptionId = tostring(subscriptionId), resourceGroup = tolower(name), Count = tolong(0)) | union (ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId = tostring(subscriptionId), resourceGroup = '', Count = tolong(0)) | summarize Count=max(Count) by subscriptionId, resourceGroup"
 
-        # Normalize the query response to a flat row collection.
-        $managementGroups = @()
-        if ($resourceGraphResponse -is [System.Collections.IEnumerable] -and -not ($resourceGraphResponse -is [string])) {
-            foreach ($entry in $resourceGraphResponse) {
-                if ($entry -and $entry.PSObject.Properties.Name -contains 'data' -and $entry.data) {
-                    $managementGroups += @($entry.data)
-                } else {
-                    $managementGroups += @($entry)
+    $hierarchyResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $hierarchyQuery -MaxPages 10 -PageSize 1000
+    $hierarchyStatus = [string]$hierarchyResult.Status
+    $managementGroupScopeMap = @{}
+    $subscriptionManagementGroupMap = @{}
+    $managementGroupParentMap = @{}
+    $subscriptionParentMap = @{}
+
+    foreach ($row in @($hierarchyResult.RetrievedRows)) {
+        $managementGroupId = [string]$row.ResourceId
+        if ([string]::IsNullOrWhiteSpace($managementGroupId)) { continue }
+        $managementGroupName = [string]$row.DisplayName
+        if ([string]::IsNullOrWhiteSpace($managementGroupName)) { $managementGroupName = $managementGroupId }
+        $managementGroupScopeMap[$managementGroupId.ToLowerInvariant()] = $managementGroupName
+    }
+
+    if ($hierarchyStatus -eq "Complete") {
+        try {
+            foreach ($row in @($hierarchyResult.Rows)) {
+                $rowType = [string]$row.RowType
+                $subscriptionId = [string]$row.subscriptionId
+                $managementGroupId = [string]$row.ResourceId
+                $managementGroupName = [string]$row.DisplayName
+                if ([string]::IsNullOrWhiteSpace($managementGroupId)) {
+                    throw "Management group hierarchy contains a row without ResourceId."
+                }
+                if ([string]::IsNullOrWhiteSpace($managementGroupName)) { $managementGroupName = $managementGroupId }
+
+                $managementGroupKey = $managementGroupId.ToLowerInvariant()
+                $managementGroupScopeMap[$managementGroupKey] = $managementGroupName
+                if ($null -ne $row.ParentId) {
+                    $managementGroupParentMap[$managementGroupKey] = ([string]$row.ParentId).ToLowerInvariant()
+                }
+
+                if ($rowType -eq "ManagementGroup") {
+                    continue
+                }
+                if ($rowType -ne "SubscriptionAncestor" -or [string]::IsNullOrWhiteSpace($subscriptionId)) {
+                    throw "Management group hierarchy contains an invalid row type or subscriptionId."
+                }
+
+                $subscriptionKey = $subscriptionId.ToLowerInvariant()
+                if ($row.IsDirectParent -eq $true) {
+                    $subscriptionParentMap[$subscriptionKey] = $managementGroupKey
+                }
+                if (-not $subscriptionManagementGroupMap.ContainsKey($subscriptionKey)) {
+                    $subscriptionManagementGroupMap[$subscriptionKey] = New-Object System.Collections.Generic.HashSet[string]
+                }
+                [void]$subscriptionManagementGroupMap[$subscriptionKey].Add($managementGroupKey)
+            }
+        } catch {
+            $hierarchyStatus = "Unavailable"
+            $subscriptionManagementGroupMap = @{}
+            $managementGroupParentMap = @{}
+            $subscriptionParentMap = @{}
+            $hierarchyResult.FailureReason = $_.Exception.Message
+        }
+    }
+    if ($hierarchyStatus -eq "Complete") {
+        Write-Log -Level Debug -Message "Got $($managementGroupScopeMap.Count) management groups in $($hierarchyResult.PagesRetrieved) Resource Graph page(s)"
+    } else {
+        Write-Log -Level Debug -Message "Management group hierarchy unavailable ($hierarchyStatus): $($hierarchyResult.FailureReason)"
+    }
+    $global:GLOBALAzureManagementGroupScopeMap = $managementGroupScopeMap
+    $global:GLOBALAzureManagementGroupHierarchyStatus = $hierarchyStatus
+
+    $inventoryResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $inventoryQuery -MaxPages 10 -PageSize 1000
+    $inventoryStatus = [string]$inventoryResult.Status
+    $resourceGroupResourceCounts = @{}
+    $subscriptionResourceCounts = @{}
+    $managementGroupResourceCounts = @{}
+    $rootResourceCount = $null
+
+    if ($inventoryStatus -eq "Complete") {
+        try {
+            $inventoryBuckets = @{}
+            foreach ($row in @($inventoryResult.Rows)) {
+                $subscriptionId = [string]$row.subscriptionId
+                $resourceGroupName = [string]$row.resourceGroup
+                $resourceCount = 0
+                if ([string]::IsNullOrWhiteSpace($subscriptionId) -or -not [int]::TryParse([string]$row.Count, [ref]$resourceCount) -or $resourceCount -lt 0) {
+                    throw "Resource inventory contains an invalid subscriptionId or Count."
+                }
+
+                $subscriptionKey = $subscriptionId.ToLowerInvariant()
+                $resourceGroupKeyPart = if ([string]::IsNullOrWhiteSpace($resourceGroupName)) { "" } else { $resourceGroupName.ToLowerInvariant() }
+                $bucketKey = "$subscriptionKey|$resourceGroupKeyPart"
+                if ($inventoryBuckets.ContainsKey($bucketKey) -and [int]$inventoryBuckets[$bucketKey] -ne $resourceCount) {
+                    throw "Resource inventory contains conflicting duplicate rows."
+                }
+                $inventoryBuckets[$bucketKey] = $resourceCount
+            }
+
+            foreach ($subscription in $subscriptions) {
+                $subscriptionKey = ([string]$subscription.Id).ToLowerInvariant()
+                if (-not $inventoryBuckets.ContainsKey("$subscriptionKey|")) {
+                    throw "Resource inventory does not contain an explicit container row for subscription '$($subscription.Id)'."
                 }
             }
-        } elseif ($resourceGraphResponse -and $resourceGraphResponse.PSObject.Properties.Name -contains 'data' -and $resourceGraphResponse.data) {
-            $managementGroups = @($resourceGraphResponse.data)
-        } elseif ($null -ne $resourceGraphResponse) {
-            $managementGroups = @($resourceGraphResponse)
-        }
 
-        foreach ($managementGroup in $managementGroups) {
-            $managementGroupId = [string]$managementGroup.ResourceId
-            $managementGroupName = [string]$managementGroup.DisplayName
-            if ([string]::IsNullOrWhiteSpace($managementGroupName)) {
-                $managementGroupName = $managementGroupId
+            foreach ($bucketKey in $inventoryBuckets.Keys) {
+                $separatorIndex = $bucketKey.IndexOf('|')
+                $subscriptionKey = $bucketKey.Substring(0, $separatorIndex)
+                $resourceGroupName = $bucketKey.Substring($separatorIndex + 1)
+                $resourceCount = [int]$inventoryBuckets[$bucketKey]
+                if (-not $subscriptionResourceCounts.ContainsKey($subscriptionKey)) { $subscriptionResourceCounts[$subscriptionKey] = 0 }
+                $subscriptionResourceCounts[$subscriptionKey] = [int]$subscriptionResourceCounts[$subscriptionKey] + $resourceCount
+
+                if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
+                    $canonicalScopeKey = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionKey, $resourceGroupName).ToLowerInvariant()
+                    $resourceGroupResourceCounts[$canonicalScopeKey] = $resourceCount
+                }
             }
 
-            if (-not [string]::IsNullOrWhiteSpace($managementGroupId)) {
-                $managementGroupScopeMap[$managementGroupId.ToLowerInvariant()] = $managementGroupName
+            if ($subscriptionResourceCounts.Count -gt 0) {
+                $rootResourceCount = [int](($subscriptionResourceCounts.Values | Measure-Object -Sum).Sum)
             }
+        } catch {
+            $inventoryStatus = "Unavailable"
+            $resourceGroupResourceCounts = @{}
+            $subscriptionResourceCounts = @{}
+            $rootResourceCount = $null
+            $inventoryResult.FailureReason = $_.Exception.Message
         }
-        Write-Log -Level Debug -Message "Got $($managementGroupScopeMap.Count) management groups for Azure scope resolution"
-    } catch {
-        Write-Log -Level Debug -Message "Management group scope resolution via Resource Graph unavailable. Using scope IDs. Error: $($_.Exception.Message)"
     }
 
-    $subscriptionResourceCounts = @{}
-    try {
-        $body = @{
-            query   = "Resources | summarize Count=count() by subscriptionId"
-            options = @{ resultFormat = "objectArray" }
+    if ($inventoryStatus -eq "Complete" -and $hierarchyStatus -eq "Complete") {
+        foreach ($managementGroupKey in $managementGroupScopeMap.Keys) {
+            $managementGroupResourceCounts[$managementGroupKey] = 0
         }
-        $resourceCountResponse = Send-ApiRequest -Method POST -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Body $body -Silent -ErrorAction Stop
-        $resourceCountRows = @()
-        if ($resourceCountResponse -is [System.Collections.IEnumerable] -and -not ($resourceCountResponse -is [string])) {
-            foreach ($entry in $resourceCountResponse) {
-                if ($entry -and $entry.PSObject.Properties.Name -contains 'data' -and $entry.data) { $resourceCountRows += @($entry.data) }
-                else { $resourceCountRows += @($entry) }
-            }
-        } elseif ($resourceCountResponse -and $resourceCountResponse.PSObject.Properties.Name -contains 'data' -and $resourceCountResponse.data) {
-            $resourceCountRows = @($resourceCountResponse.data)
-        } elseif ($resourceCountResponse) {
-            $resourceCountRows = @($resourceCountResponse)
-        }
-        foreach ($row in $resourceCountRows) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$row.subscriptionId)) {
-                $subscriptionResourceCounts[[string]$row.subscriptionId.ToLowerInvariant()] = [int]$row.Count
+        foreach ($subscriptionKey in $subscriptionResourceCounts.Keys) {
+            if (-not $subscriptionManagementGroupMap.ContainsKey($subscriptionKey)) { continue }
+            foreach ($managementGroupKey in $subscriptionManagementGroupMap[$subscriptionKey]) {
+                $managementGroupResourceCounts[$managementGroupKey] = [int]$managementGroupResourceCounts[$managementGroupKey] + [int]$subscriptionResourceCounts[$subscriptionKey]
             }
         }
-        Write-Log -Level Debug -Message "Got resource counts for $($subscriptionResourceCounts.Count) subscriptions"
-    } catch {
-        Write-Log -Level Debug -Message "Resource count query unavailable: $($_.Exception.Message)"
     }
 
+    if ($inventoryStatus -eq "Complete") {
+        Write-Log -Level Debug -Message "Got resource counts for $($resourceGroupResourceCounts.Count) resource groups and $($subscriptionResourceCounts.Count) subscriptions in $($inventoryResult.PagesRetrieved) Resource Graph page(s)"
+    } else {
+        Write-Log -Level Debug -Message "Resource inventory unavailable ($inventoryStatus): $($inventoryResult.FailureReason)"
+    }
+
+    $global:GLOBALAzureResourceInventoryStatus = $inventoryStatus
+    $global:GLOBALAzureResourceGroupResourceCountMap = $resourceGroupResourceCounts
+    $global:GLOBALAzureSubscriptionResourceCountMap = $subscriptionResourceCounts
+    $global:GLOBALAzureManagementGroupResourceCountMap = $managementGroupResourceCounts
+    $global:GLOBALAzureRootResourceCount = $rootResourceCount
+
+    $serializableSubscriptionManagementGroups = @{}
+    foreach ($subscriptionKey in $subscriptionManagementGroupMap.Keys) {
+        $serializableSubscriptionManagementGroups[$subscriptionKey] = @($subscriptionManagementGroupMap[$subscriptionKey])
+    }
+
+    $GlobalAuditSummary.AzureRoleAssignments.ContextualScoring = @{
+        Enabled                 = $true
+        PolicyVersion           = [string]$GLOBALAzureRoleImpactPolicy.Version
+        BaseImpacts             = @{
+            Tier0         = [int]$GLOBALImpactScore["AzureRoleTier0"]
+            Tier1         = [int]$GLOBALImpactScore["AzureRoleTier1"]
+            Tier2         = [int]$GLOBALImpactScore["AzureRoleTier2"]
+            Tier3         = [int]$GLOBALImpactScore["AzureRoleTier3"]
+            Uncategorized = [int]$GLOBALImpactScore["AzureRoleTier?"]
+        }
+        EnvironmentFactors      = @{
+            Production    = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Production
+            Nonproduction = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Nonproduction
+            Mixed         = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Mixed
+            Unknown       = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Unknown
+            NotApplicable = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.NotApplicable
+        }
+        MaximumAssignmentFactor = [double]$GLOBALAzureRoleImpactPolicy.MaximumAssignmentFactor
+        InventoryStatus         = $inventoryStatus
+        HierarchyStatus         = $hierarchyStatus
+        InventoryPagesRetrieved = [int]$inventoryResult.PagesRetrieved
+        HierarchyPagesRetrieved = [int]$hierarchyResult.PagesRetrieved
+        Context = @{
+            SubscriptionNames            = $subscriptionScopeMap
+            ManagementGroupNames         = $managementGroupScopeMap
+            SubscriptionManagementGroups = $serializableSubscriptionManagementGroups
+            ManagementGroupParents       = $managementGroupParentMap
+            SubscriptionParents          = $subscriptionParentMap
+            ResourceGroupResourceCounts  = $resourceGroupResourceCounts
+            SubscriptionResourceCounts   = $subscriptionResourceCounts
+            ManagementGroupResourceCounts = $managementGroupResourceCounts
+            RootResourceCount             = $rootResourceCount
+        }
+    }
     $GlobalAuditSummary.Subscriptions.Details = @($subscriptions | ForEach-Object {
         $resourceCount = $subscriptionResourceCounts[$_.Id.ToLowerInvariant()]
         [PSCustomObject]@{
@@ -9024,9 +9650,11 @@ function Get-AllAzureIAMAssignmentsNative {
             [PSCustomObject]@{
                 ObjectId           = $_.properties.principalId
                 RoleAssignmentId   = $roleAssignmentId
+                RoleDefinitionId   = $RoleDetails.RoleId
                 RoleDefinitionName = $RoleDetails.RoleName
                 RoleType           = $RoleDetails.RoleType
                 RoleTier           = $RoleTier
+                RawScope           = $rawScope
                 Scope              = $resolvedScope
                 Conditions         = $hasCondition 
                 PrincipalType      = $_.properties.principalType
@@ -9071,9 +9699,11 @@ function Get-AllAzureIAMAssignmentsNative {
                 }
                 [PSCustomObject]@{
                     ObjectId          = $_.properties.principalId
+                    RoleDefinitionId   = $RoleDetails.RoleId
                     RoleDefinitionName = $RoleDetails.RoleName
                     RoleType           = $RoleDetails.RoleType
                     RoleTier           = $RoleTier
+                    RawScope           = [string]$_.properties.scope
                     Scope              = $resolvedScope
                     Conditions         = $hasCondition 
                     PrincipalType      = $_.properties.principalType
@@ -9104,12 +9734,23 @@ function Get-AllAzureIAMAssignmentsNative {
                     $IamAssignmentsHT[$assignment.ObjectId] = @()
                 }
 
+                $impactContext = Get-AzureRoleAssignmentImpact -RoleTier $assignment.RoleTier -RoleName $assignment.RoleDefinitionName -RawScope $assignment.RawScope
+
                 # Add the assignment to the hashtable
                 $IamAssignmentsHT[$assignment.ObjectId] += [PSCustomObject]@{
                     RoleDefinitionName = $assignment.RoleDefinitionName
+                    RoleDefinitionId = $assignment.RoleDefinitionId
+                    RawScope = $assignment.RawScope
                     Scope = $assignment.Scope
                     RoleType = $assignment.RoleType
                     RoleTier = $assignment.RoleTier
+                    ScopeType = $impactContext.ScopeType
+                    Environment = $impactContext.Environment
+                    ObservedResources = $impactContext.ObservedResources
+                    InventoryStatus = $impactContext.InventoryStatus
+                    AssignmentImpact = $impactContext.AssignmentImpact
+                    ImpactExplanation = $impactContext.ImpactExplanation
+                    ScoringPolicyVersion = $impactContext.ScoringPolicyVersion
                     Conditions = $assignment.Conditions
                     PrincipalType = $assignment.PrincipalType
                     AssignmentType = $assignment.AssignmentType
@@ -9142,10 +9783,16 @@ function Get-AzureRoleDetails {
         foreach ($role in $matchingAzureRoles) {
             $roleInfo = [PSCustomObject]@{
                 RoleName = $role.RoleDefinitionName
+                RoleDefinitionId = if ($role.PSObject.Properties["RoleDefinitionId"]) { $role.RoleDefinitionId } else { $null }
                 RoleType = $role.RoleType
+                RawScope = if ($role.PSObject.Properties["RawScope"]) { $role.RawScope } else { $null }
                 Scope    = $role.Scope
                 Conditions = $role.Conditions
                 RoleTier = $role.RoleTier
+                ScopeType = if ($role.PSObject.Properties["ScopeType"]) { $role.ScopeType } else { "Unknown" }
+                Environment = if ($role.PSObject.Properties["Environment"]) { $role.Environment } else { "Unknown" }
+                ObservedResources = if ($role.PSObject.Properties["ObservedResources"]) { $role.ObservedResources } else { $null }
+                AssignmentImpact = $role.AssignmentImpact
                 AssignmentType  = $role.AssignmentType
                 ActivatedViaPIM = $role.ActivatedViaPIM
                 StartDateTime = $role.StartDateTime
@@ -11533,10 +12180,18 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALSpSignInActivityUnavailableReason -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzurePsChecks -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureSubscriptionScopeMap -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureManagementGroupScopeMap -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureManagementGroupHierarchyStatus -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureResourceInventoryStatus -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureResourceGroupResourceCountMap -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureSubscriptionResourceCountMap -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureManagementGroupResourceCountMap -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureRootResourceCount -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureIamWarningText -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuthParameters -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALEntraRoleRating -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleRating -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureRoleImpactPolicy -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALImpactScore -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMsGraphAccessToken -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMForEntraRolesChecked -ErrorAction SilentlyContinue
@@ -11862,4 +12517,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

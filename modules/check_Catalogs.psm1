@@ -1488,7 +1488,7 @@ function Invoke-CheckCatalogs {
     $headerTxt | Out-File -Width 512 -FilePath $txtPath
     $mainTableExport | Format-Table | Out-File -Width 512 -FilePath $txtPath -Append
     $detailTxtBuilder.ToString() | Out-File -Width 512 -FilePath $txtPath -Append
-    if ($Csv) { $mainTableExport | Export-Csv -Path (Join-Path $OutputFolder "$($title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv") -NoTypeInformation }
+    if ($Csv) { $mainTableExport | Export-Csv -Path (Join-Path $OutputFolder "$($title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv") -NoTypeInformation -Encoding UTF8 }
     if ($ExportDataJson) { Export-EntraFalconDataJson -OutputFolder $OutputFolder -DatasetName 'Catalogs' -Data $tableOutput | Out-Null }
     Set-GlobalReportManifest -CurrentReportKey 'Catalogs' -CurrentReportName $reportDisplayName -Warnings $warnings
     $report = ConvertTo-HTML -Body "$headerHtml $mainTableHTML" -Head ("<title>EF - Catalogs (BETA)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript -PreContent $detailsHtml

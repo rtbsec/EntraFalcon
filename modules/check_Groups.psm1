@@ -1878,6 +1878,10 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     "Assignment"  = $role.AssignmentType
                     "RoleType"    = $role.RoleType
                     "Tier Level"  = $role.RoleTier
+                    "Impact"      = $role.AssignmentImpact
+                    "Scope type"  = $role.ScopeType
+                    "Environment" = $role.Environment
+                    "Resources" = $role.ObservedResources
                     "Conditions"  = $role.Conditions
                     "Scoped to"   = $role.Scope
                 })
@@ -2887,7 +2891,7 @@ $headerHtml = @"
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | Select-Object -Property $GroupOutputProperties | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
+        $tableOutput | Select-Object -Property $GroupOutputProperties | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
 
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }

@@ -908,7 +908,7 @@ Execution Warnings = $($WarningList -join ' / ')
         $headerTXT | Out-File -Width 512 -FilePath $txtPath -Append
         $TableOutput | Format-Table -Property $TxtColumns | Out-File -Width 512 $txtPath -Append
         if ($Csv) {
-            $TableOutput | Select-Object $TxtColumns | Export-Csv -Path $csvPath -NoTypeInformation
+            $TableOutput | Select-Object $TxtColumns | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         }
         $DetailOutputTxt | Out-File $txtPath -Append
         if (-not [string]::IsNullOrWhiteSpace($AppendixTxt)) {
@@ -924,7 +924,7 @@ Execution Warnings = $($WarningList -join ' / ')
                 if ($exportRows.Count -eq 0) {
                     continue
                 }
-                $exportRows | Export-Csv -Path $csvExport['Path'] -NoTypeInformation
+                $exportRows | Export-Csv -Path $csvExport['Path'] -NoTypeInformation -Encoding UTF8
             }
         }
 
@@ -1390,6 +1390,10 @@ Execution Warnings = $($WarningList -join ' / ')
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
                     "Tier Level" = $object.RoleTier
+                    "Impact" = $object.AssignmentImpact
+                    "Scope type" = $object.ScopeType
+                    "Environment" = $object.Environment
+                    "Resources" = $object.ObservedResources
                     "Conditions" = $object.Conditions
                     "Scoped to" = $object.Scope
                 }
@@ -1401,6 +1405,10 @@ Execution Warnings = $($WarningList -join ' / ')
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
                     "Tier Level" = $object.RoleTier
+                    "Impact" = $object.AssignmentImpact
+                    "Scope type" = $object.ScopeType
+                    "Environment" = $object.Environment
+                    "Resources" = $object.ObservedResources
                     "Conditions" = $object.Conditions
                     "Scoped to" = $object.Scope
                 }
@@ -1698,6 +1706,10 @@ Appendix: Used API Permission Reference
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
                     "Tier Level" = $object.RoleTier
+                    "Impact" = $object.AssignmentImpact
+                    "Scope type" = $object.ScopeType
+                    "Environment" = $object.Environment
+                    "Resources" = $object.ObservedResources
                     "Conditions" = $object.Conditions
                     "Scoped to" = $object.Scope
                 }

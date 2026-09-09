@@ -3,6 +3,105 @@
    Generate a summary about the enumerated objects in the tenant.
 
 #>
+function Get-SummarySubscriptionHierarchy {
+    param([object[]]$Subscriptions, $Scoring)
+
+    $nodes = @{}
+    $context = $Scoring.Context
+    $hasHierarchy = $Scoring.HierarchyStatus -eq 'Complete' -and $null -ne $context.ManagementGroupParents
+    $maps = @{}
+    foreach ($name in @('ManagementGroupNames', 'ManagementGroupParents', 'SubscriptionParents')) {
+        $map = $context.$name
+        $maps[$name] = @{}
+        if ($map -is [System.Collections.IDictionary]) {
+            foreach ($key in $map.Keys) { $maps[$name][[string]$key] = $map[$key] }
+        } elseif ($null -ne $map) {
+            foreach ($property in $map.PSObject.Properties) { $maps[$name][$property.Name] = $property.Value }
+        }
+    }
+    if ($hasHierarchy) {
+        foreach ($id in $maps.ManagementGroupNames.Keys) {
+            $nodes["mg:$id"] = [pscustomobject]@{
+                Id = $id; DisplayName = $maps.ManagementGroupNames[$id]; Type = 'Management group'
+                ParentKey = ''; Depth = 0; SubscriptionCount = 0; Resources = [long]0
+                State = '-'; ManagedByTenants = '-'
+            }
+        }
+    }
+    foreach ($sub in $Subscriptions) {
+        $nodes["sub:$($sub.Id)"] = [pscustomobject]@{
+            Id = $sub.Id; DisplayName = $sub.DisplayName; Type = 'Subscription'
+            ParentKey = ''; Depth = 0; SubscriptionCount = 1; Resources = $sub.Resources
+            State = $sub.State; ManagedByTenants = $sub.ManagedByTenants
+        }
+    }
+
+    foreach ($key in @($nodes.Keys)) {
+        $node = $nodes[$key]
+        $parents = if ($key.StartsWith('mg:')) { $maps.ManagementGroupParents } else { $maps.SubscriptionParents }
+        $parentId = if ($hasHierarchy -and $parents) { [string]$parents[$node.Id] } else { '' }
+        if ($parentId -and $nodes.ContainsKey("mg:$parentId")) {
+            $node.ParentKey = "mg:$parentId"
+        } elseif ($hasHierarchy -and ($node.Type -eq 'Subscription' -or $parentId -or -not $parents.ContainsKey($node.Id))) {
+            $node.Type += ' (parent unavailable)'
+        }
+    }
+
+    # Break malformed cycles before traversing or rolling up resource counts.
+    $processedManagementGroups = @{}
+    foreach ($key in @($nodes.Keys | Where-Object { $_.StartsWith('mg:') } | Sort-Object)) {
+        if ($processedManagementGroups.ContainsKey($key)) { continue }
+
+        $path = New-Object System.Collections.Generic.List[string]
+        $pathIndexes = @{}
+        $current = $key
+        while ($current -and $nodes.ContainsKey($current) -and $current.StartsWith('mg:')) {
+            if ($pathIndexes.ContainsKey($current)) {
+                $cycleStartIndex = [int]$pathIndexes[$current]
+                $cycleKeys = @($path.ToArray() | Select-Object -Skip $cycleStartIndex)
+                $detachedKey = @($cycleKeys | Sort-Object)[-1]
+                $nodes[$detachedKey].ParentKey = ''
+                if ($nodes[$detachedKey].Type -notlike '* (parent unavailable)') {
+                    $nodes[$detachedKey].Type += ' (parent unavailable)'
+                }
+                break
+            }
+            if ($processedManagementGroups.ContainsKey($current)) { break }
+
+            $pathIndexes[$current] = $path.Count
+            [void]$path.Add($current)
+            $current = $nodes[$current].ParentKey
+        }
+        foreach ($pathKey in $path) { $processedManagementGroups[$pathKey] = $true }
+    }
+    foreach ($key in @($nodes.Keys | Where-Object { $_.StartsWith('sub:') })) {
+        $sub = $nodes[$key]
+        $parentKey = $sub.ParentKey
+        while ($parentKey) {
+            $parent = $nodes[$parentKey]
+            $parent.SubscriptionCount++
+            if ([string]$sub.Resources -match '^\d+$' -and $null -ne $parent.Resources) {
+                $parent.Resources += [long]$sub.Resources
+            } else {
+                $parent.Resources = $null
+            }
+            $parentKey = $parent.ParentKey
+        }
+    }
+
+    function Get-HierarchyChildren {
+        param([string]$ParentKey, [int]$Depth)
+        foreach ($child in @($nodes.Values | Where-Object { $_.ParentKey -eq $ParentKey } | Sort-Object @{ Expression = { if ($_.Type -like 'Management group*') { 0 } else { 1 } } }, DisplayName, Id)) {
+            $child.Depth = $Depth
+            $child
+            if ($child.Type -like 'Management group*') {
+                Get-HierarchyChildren -ParentKey "mg:$($child.Id)" -Depth ($Depth + 1)
+            }
+        }
+    }
+    Get-HierarchyChildren -ParentKey '' -Depth 0
+}
+
 function Export-Summary {
     ############################## Parameter section ########################
     [CmdletBinding()]
@@ -529,21 +628,29 @@ return @"
     function New-SubscriptionsSection {
         param([object[]]$Subscriptions)
 
-        if (-not $Subscriptions -or $Subscriptions.Count -eq 0) { return "" }
+        $hierarchyRows = @(Get-SummarySubscriptionHierarchy -Subscriptions $Subscriptions -Scoring $GlobalAuditSummary.AzureRoleAssignments.ContextualScoring)
+        if ($hierarchyRows.Count -eq 0) { return "" }
 
-        $rowsHtml = foreach ($sub in ($Subscriptions | Sort-Object @{ Expression = { if ($_.State -eq 'Enabled') { 0 } else { 1 } } }, @{ Expression = { if ($_.Resources -match '^\d+$') { [int]$_.Resources } else { -1 } }; Descending = $true })) {
+        $rowsHtml = foreach ($sub in $hierarchyRows) {
             $stateHtml = if ($sub.State -eq 'Enabled') {
                 New-GeneralStatusBadge -Text $sub.State -Tone "success"
+            } elseif ($sub.Type -like 'Management group*') {
+                '-'
             } else {
                 New-GeneralStatusBadge -Text (ConvertTo-SummaryHtmlText $sub.State) -Tone "warning"
             }
+            $nameHtml = ConvertTo-SummaryHtmlText $sub.DisplayName
+            if ($sub.Type -like 'Management group*') { $nameHtml = "<strong>$nameHtml</strong>" }
+            $resourcesHtml = if ([string]$sub.Resources -match '^\d+$') { ConvertTo-SummaryHtmlText $sub.Resources } else { 'Unknown' }
 @"
 <tr>
-    <td>$(ConvertTo-SummaryHtmlText $sub.DisplayName)</td>
+    <td style='padding-left:$(12 + 24 * $sub.Depth)px'>$nameHtml</td>
+    <td>$(ConvertTo-SummaryHtmlText $sub.Type)</td>
     <td class='summary-domain-name'>$(ConvertTo-SummaryHtmlText $sub.Id)</td>
     <td>$stateHtml</td>
     <td>$(ConvertTo-SummaryHtmlText $sub.ManagedByTenants)</td>
-    <td>$(ConvertTo-SummaryHtmlText $sub.Resources)</td>
+    <td>$($sub.SubscriptionCount)</td>
+    <td>$resourcesHtml</td>
 </tr>
 "@
         }
@@ -551,17 +658,19 @@ return @"
 return @"
 <section class='summary-panel summary-domains-panel'>
     <div class='summary-chart-panel-header'>
-        <h2>Subscriptions</h2>
-        <div class='summary-chart-panel-meta'>$($Subscriptions.Count) subscriptions</div>
+        <h2>Management Groups and Subscriptions</h2>
+        <div class='summary-chart-panel-meta'>$(@($hierarchyRows | Where-Object { $_.Type -like 'Management group*' }).Count) management groups / $(@($Subscriptions).Count) subscriptions</div>
     </div>
     <div class='summary-domain-table-wrap'>
         <table class='summary-domain-table'>
             <thead>
                 <tr>
                     <th>Name</th>
+                    <th>Type</th>
                     <th>ID</th>
                     <th>State</th>
                     <th>External Managing Tenants</th>
+                    <th>Subscriptions (subtree)</th>
                     <th>Resources</th>
                 </tr>
             </thead>

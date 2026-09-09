@@ -22,7 +22,8 @@ function Invoke-CheckRoles {
         [Parameter(Mandatory=$false)][hashtable]$AgentIdentities = @{},
         [Parameter(Mandatory=$false)][hashtable]$AgentIdentityBlueprintsPrincipals = @{},
         [Parameter(Mandatory=$false)][switch]$Csv = $false,
-        [Parameter(Mandatory=$false)][switch]$ExportDataJson = $false
+        [Parameter(Mandatory=$false)][switch]$ExportDataJson = $false,
+        [Parameter(Mandatory=$false)][switch]$DebugObjectDump = $false
     )
 
     ############################## Function section ########################
@@ -471,16 +472,31 @@ function Invoke-CheckRoles {
                     3 { $RoleTier = "Tier-3"; break }
                     default { $RoleTier = "Uncategorized" }
                 }
+                $CanonicalRawScope = if ($Assignment.PSObject.Properties["RawScope"]) { [string]$Assignment.RawScope } else { $null }
+                $ImpactContext = if ($Assignment.PSObject.Properties["AssignmentImpact"]) {
+                    $Assignment
+                } else {
+                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id
+                }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
                     PrincipalDisplayName      = $PrincipalDisplayName
                     PrincipalDisplayNameLink  = $PrincipalDisplayNameLink
                     PrincipalType             = if ($PrincipalDetails -and $PrincipalDetails.Type -ne "Unknown Object") { $PrincipalDetails.Type } else { $Assignment.PrincipalType }
                     RoleType                  = $Assignment.RoleType
+                    RoleDefinitionId          = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { $Assignment.RoleDefinitionId } else { $null }
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
+                    RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
+                    ScopeType                 = if ($ImpactContext.PSObject.Properties["ScopeType"]) { $ImpactContext.ScopeType } else { "Unknown" }
+                    Environment               = if ($ImpactContext.PSObject.Properties["Environment"]) { $ImpactContext.Environment } else { "Unknown" }
+                    ObservedResources = if ($ImpactContext.PSObject.Properties["ObservedResources"]) { $ImpactContext.ObservedResources } else { $null }
+                    InventoryStatus           = if ($ImpactContext.PSObject.Properties["InventoryStatus"]) { $ImpactContext.InventoryStatus } else { $null }
+                    AssignmentImpact          = $ImpactContext.AssignmentImpact
+                    ImpactExplanation         = $ImpactContext.ImpactExplanation
+                    ScoringPolicyVersion      = $ImpactContext.ScoringPolicyVersion
                     AssignmentType            = $Assignment.AssignmentType
                     ActivatedViaPIM           = $Assignment.ActivatedViaPIM
                     Start                     = Format-RoleAssignmentDateTime -Value $Assignment.StartDateTime
@@ -498,16 +514,31 @@ function Invoke-CheckRoles {
                     3 { $RoleTier = "Tier-3"; break }
                     default { $RoleTier = "Uncategorized" }
                 }
+                $CanonicalRawScope = if ($Assignment.PSObject.Properties["RawScope"]) { [string]$Assignment.RawScope } else { $null }
+                $ImpactContext = if ($Assignment.PSObject.Properties["AssignmentImpact"]) {
+                    $Assignment
+                } else {
+                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id
+                }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
                     PrincipalDisplayName      = $PrincipalDetails.DisplayName
                     PrincipalDisplayNameLink  = $PrincipalDetails.DisplayNameLink
                     PrincipalType             = $PrincipalDetails.Type
                     RoleType                  = $Assignment.RoleType
+                    RoleDefinitionId          = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { $Assignment.RoleDefinitionId } else { $null }
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
+                    RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
+                    ScopeType                 = if ($ImpactContext.PSObject.Properties["ScopeType"]) { $ImpactContext.ScopeType } else { "Unknown" }
+                    Environment               = if ($ImpactContext.PSObject.Properties["Environment"]) { $ImpactContext.Environment } else { "Unknown" }
+                    ObservedResources = if ($ImpactContext.PSObject.Properties["ObservedResources"]) { $ImpactContext.ObservedResources } else { $null }
+                    InventoryStatus           = if ($ImpactContext.PSObject.Properties["InventoryStatus"]) { $ImpactContext.InventoryStatus } else { $null }
+                    AssignmentImpact          = $ImpactContext.AssignmentImpact
+                    ImpactExplanation         = $ImpactContext.ImpactExplanation
+                    ScoringPolicyVersion      = $ImpactContext.ScoringPolicyVersion
                     AssignmentType            = $Assignment.AssignmentType
                     ActivatedViaPIM           = $Assignment.ActivatedViaPIM
                     Start                     = Format-RoleAssignmentDateTime -Value $Assignment.StartDateTime
@@ -559,14 +590,19 @@ function Invoke-CheckRoles {
     $mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
 
 
-    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    if ($DebugObjectDump) {
+        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},ImpactExplanation,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    } else {
+        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    }
     $mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainAzureTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainAzureTableJson + "`n" + '</script>'
 
     if ($ExportDataJson) {
         Export-EntraFalconDataJson -OutputFolder $outputFolder -DatasetName "EntraRoleAssignments" -Data $SortedEntraRoles | Out-Null
-        Export-EntraFalconDataJson -OutputFolder $outputFolder -DatasetName "AzureRoleAssignments" -Data $SortedAzureRoles | Out-Null
+        $azureRoleReportData = $SortedAzureRoles | Select-Object -Property * -ExcludeProperty InventoryStatus,ImpactExplanation,ScoringPolicyVersion
+        Export-EntraFalconDataJson -OutputFolder $outputFolder -DatasetName "AzureRoleAssignments" -Data $azureRoleReportData | Out-Null
     }
 
 
@@ -607,7 +643,7 @@ $headerHtml = @"
     $headerTXTEntraRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     $SortedEntraRoles | format-table Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Out-File -Width 512 "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
-        $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
+        $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
     write-host "[+] Details of $($SortedEntraRoles.count) Entra ID role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
@@ -680,9 +716,9 @@ $headerHtml = @"
         $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Head ("<title>EF - Role Assignments (Azure)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
-        $SortedAzureRoles | format-table Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $SortedAzureRoles | Format-Table Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         if ($Csv) {
-            $SortedAzureRoles | select-object Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
+            $SortedAzureRoles | Select-Object Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
         }
         write-host "[+] Details of $(@($SortedAzureRoles).count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
         

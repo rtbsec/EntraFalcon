@@ -5850,7 +5850,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "ENT-007" -Props @{
-            Description = "<p>$($entAppsForeignAzureRoles.Count) enabled foreign enterprise applications have Azure roles assigned.</p><p>Applications by role tier:</p><ul><li>Tier 0: $azTier0</li><li>Tier 1: $azTier1</li><li>Tier 2: $azTier2</li><li>Uncategorized tier: $azTierUncat</li></ul><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+            Description = "<p>$($entAppsForeignAzureRoles.Count) enabled foreign enterprise applications have Azure roles assigned.</p><p>Applications by role tier:</p><ul><li>Tier 0: $azTier0</li><li>Tier 1: $azTier1</li><li>Tier 2: $azTier2</li><li>Uncategorized tier: $azTierUncat</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $entAzureRoleAffected
         }
         if ($azTier0 -gt 0) {
@@ -6331,7 +6331,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            Description = "<p>$($entAppsInternalAzureTier.Count) enabled internal enterprise applications which have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $entAzureTier0Apps</li><li>Tier 1: $entAzureTier1Apps</li></ul><p><strong>Important:</strong> This finding requires manual verification. The tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Additionally, Azure provides more than 850 built-in roles, and the actual impact highly depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+            Description = "<p>$($entAppsInternalAzureTier.Count) enabled internal enterprise applications which have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $entAzureTier0Apps</li><li>Tier 1: $entAzureTier1Apps</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $entAzureAffected
         }
     } else {
@@ -7344,7 +7344,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Important:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $agt005Affected
         }
         if ($agt005Tier0 -gt 0) {
@@ -7904,7 +7904,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "AGT-009" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt009Tier0</li><li>Tier 1: $agt009Tier1</li></ul><p><strong>Important:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt009Tier0</li><li>Tier 1: $agt009Tier1</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $agt009Affected
         }
         if ($agt009Tier0 -gt 0) {
@@ -8083,7 +8083,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $agt012Affected
         }
         if ($agt012Tier0 -gt 0) {
@@ -8213,7 +8213,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt014Tier0</li><li>Tier 1: $agt014Tier1</li></ul><p><strong>Note:</strong> The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission. The effective impact depends on the resources to which the role is scoped.</p>"
+            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt014Tier0</li><li>Tier 1: $agt014Tier1</li></ul><p><strong>Note:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $agt014Affected
         }
         if ($agt014Tier0 -gt 0) {
@@ -8679,7 +8679,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) managed identities which have privileged Azure roles assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $maiAzureTier0Count</li><li>Tier 1: $maiAzureTier1Count</li></ul><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Additionally, Azure provides more than 850 built-in roles, and the actual impact highly depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) managed identities which have privileged Azure roles assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $maiAzureTier0Count</li><li>Tier 1: $maiAzureTier1Count</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             AffectedObjects = $maiAzureAffected
         }
     } else {
@@ -10640,7 +10640,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-008" -Props @{
-            Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid (on-premises synchronized) users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+            Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid (on-premises synchronized) users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
@@ -10682,7 +10682,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Vulnerable
             Set-FindingOverride -FindingId "USR-009" -Props @{
-                Description = "<p>There are $usr009Count users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> This finding requires manual verification. The Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+                Description = "<p>There are $usr009Count users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
                 RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
                 AffectedSortKey = "Impact"
                 AffectedSortDir = "DESC"
@@ -10747,7 +10747,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-011" -Props @{
-            Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with Tier-0 Azure roles assigned (directly or through groups) who are not protected against modifications by lower-tier administrators or applications. They are considered unprotected because they are:</p><ul><li>Not direct members of a privileged role</li><li>Not members of a role-assignable group</li><li>Not members of a Restricted Management Administrative Unit</li></ul><p><strong>Important:</strong> This finding requires manual verification. Exploitability also depends on additional factors (for example, password hash synchronization or password write-back configuration). Furthermore, the Azure role tier classification is based solely on the assigned role and does not consider the scope of the permission (for example, whether it is assigned at the subscription level or to a specific resource). Azure provides more than 850 built-in roles, and the actual impact depends on the resources to which the role is scoped. For example, a Tier 0 role may only be assigned to a non-critical resource in a test subscription.</p>"
+            Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with Tier-0 Azure roles assigned (directly or through groups) who are not protected against modifications by lower-tier administrators or applications. They are considered unprotected because they are:</p><ul><li>Not direct members of a privileged role</li><li>Not members of a role-assignable group</li><li>Not members of a Restricted Management Administrative Unit</li></ul><p><strong>Important:</strong> This finding requires manual verification. Exploitability also depends on additional factors such as password hash synchronization or password write-back. Role tier describes the assigned role; Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available.</p>"
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
@@ -16340,5 +16340,3 @@ $FindingsJson
     return $Findings
     #endregion
 }
-
-

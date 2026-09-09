@@ -1409,20 +1409,6 @@ function Invoke-CheckAccessPackages {
         }
     }
 
-    # Scores direct Azure role resources by tier.
-    function Get-AccessPackageAzureRoleImpact {
-        param([string]$TierLabel)
-
-        switch ($TierLabel) {
-            "Tier-0" { return $GLOBALImpactScore["AzureRoleTier0"] }
-            "Tier-1" { return $GLOBALImpactScore["AzureRoleTier1"] }
-            "Tier-2" { return $GLOBALImpactScore["AzureRoleTier2"] }
-            "Tier-3" { return $GLOBALImpactScore["AzureRoleTier3"] }
-            "Uncategorized" { return $GLOBALImpactScore["AzureRoleTier?"] }
-            default { return 0 }
-        }
-    }
-
     # Scores SharePoint access by granted role level.
     function Get-AccessPackageSharePointImpact {
         param([string]$RoleName)
@@ -1545,6 +1531,7 @@ function Invoke-CheckAccessPackages {
         $entraRoles = 0
         $azureRoles = 0
         $apiPermissionCategory = "-"
+        $azureImpactContext = $null
         $resourceType = Get-AccessPackageResourceType -OriginSystem $originSystem -Role $role -Scope $scope -AppRoleReferenceCache $AppRoleReferenceCache
 
         if ($originSystem -eq "AadGroup" -and -not [string]::IsNullOrWhiteSpace($originId) -and $AllGroupsDetails.ContainsKey($originId)) {
@@ -1598,7 +1585,8 @@ function Invoke-CheckAccessPackages {
             $roleDefinitionId = Get-AccessPackageAzureRoleDefinitionId -OriginId ([string](Get-AccessPackageObjectValue -Object $role -Names @("originId")))
             $roleTierValue = if (-not [string]::IsNullOrWhiteSpace($roleDefinitionId) -and $GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) { $GLOBALAzureRoleRating[$roleDefinitionId] } else { "?" }
             $azureTier = ConvertTo-AccessPackageTierLabel -Tier $roleTierValue
-            $impact = Get-AccessPackageAzureRoleImpact -TierLabel $azureTier
+            $azureImpactContext = Get-AzureRoleAssignmentImpact -RoleTier $roleTierValue -RoleName $roleName -RawScope $originId -TenantId $CurrentTenant.Id
+            $impact = $azureImpactContext.AssignmentImpact
             $azureRoles = 1
         } elseif ($originSystem -eq "SharePointOnline") {
             $impact = Get-AccessPackageSharePointImpact -RoleName $roleName
@@ -1648,6 +1636,9 @@ function Invoke-CheckAccessPackages {
             EntraMaxTier = $entraTier
             AzureRoles   = $azureRoles
             AzureMaxTier = $azureTier
+            ScopeType    = if ($azureImpactContext) { $azureImpactContext.ScopeType } else { "-" }
+            Environment  = if ($azureImpactContext) { $azureImpactContext.Environment } else { "-" }
+            ObservedResources = if ($azureImpactContext) { $azureImpactContext.ObservedResources } else { $null }
         }
     }
 
@@ -1933,6 +1924,9 @@ function Invoke-CheckAccessPackages {
                 $resourceAzureRoles = Get-AccessPackageIntValue -Value $resource.AzureRoles
                 $resourceRowProperties["AzureRoles"] = if ($resourceAzureRoles -gt 0) { $resourceAzureRoles } else { "-" }
                 $resourceRowProperties["AzureMaxTier"] = if ($resourceAzureRoles -gt 0) { $resource.AzureMaxTier } else { "-" }
+                $resourceRowProperties["ScopeType"] = if ($resourceAzureRoles -gt 0) { $resource.ScopeType } else { "-" }
+                $resourceRowProperties["Environment"] = if ($resourceAzureRoles -gt 0) { $resource.Environment } else { "-" }
+                $resourceRowProperties["Resources"] = if ($resourceAzureRoles -gt 0 -and $null -ne $resource.ObservedResources) { $resource.ObservedResources } else { "-" }
             }
             $resourceRowProperties["Impact"] = $resource.Impact
             [pscustomobject]$resourceRowProperties
@@ -2381,7 +2375,7 @@ Execution Warnings = $($Warnings -join ' / ')
         if ($mainTableExport.Count -eq 0) {
             ($csvColumns -join ",") | Out-File -FilePath $csvPath
         } else {
-            $mainTableExport | Select-Object $csvColumns | Export-Csv -Path $csvPath -NoTypeInformation
+            $mainTableExport | Select-Object $csvColumns | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         }
     }
 

@@ -2071,7 +2071,7 @@ function Invoke-CheckCaps {
             $csvFilePath = Join-Path $CapUncoveredUsersOutputFolder "$safePolicyName`_$shortPolicyId.csv"
             Write-Log -Level Debug -Message "CAP uncovered-users export summary for '$($policy.DisplayName)' [$($policy.Id)]: includedTargeted=$($includedTargetUserIds.Count) excludedTargeted=$($excludedTargetUserIds.Count) netTargeted=$($netTargetUserIds.Count) potentialViaPim=$($includedPotentialPimUserIds.Count) uncovered=$($capUncoveredUsersRows.Count) reasons=(Excluded=$excludedReasonCount, PotentialViaPIM=$potentialViaPimReasonCount, NotTargeted=$notTargetedReasonCount)"
             if ($capUncoveredUsersRows.Count -gt 0) {
-                $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -Path $csvFilePath -NoTypeInformation
+                $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -Path $csvFilePath -NoTypeInformation -Encoding UTF8
                 $capUncoveredExportFilesWritten++
                 $capUncoveredExportRows += $capUncoveredUsersRows.Count
             } else {
@@ -3168,7 +3168,7 @@ $headerHtml = @"
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
     if ($AllPoliciesCount -gt 0 -and $Csv) { 
-        $tableOutput | select-object DisplayName,TargetType,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation
+        $tableOutput | select-object DisplayName,TargetType,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
     $tableOutput | format-table -Property DisplayName,TargetType,UserCoverage,State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,IncUsersViaRoles,ExcRoles,ExcUsersViaRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Warnings.count -ge 1) {$Warnings | Out-File -Width 768 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append}

@@ -345,8 +345,6 @@ To apply OR logic across columns, use the `or_` or `group1_` prefix (e.g., `?or_
 Entra ID and Azure roles are roughly categorized into different tier levels. This categorization influences the impact scores of objects assigned to those roles.
 The goal is to assign a higher impact score to users with more powerful roles (e.g., Global Administrator) compared to users with less critical roles (e.g., Global Reader), even if both are considered privileged roles by Microsoft.
 
->Note:
-For Azure roles, this categorization is less precise, as the actual impact depends heavily on the scope of the role assignment. For example, an Owner role on a single virtual machine has significantly less impact than when the same role is applied to an entire subscription. It might also be a test subscription with no resources at all.
 <details>
 <summary>Entra ID Roles</summary>
 
@@ -398,6 +396,14 @@ For Azure roles, this categorization is less precise, as the actual impact depen
 
 <details>
 <summary>Azure Roles</summary>
+
+EntraFalcon starts with the role tier and adjusts its impact using three kinds of context:
+
+- **Scope:** Assignments covering the tenant root, management groups, or subscriptions have more impact than assignments on a resource group or individual resource. The tenant root receives reserved headroom above the role's base score.
+- **Environment:** Common naming patterns such as `prod`, `prd`, `dev`, `test`, and `uat` help distinguish environments. Likely production increases the score, likely nonproduction lowers it, and mixed or unknown names are treated neutrally.
+- **Resources:** Larger scopes receive more weight. An individual resource counts as one, while a confirmed empty resource group, subscription, or management group receives a lower score.
+
+This model helps prioritize Azure role assignments for review. If scope or inventory information is missing or incomplete, EntraFalcon keeps that part of the score neutral instead of assuming a lower impact. Environment classification is based on names and should be verified by an analyst.
 
 | Role Name                                                          | Tier-Level | GUID                                   |
 |--------------------------------------------------------------------|------------|----------------------------------------|
