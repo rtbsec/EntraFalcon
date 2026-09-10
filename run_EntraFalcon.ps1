@@ -608,7 +608,7 @@ write-host "`n********************************** [13/18] Generating Role Assignm
 Invoke-CheckRoles -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -EnterpriseApps $EnterpriseApps -AllGroupsDetails $AllGroupsDetails -AzureIAMAssignments $AzureIAMAssignments -TenantRoleAssignments $TenantRoleAssignments -AppRegistrations $AppRegistrations -AdminUnitWithMembers $AdminUnitWithMembers -Users $Users -ManagedIdentities $ManagedIdentities -AgentIdentities $AgentIdentities -AgentIdentityBlueprintsPrincipals $AgentIdentityBlueprintsPrincipals -OutputFolder $OutputFolder -DebugObjectDump:$DebugObjectDump @optionalParamsOutput
 
 write-host "`n********************************** [14/18] Enumerating Conditional Access Policies **********************************"
-$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments @optionalParamsOutput @optionalParamsCap
+$AllCaps = Invoke-CheckCaps -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -AllGroupsDetails $AllGroupsDetails -Users $Users -OutputFolder $OutputFolder -TenantRoleAssignments $TenantRoleAssignments -ApiTop $ApiTop @optionalParamsOutput @optionalParamsCap
 
 write-host "`n********************************** [15/18] Enumerating PIM Role Settings **********************************"
 if ($GLOBALPIMForEntraRolesChecked) {

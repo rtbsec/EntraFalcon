@@ -13,6 +13,7 @@ function Invoke-CheckCaps {
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments,
         [Parameter(Mandatory=$true)][hashtable]$Users,
+        [Parameter(Mandatory=$false)][int]$ApiTop = 999,
         [Parameter(Mandatory=$false)][switch]$Csv = $false,
         [Parameter(Mandatory=$false)][switch]$ExportDataJson = $false,
         [Parameter(Mandatory=$false)][switch]$ExportCapUncoveredUsers = $false
@@ -1284,9 +1285,15 @@ function Invoke-CheckCaps {
             }
         }
 
-        if ($EnterpriseAppsHT.ContainsKey($Guid)) { 
-            $ResolvedGUID = $($EnterpriseAppsHT[$Guid])
-            return $ResolvedGUID
+        if ($EnterpriseAppsHT.ContainsKey($Guid)) {
+            $ResolvedEnterpriseApp = $EnterpriseAppsHT[$Guid]
+            $ResolvedGUID = $ResolvedEnterpriseApp.DisplayName
+
+            if ($Report -eq "HTML") {
+                return "<a href=EnterpriseApps_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($ResolvedEnterpriseApp.Id)>$ResolvedGUID</a>"
+            } elseif ($Report -eq "TXT") {
+                return $ResolvedGUID
+            }
         }
         
         if ($NamedLocationsHT.ContainsKey($Guid)) { 
@@ -1350,8 +1357,12 @@ function Invoke-CheckCaps {
                     foreach ($item in $value) {
                         # Call function only if $item is a valid GUID
                         if (Test-IsGuid -Value $item) {
+                            $originalGuid = [string]$item
                             #Resolve the GUID
                             $item = Resolve-Name -Guid $item -Report $Report
+                            if ([string]$item -eq $originalGuid -and $name -match '(?i)(?:include|exclude)(?:AgentId)?ServicePrincipals$') {
+                                $item = "$originalGuid (orphaned reference)"
+                            }
                         }
                         Write-Output "${newIndent}- $item"
                     }
@@ -1368,8 +1379,12 @@ function Invoke-CheckCaps {
 
                     # Call function only if $item is a valid GUID
                     if (Test-IsGuid -Value $value) {
+                        $originalGuid = [string]$value
                         #Resolve the GUID
                         $value = Resolve-Name -Guid $value -Report $Report
+                        if ([string]$value -eq $originalGuid -and $name -match '(?i)(?:include|exclude)(?:AgentId)?ServicePrincipals$') {
+                            $value = "$originalGuid (orphaned reference)"
+                        }
                     }
                     $formattedValue = "'$value'"
                 }
@@ -1674,15 +1689,22 @@ function Invoke-CheckCaps {
 
 
     if ($AllPoliciesCount -gt 0) {
-        #Get all Enterprise Apps to resolve GUIDs (fetching it again ensures MS apps are included)
+        # Get all Enterprise Apps to resolve both application IDs and service principal object IDs.
+        # Fetching them again ensures Microsoft applications are included.
         $QueryParameters = @{
-            '$select' = "AppId,Displayname"
+            '$select' = "Id,AppId,DisplayName"
+            '$top' = $ApiTop
         }
         $EnterpriseApps = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/servicePrincipals" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
         $EnterpriseAppsHT = @{}
-        foreach ($app in $EnterpriseApps ) {
-            $EnterpriseAppsHT[$app.AppId] = $app.DisplayName
+        foreach ($app in $EnterpriseApps) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$app.Id)) {
+                $EnterpriseAppsHT[[string]$app.Id] = $app
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$app.AppId)) {
+                $EnterpriseAppsHT[[string]$app.AppId] = $app
+            }
         }
 
         Write-Log -Level Debug -Message "Prepared HT EnterpriseApps $($EnterpriseAppsHT.Count)"
