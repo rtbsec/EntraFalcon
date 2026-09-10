@@ -27,7 +27,7 @@ function Invoke-AgentIdentityBlueprints {
             $QueryParameters = @{
                 '$select' = "DisplayName,UserPrincipalName,UserType,OnPremisesSyncEnabled,AccountEnabled,jobTitle,Department"
             }
-            $user = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users/$Object" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+            $user = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users/$Object" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
             if ($user) {
                 If ($Null -eq $User.OnPremisesSyncEnabled) {
@@ -171,7 +171,7 @@ function Invoke-AgentIdentityBlueprints {
             '$top' = "1"
         }
 
-        $MatchingServicePrincipal = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+        $MatchingServicePrincipal = @(Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name))
         if (($MatchingServicePrincipal | Measure-Object).Count -ge 1) {
             $ApiDisplayName = if ([string]::IsNullOrWhiteSpace($MatchingServicePrincipal[0].displayName)) { "-" } else { $MatchingServicePrincipal[0].displayName }
             $ResourceApiDisplayNameCache[$ResourceAppId] = $ApiDisplayName
@@ -215,6 +215,9 @@ function Invoke-AgentIdentityBlueprints {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+    $RelationshipBatchSize = 10000
+
     #Define basic variables
     $ProgressCounter = 0
     $AllAgentIdentityBlueprints = [System.Collections.ArrayList]::new()
@@ -235,7 +238,7 @@ function Invoke-AgentIdentityBlueprints {
     $QueryParameters = @{
         '$select' = "Id,AppID,DisplayName,SignInAudience,isDisabled,RequiredResourceAccess,web,createdDateTime,KeyCredentials,PasswordCredentials,AppRoles,api"
     }
-    $BlueprintDefinitions = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications/microsoft.graph.agentIdentityBlueprint' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    $BlueprintDefinitions = @(Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/applications/microsoft.graph.agentIdentityBlueprint' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
     $BlueprintCount = $($BlueprintDefinitions.count)
     write-host "[+] Got $BlueprintCount Agent Identity Blueprints"
 
@@ -245,72 +248,29 @@ function Invoke-AgentIdentityBlueprints {
         Return $AllAgentIdentityBlueprintsHT
     }
     Write-Host "[*] Get all owners"
-    $Requests = @()
-    $BlueprintDefinitions | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/applications/$($_.id)/owners"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppOwnersRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppOwnersRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppOwnersResult = Get-EntraFalconObjectRelationshipChunked -Objects $BlueprintDefinitions -UrlTemplate "/applications/{0}/owners" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppOwnersRaw = $AppOwnersResult.Values
+    $AppOwnersCoverage = $AppOwnersResult.Coverage
 
     Write-Host "[*] Get all sponsors"
-    $Requests = @()
-    $BlueprintDefinitions | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    = "/applications/$($_.id)/microsoft.graph.agentIdentityBlueprint/sponsors"
-        }
-    }
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppSponsorsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppSponsorsRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppSponsorsResult = Get-EntraFalconObjectRelationshipChunked -Objects $BlueprintDefinitions -UrlTemplate "/applications/{0}/microsoft.graph.agentIdentityBlueprint/sponsors" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppSponsorsRaw = $AppSponsorsResult.Values
+    $AppSponsorsCoverage = $AppSponsorsResult.Coverage
 
     Write-Host "[*] Get all inheritable permissions"
-    $Requests = @()
-    $BlueprintDefinitions | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    = "/applications/$($_.id)/microsoft.graph.agentIdentityBlueprint/inheritablePermissions"
-        }
-    }
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppInheritablePermissionsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppInheritablePermissionsRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppInheritablePermissionsResult = Get-EntraFalconObjectRelationshipChunked -Objects $BlueprintDefinitions -UrlTemplate "/applications/{0}/microsoft.graph.agentIdentityBlueprint/inheritablePermissions" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppInheritablePermissionsRaw = $AppInheritablePermissionsResult.Values
+    $AppInheritablePermissionsCoverage = $AppInheritablePermissionsResult.Coverage
 
     Write-Host "[*] Get all federated identity credentials"
-    $Requests = @()
-    $BlueprintDefinitions | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    = "/applications/$($_.id)/microsoft.graph.agentIdentityBlueprint/federatedIdentityCredentials"
-        }
-    }
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppFederatedIdentityCredentialsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppFederatedIdentityCredentialsRaw[$item.id] = $item.response.value
-        }
+    $AppFederatedIdentityCredentialsResult = Get-EntraFalconObjectRelationshipChunked -Objects $BlueprintDefinitions -UrlTemplate "/applications/{0}/microsoft.graph.agentIdentityBlueprint/federatedIdentityCredentials" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppFederatedIdentityCredentialsRaw = $AppFederatedIdentityCredentialsResult.Values
+    $AppFederatedIdentityCredentialsCoverage = $AppFederatedIdentityCredentialsResult.Coverage
+
+    # No report-level warning list in this module, so gaps are surfaced per blueprint below.
+    $RelationshipCoverageTotal = $AppOwnersCoverage.Count + $AppSponsorsCoverage.Count + $AppInheritablePermissionsCoverage.Count + $AppFederatedIdentityCredentialsCoverage.Count
+    if ($RelationshipCoverageTotal -gt 0) {
+        Write-Host "[!] Some blueprint relationships could not be fully enumerated; affected blueprints are marked in the Warnings column."
     }
 
     # Cache API display names by appId to enrich inheritable-permission output
@@ -351,6 +311,20 @@ function Invoke-AgentIdentityBlueprints {
         $InheritedImpactScore = 0
         $AppHomePage = $null
         $BlueprintEnabled = -not ($item.isDisabled -eq $true)
+
+        $blueprintIdKey = [string]$item.Id
+        if ($AppOwnersCoverage.ContainsKey($blueprintIdKey)) {
+            $warnings += "Ownership incomplete: owner data could not be fully retrieved"
+        }
+        if ($AppSponsorsCoverage.ContainsKey($blueprintIdKey)) {
+            $warnings += "Sponsors incomplete: sponsor data could not be fully retrieved"
+        }
+        if ($AppInheritablePermissionsCoverage.ContainsKey($blueprintIdKey)) {
+            $warnings += "Inheritable permissions incomplete: permissions inherited by agent identities are understated"
+        }
+        if ($AppFederatedIdentityCredentialsCoverage.ContainsKey($blueprintIdKey)) {
+            $warnings += "Federated credentials incomplete: federated identity credential data could not be fully retrieved"
+        }
 
         $ProgressCounter ++
 

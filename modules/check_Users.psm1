@@ -77,6 +77,8 @@ function Invoke-CheckUsers {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth -SkipAutoRefresh ([bool]$SkipAutoRefresh)
+
     #Define basic variables
     $Title = "Users"
     $ProgressCounter = 0
@@ -88,7 +90,16 @@ function Invoke-CheckUsers {
     if ($null -eq $AccessPackageUserSpecificTargetIndex) { $AccessPackageUserSpecificTargetIndex = @{} }
     $EscapedTenantName = $CurrentTenant.FileSafeDisplayNameEncoded
     if (-not $GLOBALGraphExtendedChecks) {$WarningReport.Add("Coverage gap: eligible role assignments not assessed; only active assignments are included.")}
-    if (-not ($GLOBALPimForGroupsChecked)) {$WarningReport.Add("Coverage gap: PIM for Groups not assessed; eligible group owners/members may be missing.")}
+    if (-not ($GLOBALPimForGroupsChecked)) {
+        $WarningReport.Add("Coverage gap: PIM for Groups not assessed; eligible group owners/members may be missing.")
+    } elseif ([int]$GLOBALPimForGroupsIncompleteGroupCount -gt 0) {
+        $WarningReport.Add("Coverage gap: PIM for Groups eligibility could not be fully enumerated for $GLOBALPimForGroupsIncompleteGroupCount group(s); eligible group memberships may be missing for those groups.")
+    }
+    if ([bool]$GLOBALAdminUnitsUnavailable) {
+        $WarningReport.Add("Coverage gap: administrative units could not be enumerated; administrative unit membership and restricted management state are unknown for every user.")
+    } elseif ([int]$GLOBALAdminUnitsIncompleteCount -gt 0) {
+        $WarningReport.Add("Coverage gap: membership could not be fully enumerated for $GLOBALAdminUnitsIncompleteCount administrative unit(s); users in those units may not be shown as members and their restricted management state is unknown.")
+    }
     if (-not ($GLOBALIntuneRbacAvailable)) {
         if ([string]::IsNullOrWhiteSpace([string]$GLOBALIntuneRbacSkipReason)) {
             $WarningReport.Add("Coverage gap: Intune RBAC role assignments were not assessed; Intune role assignment counts are unknown.")
@@ -244,7 +255,8 @@ function Invoke-CheckUsers {
         '$top' = "1"
     }
     try {
-        Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop -DisablePagination | Out-Null
+        # First-page probe: -DisablePagination is intentional, only success or failure matters.
+        Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop -DisablePagination | Out-Null
     } catch {
         if ($($_.Exception.Message) -match "Status: 403") {
             write-host "[!] HTTP 403 Error: Most likely due to missing Entra ID premium licence. Can't retrieve SignInActivity."
@@ -270,7 +282,12 @@ function Invoke-CheckUsers {
             '$top' = $ApiTop
         } 
     }
-    $AllUsers = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # An incomplete user list understates the whole tenant, not just one relationship.
+    try {
+        $AllUsers = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        throw "User enumeration failed and the user report cannot be produced from a partial list: $($_.Exception.Message)"
+    }
 
     $UsersTotalCount = @($AllUsers).count
     write-host "[+] Got $($UsersTotalCount) users"
@@ -279,17 +296,20 @@ function Invoke-CheckUsers {
     Write-Host "[*] Collecting user memberships"
 
     $UserMemberOfRaw = @{}
-    $BatchSize = 10000     
+    # Users whose membership is incomplete: their group counts must not be read as "no access".
+    $UserMembershipCoverage = @{}
+    $BatchSize = 10000
     $ChunkCount = [math]::Ceiling($AllUsers.Count / $BatchSize)
 
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-Log -Level Verbose -Message "Processing user batch $($chunkIndex + 1) of $ChunkCount..." 
+        Write-Log -Level Verbose -Message "Processing user batch $($chunkIndex + 1) of $ChunkCount..."
 
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $AllUsers.Count - 1)
         $UserBatch = $AllUsers[$StartIndex..$EndIndex]
 
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
+        $ExpectedIds = New-Object System.Collections.Generic.List[string]
         foreach ($user in $UserBatch) {
             $req = @{
                 "id"     = $user.id
@@ -297,27 +317,32 @@ function Invoke-CheckUsers {
                 "url"    = "/users/$($user.id)/transitiveMemberOf"
             }
             $Requests.Add($req)
+            $ExpectedIds.Add([string]$user.id)
         }
 
         # Send batched request
-        $Response = Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id'; '$top'= $ApiTop}
+        $Response = Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $GraphTokenProvider -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id'; '$top'= $ApiTop}
 
         # Parse and store results
-        foreach ($item in $Response) {
-            if ($item.response.value -and $item.response.value.Count -gt 0) {
-                $groupIds = [System.Collections.Generic.List[string]]::new()
+        $Coverage = Get-EntraFalconBatchCoverage -Responses @($Response) -ExpectedIds $ExpectedIds
+        foreach ($userResponseId in $Coverage.Records.Keys) {
+            $record = $Coverage.Records[$userResponseId]
+            if ($record.State -ne 'Complete') {
+                $UserMembershipCoverage[$userResponseId] = $record.State
+            }
 
-                foreach ($entry in $item.response.value) {
-                    if ($entry.'@odata.type' -eq '#microsoft.graph.group') {
-                        $groupIds.Add($entry.id)
-                    }
-                }
-
-                if ($groupIds.Count -gt 0) {
-                    $UserMemberOfRaw[$item.id] = $groupIds
+            $groupIds = [System.Collections.Generic.List[string]]::new()
+            foreach ($entry in @($record.Value)) {
+                if ($entry.'@odata.type' -eq '#microsoft.graph.group') {
+                    $groupIds.Add($entry.id)
                 }
             }
+            if ($groupIds.Count -gt 0) {
+                $UserMemberOfRaw[$userResponseId] = $groupIds
+            }
         }
+
+        Remove-Variable -Name Requests, ExpectedIds, Response, Coverage, UserBatch -ErrorAction SilentlyContinue
     }
     
 
@@ -340,71 +365,38 @@ function Invoke-CheckUsers {
 
     Write-Host "[*] Collecting user ownerships"
     #Get all users ownerships for later lookup
-    $Requests = New-Object System.Collections.Generic.List[Hashtable]
-    foreach ($item in $AllUsers) {
-        $req = @{
-            "id"     = $item.id
-            "method" = "GET"
-            "url"    = "/users/$($item.id)/ownedObjects"
-        }
-        $Requests.Add($req)
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id' ;'$top'=$ApiTop})
-    $UserOwnedObjectsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $UserOwnedObjectsRaw[$item.id] = $item.response.value
-        }
-    }
+    $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id' ;'$top'=$ApiTop} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $UserOwnedObjectsRaw = $OwnedObjectsResult.Values
+    $UserOwnedObjectsCoverage = $OwnedObjectsResult.Coverage
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
     Write-Host "[*] Collecting user device ownership"
     #Get all users device ownerships for later lookup
-    $Requests = New-Object System.Collections.Generic.List[Hashtable]
-    foreach ($item in $AllUsers) {
-        $req = @{
-            "id"     = $item.id
-            "method" = "GET"
-            "url"    = "/users/$($item.id)/ownedDevices"
-            "headers" = @{"Accept"= "application/json;odata.metadata=none"} 
-        }
-        $Requests.Add($req)
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop})
-    $DeviceOwnerRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $DeviceOwnerRaw[$item.id] = $item.response.value
-        }
-    }
+    $DeviceOwnerResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/ownedDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DeviceOwnerRaw = $DeviceOwnerResult.Values
+    $DeviceOwnerCoverage = $DeviceOwnerResult.Coverage
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
     Write-Host "[*] Collecting user device registrations"
     #Get all users device registrations for later lookup
-    $Requests = New-Object System.Collections.Generic.List[Hashtable]
-    foreach ($item in $AllUsers) {
-        $req = @{
-            "id"     = $item.id
-            "method" = "GET"
-            "url"    = "/users/$($item.id)/registeredDevices"
-            "headers" = @{"Accept"= "application/json;odata.metadata=none"} 
-        }
-        $Requests.Add($req)
+    $DeviceRegisteredResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/registeredDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DeviceRegisteredRaw = $DeviceRegisteredResult.Values
+    $DeviceRegisteredCoverage = $DeviceRegisteredResult.Coverage
+
+    # Surface relationship gaps once at report level; per-user warnings are added in the loop below.
+    if ($UserMembershipCoverage.Count -gt 0) {
+        $WarningReport.Add("Coverage gap: group membership could not be fully enumerated for $($UserMembershipCoverage.Count) user(s). Group counts for those users are incomplete and an absence of memberships must not be read as no access.")
     }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop})
-    $DeviceRegisteredRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $DeviceRegisteredRaw[$item.id] = $item.response.value
-        }
-    }    
+    if ($UserOwnedObjectsCoverage.Count -gt 0) {
+        $WarningReport.Add("Coverage gap: owned objects could not be fully enumerated for $($UserOwnedObjectsCoverage.Count) user(s).")
+    }
+    if ($DeviceOwnerCoverage.Count -gt 0 -or $DeviceRegisteredCoverage.Count -gt 0) {
+        $WarningReport.Add("Coverage gap: device ownership or registration could not be fully enumerated for some users.")
+    }
 
     $PmDataCollection.Stop()
     ########################################## SECTION: User Processing ##########################################
@@ -423,6 +415,17 @@ function Invoke-CheckUsers {
         $Warnings = [System.Collections.Generic.HashSet[string]]::new()
         $Protected = $false
         $ProgressCounter ++
+
+        $userIdKey = [string]$item.id
+        if ($UserMembershipCoverage.ContainsKey($userIdKey)) {
+            [void]$Warnings.Add("Membership incomplete: group membership could not be fully retrieved, counts and inherited access are understated")
+        }
+        if ($UserOwnedObjectsCoverage.ContainsKey($userIdKey)) {
+            [void]$Warnings.Add("Ownership incomplete: owned object data could not be fully retrieved")
+        }
+        if ($DeviceOwnerCoverage.ContainsKey($userIdKey) -or $DeviceRegisteredCoverage.ContainsKey($userIdKey)) {
+            [void]$Warnings.Add("Device data incomplete: owned or registered device data could not be fully retrieved")
+        }
         $Impact = $UserImpact["Base"]
         $Likelihood = $UserLikelihood["Base"]
         $LastInteractiveSignIn = $item.SignInActivity.LastSignInDateTime

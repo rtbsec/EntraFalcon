@@ -32,6 +32,8 @@ function Invoke-AgentIdentities {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+
     #Define basic variables
     $ProgressCounter = 0
     $Inactive = $false
@@ -110,9 +112,9 @@ function Invoke-AgentIdentities {
                 $QueryParameters = @{
                     '$select' = "id,displayName,userPrincipalName"
                 }
-                $user = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+                $user = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
                 if ($null -eq $user -and $sponsorType -eq 'agentuser') {
-                    $user = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users/microsoft.graph.agentUser/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+                    $user = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users/microsoft.graph.agentUser/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
                 }
                 if ($null -ne $user) {
                     $resolved = [pscustomobject]@{
@@ -140,7 +142,7 @@ function Invoke-AgentIdentities {
                 $QueryParameters = @{
                     '$select' = "id,displayName"
                 }
-                $group = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/groups/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+                $group = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/groups/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
                 if ($null -ne $group) {
                     $resolved = [pscustomobject]@{
                         Id            = $sponsorId
@@ -156,7 +158,7 @@ function Invoke-AgentIdentities {
             $QueryParameters = @{
                 '$select' = "id,displayName,publisherName,appOwnerOrganizationId"
             }
-            $sp = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/servicePrincipals/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+            $sp = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/servicePrincipals/$sponsorId" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
             if ($null -ne $sp) {
                 $foreign = "-"
                 $ownerTenantId = "$($sp.appOwnerOrganizationId)".Trim()
@@ -196,7 +198,7 @@ function Invoke-AgentIdentities {
         '$select' = "Id,AppId,DisplayName,appRoles,accountEnabled,servicePrincipalType,createdDateTime,AppRoleAssignmentRequired,agentIdentityBlueprintId,createdByAppId,tags,AppOwnerOrganizationId"
         '$top' = $ApiTop
     }
-    $AgentIdentities = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals/Microsoft.Graph.AgentIdentity' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AgentIdentities = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals/Microsoft.Graph.AgentIdentity' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
     $AgentIdentitiesCount = $($AgentIdentities.count)
     write-host "[+] Got $AgentIdentitiesCount Agent Identities "
@@ -209,162 +211,62 @@ function Invoke-AgentIdentities {
 
     Write-Log -Level Debug -Message "Using $($AppLastSignIns.Count) cached app last sign-in dates"
 
-    Write-Host "[*] Get all agent identity API permissions assignments"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/appRoleAssignments?`$select=AppRoleId,ResourceId,ResourceDisplayName"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppAssignmentsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppAssignmentsRaw[$item.id] = $item.response.value
-        }
-    }
+    $RelationshipBatchSize = 10000
 
+    Write-Host "[*] Get all agent identity API permissions assignments"
+    $AppAssignmentsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/appRoleAssignments?`$select=AppRoleId,ResourceId,ResourceDisplayName" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppAssignmentsRaw = $AppAssignmentsResult.Values
+    $AppAssignmentsCoverage = $AppAssignmentsResult.Coverage
     Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.Count) applications API permissions assignments"
 
     Write-Host "[*] Get all agent identity delegated API permissions"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/oauth2PermissionGrants?`$select=ResourceId,Scope,ConsentType,PrincipalId"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $DelegatedPermissionRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $DelegatedPermissionRaw[$item.id] = $item.response.value
-        }
-    }
+    $DelegatedPermissionResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/oauth2PermissionGrants?`$select=ResourceId,Scope,ConsentType,PrincipalId" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DelegatedPermissionRaw = $DelegatedPermissionResult.Values
+    $DelegatedPermissionCoverage = $DelegatedPermissionResult.Coverage
     Write-Log -Level Debug -Message "Got $($DelegatedPermissionRaw.Count) delegated API permissions assignments"
 
     Write-Host "[*] Get all agent identity group memberships"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/transitiveMemberOf/microsoft.graph.group?`$select=Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $GroupMemberRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $GroupMemberRaw[$item.id] = $item.response.value
-        }
-    }
+    $GroupMemberResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/transitiveMemberOf/microsoft.graph.group?`$select=Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $GroupMemberRaw = $GroupMemberResult.Values
+    $GroupMemberCoverage = $GroupMemberResult.Coverage
     Write-Log -Level Debug -Message "Got $($GroupMemberRaw.Count) group memberships"
 
     Write-Host "[*] Get all agent identity object ownerships"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/ownedObjects"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $OwnedObjectsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $OwnedObjectsRaw[$item.id] = $item.response.value
-        }
-    }
+    $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $OwnedObjectsRaw = $OwnedObjectsResult.Values
+    $OwnedObjectsCoverage = $OwnedObjectsResult.Coverage
     Write-Log -Level Debug -Message "Got $($OwnedObjectsRaw.Count) owned objects"
 
     Write-Host "[*] Get all owners"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/owners"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $OwnersRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $OwnersRaw[$item.id] = $item.response.value
-        }
-    }
+    $OwnersResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/owners" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $OwnersRaw = $OwnersResult.Values
+    $OwnersCoverage = $OwnersResult.Coverage
     Write-Log -Level Debug -Message "Got $($OwnersRaw.Count) owners"
 
     Write-Host "[*] Get all sponsors"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/microsoft.graph.agentIdentity/sponsors"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $SponsorsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $SponsorsRaw[$item.id] = $item.response.value
-        }
-    }
+    $SponsorsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/microsoft.graph.agentIdentity/sponsors" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $SponsorsRaw = $SponsorsResult.Values
+    $SponsorsCoverage = $SponsorsResult.Coverage
     Write-Log -Level Debug -Message "Got $($SponsorsRaw.Count) sponsors"
 
     Write-Host "[*] Get assigned agent users"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    = "/users/microsoft.graph.agentUser"
-            "queryParameters" = @{
-                '$filter' = "identityParentId eq '$($_.id)'"
-                '$select' = "id,accountEnabled,userPrincipalName"
-                '$top'    = "$ApiTop"
-            }
-        }
-    }
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AgentUsersRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AgentUsersRaw[$item.id] = $item.response.value
-        }
-    }
+    # Filter-based lookup: the object id goes into a query parameter, not the URL.
+    $AgentUsersResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/users/microsoft.graph.agentUser" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -RequestQueryParameterTemplate @{ '$filter' = "identityParentId eq '{0}'"; '$select' = "id,accountEnabled,userPrincipalName"; '$top' = "$ApiTop" } -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AgentUsersRaw = $AgentUsersResult.Values
+    $AgentUsersCoverage = $AgentUsersResult.Coverage
     Write-Log -Level Debug -Message "Got assigned agent users for $($AgentUsersRaw.Count) agent identities"
 
     Write-Host "[*] Get all app role assignments"
-    $Requests = @()
-    $AgentIdentities | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/appRoleAssignedTo"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppRolesAssignedToRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppRolesAssignedToRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppRolesAssignedToResult = Get-EntraFalconObjectRelationshipChunked -Objects $AgentIdentities -UrlTemplate "/servicePrincipals/{0}/appRoleAssignedTo" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppRolesAssignedToRaw = $AppRolesAssignedToResult.Values
+    $AppRolesAssignedToCoverage = $AppRolesAssignedToResult.Coverage
     Write-Log -Level Debug -Message "Got $($AppRolesAssignedToRaw.Count) app role assignments"
+
+    # No report-level warning list in this module, so gaps are surfaced per identity below.
+    $RelationshipCoverageTotal = $AppAssignmentsCoverage.Count + $DelegatedPermissionCoverage.Count + $GroupMemberCoverage.Count + $OwnedObjectsCoverage.Count + $OwnersCoverage.Count + $SponsorsCoverage.Count + $AgentUsersCoverage.Count + $AppRolesAssignedToCoverage.Count
+    if ($RelationshipCoverageTotal -gt 0) {
+        Write-Host "[!] Some agent identity relationships could not be fully enumerated; affected identities are marked in the Warnings column."
+    }
 
     ########################################## SECTION: Agent Identity Processing ##########################################
 
@@ -459,6 +361,33 @@ function Invoke-AgentIdentities {
         $ImpactScore = $SPImpactScore["Base"]
         $LikelihoodScore = 0
         $warnings = @()
+
+        $agentIdKey = [string]$item.Id
+        if ($AppAssignmentsCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "API permissions incomplete: application permission data could not be fully retrieved"
+        }
+        if ($DelegatedPermissionCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Delegated permissions incomplete: delegated permission data could not be fully retrieved"
+        }
+        if ($GroupMemberCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Group membership incomplete: inherited roles and impact are understated"
+        }
+        if ($OwnedObjectsCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Owned objects incomplete: owned object data could not be fully retrieved"
+        }
+        if ($OwnersCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Ownership incomplete: owner data could not be fully retrieved"
+        }
+        if ($SponsorsCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Sponsors incomplete: sponsor data could not be fully retrieved"
+        }
+        if ($AgentUsersCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "Assigned agent users incomplete: agent user data could not be fully retrieved"
+        }
+        if ($AppRolesAssignedToCoverage.ContainsKey($agentIdKey)) {
+            $warnings += "App role assignments incomplete: assigned users and groups could not be fully retrieved"
+        }
+
         $OwnerUserDetails = @()
         $OwnerSPDetails = @()
         # Display status based on the objects numbers (slightly improves performance)

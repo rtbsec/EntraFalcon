@@ -36,6 +36,8 @@ function Invoke-CheckEnterpriseApps {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+
     #Define basic variables
     $Title = "EnterpriseApps"
     $ProgressCounter = 0
@@ -150,7 +152,13 @@ function Invoke-CheckEnterpriseApps {
         '$select' = "Id,DisplayName,PublisherName,accountEnabled,isDisabled,disabledByMicrosoftStatus,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode"
         '$top' = $ApiTop
     }
-    $EnterpriseApps = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    # A partial list cannot be told apart from a complete one, and a silent empty result would
+    # fall through the "no apps present" early return below and skip the whole report.
+    try {
+        $EnterpriseApps = @(Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    } catch {
+        throw "Service principal enumeration failed and the Enterprise Apps report cannot be produced from a partial list: $($_.Exception.Message)"
+    }
 
     $EnterpriseAppsCount = $($EnterpriseApps.count)
     write-host "[+] Got $EnterpriseAppsCount Enterprise Applications "
@@ -201,7 +209,9 @@ function Invoke-CheckEnterpriseApps {
     $QueryParameters = @{
         '$select' = "id,AppId,ServicePrincipalLockConfiguration"
     }
-    $AllAppRegistrations = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # Failure behaviour deliberately unchanged: a failed lookup leaves $AppRegistrations empty and
+    # every non-foreign app then reports no app instance lock. Known false positive, tracked apart.
+    $AllAppRegistrations = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
     foreach ($app in $AllAppRegistrations) {
         $AppRegistrations[$app.AppId] = @{
             id = $app.id
@@ -212,120 +222,49 @@ function Invoke-CheckEnterpriseApps {
 
     Write-Log -Level Debug -Message "Using $($AppLastSignIns.Count) cached app last sign-in dates"
 
-    Write-Host "[*] Get all applications API permissions assignments"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/appRoleAssignments?`$select=AppRoleId,ResourceId,ResourceDisplayName"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppAssignmentsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppAssignmentsRaw[$item.id] = $item.response.value
-        }
-    }
+    $RelationshipBatchSize = 10000
 
+    Write-Host "[*] Get all applications API permissions assignments"
+    $AppAssignmentsResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/appRoleAssignments" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{'$select' = 'AppRoleId,ResourceId,ResourceDisplayName'} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppAssignmentsRaw = $AppAssignmentsResult.Values
+    $AppAssignmentsCoverage = $AppAssignmentsResult.Coverage
     Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.Count) applications API permissions assignments"
 
     Write-Host "[*] Get all delegated API permissions"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/oauth2PermissionGrants?`$select=ResourceId,Scope,ConsentType,PrincipalId"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $DelegatedPermissionRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $DelegatedPermissionRaw[$item.id] = $item.response.value
-        }
-    }
+    $DelegatedPermissionResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/oauth2PermissionGrants" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{'$select' = 'ResourceId,Scope,ConsentType,PrincipalId'} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DelegatedPermissionRaw = $DelegatedPermissionResult.Values
+    $DelegatedPermissionCoverage = $DelegatedPermissionResult.Coverage
     Write-Log -Level Debug -Message "Got $($DelegatedPermissionRaw.Count) delegated API permissions assignments"
 
     Write-Host "[*] Get all applications group memberships"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/transitiveMemberOf/microsoft.graph.group?`$select=Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $GroupMemberRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $GroupMemberRaw[$item.id] = $item.response.value
-        }
-    }
+    $GroupMemberResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/transitiveMemberOf/microsoft.graph.group" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{'$select' = 'Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole'} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $GroupMemberRaw = $GroupMemberResult.Values
+    $GroupMemberCoverage = $GroupMemberResult.Coverage
     Write-Log -Level Debug -Message "Got $($GroupMemberRaw.Count) group memberships"
 
     Write-Host "[*] Get all application object ownerships"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/ownedObjects"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $OwnedObjectsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $OwnedObjectsRaw[$item.id] = $item.response.value
-        }
-    }
+    $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $OwnedObjectsRaw = $OwnedObjectsResult.Values
+    $OwnedObjectsCoverage = $OwnedObjectsResult.Coverage
     Write-Log -Level Debug -Message "Got $($OwnedObjectsRaw.Count) owned objects"
 
     Write-Host "[*] Get all owners"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/owners"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $OwnersRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $OwnersRaw[$item.id] = $item.response.value
-        }
-    }
+    $OwnersResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/owners" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $OwnersRaw = $OwnersResult.Values
+    $OwnersCoverage = $OwnersResult.Coverage
     Write-Log -Level Debug -Message "Got $($OwnersRaw.Count) owners"
 
     Write-Host "[*] Get all app role assignments"
-    $Requests = @()
-    $EnterpriseApps | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/servicePrincipals/$($_.id)/appRoleAssignedTo"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppRolesAssignedToRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppRolesAssignedToRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppRolesAssignedToResult = Get-EntraFalconObjectRelationshipChunked -Objects $EnterpriseApps -UrlTemplate "/servicePrincipals/{0}/appRoleAssignedTo" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppRolesAssignedToRaw = $AppRolesAssignedToResult.Values
+    $AppRolesAssignedToCoverage = $AppRolesAssignedToResult.Coverage
     Write-Log -Level Debug -Message "Got $($AppRolesAssignedToRaw.Count) app role assignments"
+
+    # Surface the gaps once at report level; per-app warnings are added in the processing loop.
+    $RelationshipCoverageTotal = $AppAssignmentsCoverage.Count + $DelegatedPermissionCoverage.Count + $GroupMemberCoverage.Count + $OwnedObjectsCoverage.Count + $OwnersCoverage.Count + $AppRolesAssignedToCoverage.Count
+    if ($RelationshipCoverageTotal -gt 0) {
+        $EnterpriseAppsScriptWarningList += "Coverage gap: one or more application relationships (API permissions, delegated permissions, group memberships, owned objects, owners, app role assignments) could not be fully enumerated. Affected applications are marked in the Warnings column; an absence of permissions or owners must not be read as no access."
+    }
 
     ########################################## SECTION: Enterprise App Processing ##########################################
 
@@ -335,9 +274,14 @@ function Invoke-CheckEnterpriseApps {
     #Enumerate all AppRoles configured (only of the apps in scope)
     $AppRoles = [System.Collections.ArrayList]::new()
     
+    $AppRolesSkippedForCoverage = 0
     foreach ($app in $EnterpriseApps) {
-        if (-not $AppRolesAssignedToRaw.ContainsKey($app.Id)) { continue }
-    
+        if (-not $AppRolesAssignedToRaw.ContainsKey($app.Id)) {
+            # A skip caused by a failed fetch is not the same as an app with no assignments.
+            if ($AppRolesAssignedToCoverage.ContainsKey([string]$app.Id)) { $AppRolesSkippedForCoverage++ }
+            continue
+        }
+
         $userRoles = $app.AppRoles
     
         foreach ($assignment in $AppRolesAssignedToRaw[$app.Id]) {
@@ -382,6 +326,9 @@ function Invoke-CheckEnterpriseApps {
             }
         }
     }
+    if ($AppRolesSkippedForCoverage -gt 0) {
+        Write-Log -Level Verbose -Message "Skipped app role enumeration for $AppRolesSkippedForCoverage application(s) whose assignments could not be retrieved"
+    }
 
     # Add AppRoles assigned to users to a global var to use it in the check_user script
     $filteredAppRoles = $AppRoles | Where-Object { $_.AppRoleAssignmentType -eq "User" }
@@ -420,6 +367,27 @@ function Invoke-CheckEnterpriseApps {
         $ImpactScore = $SPImpactScore["Base"]
         $LikelihoodScore = 0
         $warnings = @()
+
+        # Recorded before scoring, so an incomplete collection never reads as a confirmed absence.
+        $appIdKey = [string]$item.Id
+        if ($AppAssignmentsCoverage.ContainsKey($appIdKey)) {
+            $warnings += "API permissions incomplete: application permission data could not be fully retrieved"
+        }
+        if ($DelegatedPermissionCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Delegated permissions incomplete: delegated permission data could not be fully retrieved"
+        }
+        if ($GroupMemberCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Group membership incomplete: inherited roles and impact are understated"
+        }
+        if ($OwnedObjectsCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Owned objects incomplete: owned object data could not be fully retrieved"
+        }
+        if ($OwnersCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Ownership incomplete: owner data could not be fully retrieved"
+        }
+        if ($AppRolesAssignedToCoverage.ContainsKey($appIdKey)) {
+            $warnings += "App role assignments incomplete: assigned users and groups could not be fully retrieved"
+        }
         $WarningsHighPermission = $null
         $WarningsDangerousPermission = $null
         $WarningsMediumPermission = $null

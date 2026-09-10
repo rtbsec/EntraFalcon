@@ -204,6 +204,8 @@ function Invoke-CheckGroups {
     # Check token and trigger refresh if required
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth -SkipAutoRefresh ([bool]$SkipAutoRefresh)
+
     # Define basic variables
     $Title = "Groups"
     $ProgressCounter = 0
@@ -397,7 +399,12 @@ function Invoke-CheckGroups {
         '$select' = 'Id,DisplayName,Visibility,GroupTypes,SecurityEnabled,IsAssignableToRole,OnPremisesSyncEnabled,MailEnabled,Description,MembershipRule'
         '$top' = $ApiTop
     }
-    $AllGroups = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/groups' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # An incomplete group list understates the whole tenant, not just one relationship.
+    try {
+        $AllGroups = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/groups' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        throw "Group enumeration failed and the group report cannot be produced from a partial list: $($_.Exception.Message)"
+    }
 
     $GroupsTotalCount = @($AllGroups).Count
     Write-Host "[+] Got $($GroupsTotalCount) groups"
@@ -446,21 +453,34 @@ function Invoke-CheckGroups {
     #Check if PIM for groups was checked
     if (-not ($GLOBALPimForGroupsChecked)) {
         $GroupScriptWarningList.Add("Coverage gap: PIM for Groups not assessed; eligible group owners/members are therefore missing from this report.")
+    } elseif ([int]$GLOBALPimForGroupsIncompleteGroupCount -gt 0) {
+        # Assessed, but not for every group: those groups are unknown, not confirmed empty.
+        $GroupScriptWarningList.Add("Coverage gap: PIM for Groups eligibility could not be fully enumerated for $GLOBALPimForGroupsIncompleteGroupCount group(s); eligible owners/members may be missing for those groups.")
+    }
+
+    #Check administrative unit coverage
+    if ([bool]$GLOBALAdminUnitsUnavailable) {
+        $GroupScriptWarningList.Add("Coverage gap: administrative units could not be enumerated; administrative unit membership and restricted management state are unknown for every group.")
+    } elseif ([int]$GLOBALAdminUnitsIncompleteCount -gt 0) {
+        $GroupScriptWarningList.Add("Coverage gap: membership could not be fully enumerated for $GLOBALAdminUnitsIncompleteCount administrative unit(s); groups in those units may not be shown as members and their restricted management state is unknown.")
     }
 
     Write-Host "[*] Getting all group memberships"
     $GroupMembers = @{}
     $DirectActiveMemberCountById = @{}
+    # Groups whose member list is incomplete: their counts must not be read as "no members".
+    $GroupMemberCoverage = @{}
     $BatchSize = 10000
     $ChunkCount = [math]::Ceiling($GroupsTotalCount / $BatchSize)
-    
+
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-Log -Level Verbose -Message "Processing batch $($chunkIndex + 1) of $ChunkCount..."                  
-    
+        Write-Log -Level Verbose -Message "Processing batch $($chunkIndex + 1) of $ChunkCount..."
+
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
         $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
+        $ExpectedIds = New-Object System.Collections.Generic.List[string]
         foreach ($group in $GroupBatch) {
             $req = @{
                 "id"     = $group.id
@@ -468,20 +488,32 @@ function Invoke-CheckGroups {
                 "url"    = "/groups/$($group.id)/members"
             }
             $Requests.Add($req)
+            $ExpectedIds.Add([string]$group.id)
         }
-    
+
         # Send the batch
-        $Response = Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id,userType,onPremisesSyncEnabled' ;'$top'= $ApiTop}
+        $Response = Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $GraphTokenProvider -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id,userType,onPremisesSyncEnabled' ;'$top'= $ApiTop}
 
         # Store results
-        foreach ($item in $Response) {
-            $groupResponseId = [string]$item.id
-            $directMembers = @($item.response.value)
-            $DirectActiveMemberCountById[$groupResponseId] = $directMembers.Count
+        $Coverage = Get-EntraFalconBatchCoverage -Responses @($Response) -ExpectedIds $ExpectedIds
+        foreach ($groupResponseId in $Coverage.Records.Keys) {
+            $record = $Coverage.Records[$groupResponseId]
+            $directMembers = @($record.Value)
+            if ($record.State -eq 'Complete') {
+                $DirectActiveMemberCountById[$groupResponseId] = $directMembers.Count
+            } else {
+                # Positively observed members stay usable; the count does not.
+                $GroupMemberCoverage[$groupResponseId] = $record.State
+            }
             if ($directMembers.Count -gt 0) {
                 $GroupMembers[$groupResponseId] = $directMembers
             }
         }
+        if ($Coverage.Outcome -ne 'Complete') {
+            Write-Log -Level Verbose -Message "Membership chunk $($chunkIndex + 1): $($Coverage.PartialIds.Count) partial, $($Coverage.UnknownIds.Count) unknown"
+        }
+
+        Remove-Variable -Name Requests, ExpectedIds, Response, Coverage, GroupBatch -ErrorAction SilentlyContinue
     }
 
 
@@ -515,27 +547,45 @@ function Invoke-CheckGroups {
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
     Write-Host "[*] Get all group ownerships"
-    #Get owners of all groups for later lookup
-    $Requests = New-Object System.Collections.Generic.List[Hashtable]
-    foreach ($item in $AllGroups) {
-        $req = @{
-            "id"     = $item.id
-            "method" = "GET"
-            "url"    =   "/groups/$($item.id)/owners"
-        }
-        $Requests.Add($req)
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id,userType,onPremisesSyncEnabled'})
+    #Get owners of all groups for later lookup. Chunked to bound transient request/response memory.
     $GroupOwnersRaw = @{}
     $DirectActiveOwnerCountById = @{}
-    foreach ($item in $RawResponse) {
-        $groupResponseId = [string]$item.id
-        $directOwners = @($item.response.value)
-        $DirectActiveOwnerCountById[$groupResponseId] = $directOwners.Count
-        if ($directOwners.Count -gt 0) {
-            $GroupOwnersRaw[$groupResponseId] = $directOwners
+    $GroupOwnerCoverage = @{}
+    $ChunkCount = [math]::Ceiling($GroupsTotalCount / $BatchSize)
+
+    for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
+        $StartIndex = $chunkIndex * $BatchSize
+        $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
+        $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
+        $Requests = New-Object System.Collections.Generic.List[Hashtable]
+        $ExpectedIds = New-Object System.Collections.Generic.List[string]
+        foreach ($item in $GroupBatch) {
+            $req = @{
+                "id"     = $item.id
+                "method" = "GET"
+                "url"    =   "/groups/$($item.id)/owners"
+            }
+            $Requests.Add($req)
+            $ExpectedIds.Add([string]$item.id)
         }
+
+        $RawResponse = Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $GraphTokenProvider -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'id,userType,onPremisesSyncEnabled'}
+        $Coverage = Get-EntraFalconBatchCoverage -Responses @($RawResponse) -ExpectedIds $ExpectedIds
+
+        foreach ($groupResponseId in $Coverage.Records.Keys) {
+            $record = $Coverage.Records[$groupResponseId]
+            $directOwners = @($record.Value)
+            if ($record.State -eq 'Complete') {
+                $DirectActiveOwnerCountById[$groupResponseId] = $directOwners.Count
+            } else {
+                $GroupOwnerCoverage[$groupResponseId] = $record.State
+            }
+            if ($directOwners.Count -gt 0) {
+                $GroupOwnersRaw[$groupResponseId] = $directOwners
+            }
+        }
+
+        Remove-Variable -Name Requests, ExpectedIds, RawResponse, Coverage, GroupBatch -ErrorAction SilentlyContinue
     }
 
     Write-Log -Level Debug -Message "Got $($GroupOwnersRaw.Count) group ownerships"
@@ -544,23 +594,42 @@ function Invoke-CheckGroups {
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
     Write-Host "[*] Get all group app role assignments"
-    #Get group AppRole Assignments of all groups for later lookup
-    $Requests = New-Object System.Collections.Generic.List[Hashtable]
-    foreach ($item in $AllGroups) {
-        $req = @{
-            "id"     = $item.id
-            "method" = "GET"
-            "url"    =   "/groups/$($item.id)/appRoleAssignments"
-        }
-        $Requests.Add($req)
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'ResourceDisplayName,ResourceId,AppRoleId' ;'$top'= $ApiTop})
+    #Get group AppRole Assignments of all groups for later lookup. Chunked to bound memory.
     $AppRoleAssignmentsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppRoleAssignmentsRaw[$item.id] = $item.response.value
+    $GroupAppRoleCoverage = @{}
+    $ChunkCount = [math]::Ceiling($GroupsTotalCount / $BatchSize)
+
+    for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
+        $StartIndex = $chunkIndex * $BatchSize
+        $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
+        $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
+        $Requests = New-Object System.Collections.Generic.List[Hashtable]
+        $ExpectedIds = New-Object System.Collections.Generic.List[string]
+        foreach ($item in $GroupBatch) {
+            $req = @{
+                "id"     = $item.id
+                "method" = "GET"
+                "url"    =   "/groups/$($item.id)/appRoleAssignments"
+            }
+            $Requests.Add($req)
+            $ExpectedIds.Add([string]$item.id)
         }
+
+        $RawResponse = Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $GraphTokenProvider -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -QueryParameters @{'$select' = 'ResourceDisplayName,ResourceId,AppRoleId' ;'$top'= $ApiTop}
+        $Coverage = Get-EntraFalconBatchCoverage -Responses @($RawResponse) -ExpectedIds $ExpectedIds
+
+        foreach ($groupResponseId in $Coverage.Records.Keys) {
+            $record = $Coverage.Records[$groupResponseId]
+            if ($record.State -ne 'Complete') {
+                $GroupAppRoleCoverage[$groupResponseId] = $record.State
+            }
+            $assignments = @($record.Value)
+            if ($assignments.Count -gt 0) {
+                $AppRoleAssignmentsRaw[$groupResponseId] = $assignments
+            }
+        }
+
+        Remove-Variable -Name Requests, ExpectedIds, RawResponse, Coverage, GroupBatch -ErrorAction SilentlyContinue
     }
 
     Write-Log -Level Debug -Message "Got $($AppRoleAssignmentsRaw.Count) app group role assignments"
@@ -598,16 +667,43 @@ function Invoke-CheckGroups {
 
     Write-Log -Level Debug -Message "Got $($GroupNestedInRaw.Count) groups with parent group relationship"
 
+    # An incomplete member list makes every parent's transitive membership incomplete too, so the
+    # gap is propagated upwards before any inherited conclusion is drawn.
+    if ($GroupMemberCoverage.Count -gt 0) {
+        foreach ($affectedGroupId in @($GroupMemberCoverage.Keys)) {
+            $ancestors = Get-TransitiveParentsCached -GroupId $affectedGroupId -ReverseAdjList $ReverseGroupMembershipMap -AllGroupsHT $AllGroupsHT
+            foreach ($ancestor in @($ancestors)) {
+                $ancestorId = [string]$ancestor.id
+                if (-not $GroupMemberCoverage.ContainsKey($ancestorId)) {
+                    $GroupMemberCoverage[$ancestorId] = 'InheritedIncomplete'
+                }
+            }
+        }
+        $GroupScriptWarningList.Add("Coverage gap: membership could not be fully enumerated for $($GroupMemberCoverage.Count) group(s) (including groups that nest them). Member counts for those groups are incomplete and an absence of members must not be read as no access.")
+    }
+    if ($GroupOwnerCoverage.Count -gt 0) {
+        $GroupScriptWarningList.Add("Coverage gap: ownership could not be fully enumerated for $($GroupOwnerCoverage.Count) group(s). Owner counts for those groups are incomplete.")
+    }
+    if ($GroupAppRoleCoverage.Count -gt 0) {
+        $GroupScriptWarningList.Add("Coverage gap: app role assignments could not be fully enumerated for $($GroupAppRoleCoverage.Count) group(s).")
+    }
+
 
     #Basic ServicePrincipal Info to avoid storing the information in a large object
     $QueryParameters = @{
         '$select' = "id,displayName,accountEnabled,appOwnerOrganizationId,publisherName,servicePrincipalType"
         '$top' = $ApiTop
     }
-    $RawResponse = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # Lookup table only: an incomplete list costs display names, not membership analysis.
     $AllSPBasicHT = @{}
-    foreach ($app in $RawResponse) {
-        $AllSPBasicHT[$app.id] = $app
+    try {
+        $RawResponse = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+        foreach ($app in $RawResponse) {
+            $AllSPBasicHT[$app.id] = $app
+        }
+    } catch {
+        Write-Log -Level Debug -Message "Service principal lookup failed: $($_.Exception.Message)"
+        $GroupScriptWarningList.Add("Coverage gap: the service principal lookup could not be retrieved; service principal members and owners may be shown by object ID only.")
     }
     
 
@@ -696,6 +792,16 @@ function Invoke-CheckGroups {
         $groupIdKey = [string]$group.Id
         $DirectActiveMemberCount = if ($null -ne $DirectActiveMemberCountById -and $DirectActiveMemberCountById.ContainsKey($groupIdKey)) { [int]$DirectActiveMemberCountById[$groupIdKey] } else { 0 }
         $DirectActiveOwnerCount = if ($null -ne $DirectActiveOwnerCountById -and $DirectActiveOwnerCountById.ContainsKey($groupIdKey)) { [int]$DirectActiveOwnerCountById[$groupIdKey] } else { 0 }
+
+        if ($GroupMemberCoverage.ContainsKey($groupIdKey)) {
+            [void]$Warnings.Add("Membership incomplete: member data could not be fully retrieved, counts and nested membership are understated")
+        }
+        if ($GroupOwnerCoverage.ContainsKey($groupIdKey)) {
+            [void]$Warnings.Add("Ownership incomplete: owner data could not be fully retrieved")
+        }
+        if ($GroupAppRoleCoverage.ContainsKey($groupIdKey)) {
+            [void]$Warnings.Add("App role assignments incomplete: assignment data could not be fully retrieved")
+        }
 
         # Process group members
         if ($TransitiveMembersRaw.ContainsKey($group.Id)) {

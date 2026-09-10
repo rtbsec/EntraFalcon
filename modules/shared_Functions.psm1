@@ -7823,7 +7823,14 @@ function Get-UsersBasic {
         '$select' = "Id,UserPrincipalName,UserType,accountEnabled,onPremisesSyncEnabled"
         '$top' = $ApiTop
       }
-      $RawResponse = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # A paged GET carries no completeness metadata, so a partial list is indistinguishable from a
+    # complete one. Failing here is terminating: this index is used across reports, and an empty
+    # one would silently understate access everywhere it is consulted.
+    try {
+        $RawResponse = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/users" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        throw "The basic user list could not be retrieved, so downstream reports cannot be produced from a partial index: $($_.Exception.Message)"
+    }
     $AllUsersBasicHT = @{}
     foreach ($user in $RawResponse) {
         $AllUsersBasicHT[$user.id] = $user
@@ -8183,7 +8190,13 @@ function Get-Devices {
         '$top' = $ApiTop
     }
 
-    $DevicesRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/devices" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    # Terminating for the same reason as the user index: a truncated device list cannot be told
+    # apart from a complete one, and device ownership feeds user risk conclusions.
+    try {
+        $DevicesRaw = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/devices" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        throw "The device list could not be retrieved, so reports cannot be produced from a partial device index: $($_.Exception.Message)"
+    }
     
     #Convert to HT
     $Devices = @{}
@@ -8334,6 +8347,580 @@ function Invoke-CheckTokenExpiration ($Object) {
     return $result
 
 }
+
+#region Graph token providers
+# The transports call a provider before every request, pagination included, so the common path
+# stays quiet and local. State is shared per purpose: chunk loops must not start their own.
+$script:EntraFalconTokenProviderState = @{}
+
+# Renewal trigger, not a minimum lifetime: a short but still valid token is used, not rejected.
+$script:EntraFalconTokenRenewMarginMinutes = 10
+$script:EntraFalconTokenRenewCooldownSeconds = 60
+
+function Reset-EntraFalconTokenProviderState {
+    param(
+        [Parameter(Mandatory = $false)][string]$Purpose
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Purpose)) {
+        $script:EntraFalconTokenProviderState = @{}
+    } elseif ($script:EntraFalconTokenProviderState.ContainsKey($Purpose)) {
+        $script:EntraFalconTokenProviderState.Remove($Purpose)
+    }
+}
+
+# Expiration_time is written as local time, but normalise so a UTC-kind value from another path
+# is not compared against local now.
+function ConvertTo-EntraFalconLocalExpiration ($Value) {
+    if ($null -eq $Value) { return $null }
+    $expiration = $Value -as [datetime]
+    if ($null -eq $expiration) { return $null }
+    if ($expiration.Kind -eq [System.DateTimeKind]::Utc) { return $expiration.ToLocalTime() }
+    return $expiration
+}
+
+function Get-EntraFalconPurposeToken ($Purpose) {
+    if ($Purpose -eq 'MainAuth') { return $global:GLOBALMsGraphAccessToken }
+    if ($Purpose -eq 'PimForGroup') { return $global:GLOBALPimForGroupAccessToken }
+    return $null
+}
+
+function Set-EntraFalconPurposeToken ($Purpose, $Token) {
+    if ($Purpose -eq 'MainAuth') { $global:GLOBALMsGraphAccessToken = $Token }
+    if ($Purpose -eq 'PimForGroup') { $global:GLOBALPimForGroupAccessToken = $Token }
+}
+
+# Returns $true only when a new token object was installed. The routing table can return without
+# acting and its output stream may carry several values, so the token object is the only signal.
+function Invoke-EntraFalconProviderRenewal ($Purpose) {
+    $before = Get-EntraFalconPurposeToken $Purpose
+
+    try {
+        if ($Purpose -eq 'MainAuth') {
+            RefreshAuthenticationMsGraph | Out-Null
+        } elseif ($Purpose -eq 'PimForGroup') {
+            invoke-EntraFalconAuth -Action Refresh -Purpose PimforGroup @GLOBALAuthMethods | Out-Null
+        }
+    } catch {
+        # Deliberately no early return: a refresh can replace the global token and then fail, so
+        # validation and restoration below must run for the exceptional path too.
+        Write-Log -Level Debug -Message "[TokenProvider] $Purpose renewal threw: $($_.Exception.Message)"
+    }
+
+    $after = Get-EntraFalconPurposeToken $Purpose
+    if ([object]::ReferenceEquals($before, $after)) { return $false }
+
+    # Accepted only if usable: non-empty, with parseable expiration metadata in the future.
+    $replacementUsable = $false
+    if ($null -ne $after -and -not [string]::IsNullOrWhiteSpace([string]$after.access_token)) {
+        $newExpiration = ConvertTo-EntraFalconLocalExpiration $after.Expiration_time
+        if ($null -ne $newExpiration -and $newExpiration -gt [datetime]::Now) {
+            $replacementUsable = $true
+        }
+    }
+
+    if ($replacementUsable) { return $true }
+
+    # Restore the previous token if still valid, so a bad replacement cannot destroy a credential.
+    $previousExpiration = $null
+    if ($null -ne $before -and -not [string]::IsNullOrWhiteSpace([string]$before.access_token)) {
+        $previousExpiration = ConvertTo-EntraFalconLocalExpiration $before.Expiration_time
+    }
+    if ($null -ne $previousExpiration -and $previousExpiration -gt [datetime]::Now) {
+        Write-Log -Level Debug -Message "[TokenProvider] $Purpose renewal produced an unusable token; restoring the previous valid token."
+        Set-EntraFalconPurposeToken $Purpose $before
+    } else {
+        Write-Log -Level Debug -Message "[TokenProvider] $Purpose renewal produced an unusable token and no valid previous token remains."
+    }
+
+    return $false
+}
+
+function Set-EntraFalconProviderSchedule ($State, $Expiration) {
+    # Renew at expiry minus min(margin, half the remaining lifetime), so a short but valid token
+    # is not renewed on every request.
+    $remainingMinutes = ($Expiration - [datetime]::Now).TotalMinutes
+    $offsetMinutes = $script:EntraFalconTokenRenewMarginMinutes
+    if (($remainingMinutes / 2) -lt $offsetMinutes) { $offsetMinutes = $remainingMinutes / 2 }
+    if ($offsetMinutes -lt 0) { $offsetMinutes = 0 }
+
+    $State.KnownExpiration = $Expiration
+    $State.RenewAt = $Expiration.AddMinutes(-1 * $offsetMinutes)
+}
+
+function Get-EntraFalconProviderState ($Purpose) {
+    if (-not $script:EntraFalconTokenProviderState.ContainsKey($Purpose)) {
+        $script:EntraFalconTokenProviderState[$Purpose] = @{
+            KnownExpiration = $null
+            RenewAt         = $null
+            CooldownUntil   = [datetime]::MinValue
+            WarnedEpisode   = $false
+            SkipAutoRefresh = $false
+        }
+    }
+    return $script:EntraFalconTokenProviderState[$Purpose]
+}
+
+function Get-EntraFalconProviderToken ($Purpose) {
+    $state = Get-EntraFalconProviderState $Purpose
+    $SkipAutoRefresh = [bool]$state.SkipAutoRefresh
+
+    $token = Get-EntraFalconPurposeToken $Purpose
+    if ($null -eq $token -or [string]::IsNullOrWhiteSpace([string]$token.access_token)) {
+        throw (New-Object System.Security.Authentication.AuthenticationException("No $Purpose access token is available. Authentication is required before collection."))
+    }
+
+    $expiration = ConvertTo-EntraFalconLocalExpiration $token.Expiration_time
+    if ($null -eq $expiration) {
+        throw (New-Object System.Security.Authentication.AuthenticationException("The $Purpose access token has no usable expiration metadata."))
+    }
+
+    # A token installed elsewhere starts a new generation, using the standard margin on first sight.
+    if ($null -eq $state.KnownExpiration -or $state.KnownExpiration -ne $expiration) {
+        $state.KnownExpiration = $expiration
+        $state.RenewAt = $expiration.AddMinutes(-1 * $script:EntraFalconTokenRenewMarginMinutes)
+        $state.CooldownUntil = [datetime]::MinValue
+        $state.WarnedEpisode = $false
+    }
+
+    $now = [datetime]::Now
+    $expired = ($now -ge $expiration)
+
+    if (-not $expired -and $now -lt $state.RenewAt) {
+        return [string]$token.access_token
+    }
+
+    if ($SkipAutoRefresh) {
+        if ($expired) {
+            throw (New-Object System.Security.Authentication.AuthenticationException("The $Purpose access token has expired and automatic renewal is disabled."))
+        }
+        return [string]$token.access_token
+    }
+
+    # A recent renewal failure defers the next proactive attempt, but never past actual expiry.
+    if (-not $expired -and $now -lt $state.CooldownUntil) {
+        return [string]$token.access_token
+    }
+
+    if (Invoke-EntraFalconProviderRenewal $Purpose) {
+        $token = Get-EntraFalconPurposeToken $Purpose
+        $expiration = ConvertTo-EntraFalconLocalExpiration $token.Expiration_time
+        Set-EntraFalconProviderSchedule $state $expiration
+        $state.CooldownUntil = [datetime]::MinValue
+        $state.WarnedEpisode = $false
+        Write-Log -Level Verbose -Message "[TokenProvider] Renewed $Purpose token; next check at $($state.RenewAt)."
+        return [string]$token.access_token
+    }
+
+    if (-not $state.WarnedEpisode) {
+        Write-Host "[!] Automatic renewal of the $Purpose access token was unsuccessful or is unavailable for this authentication flow."
+        $state.WarnedEpisode = $true
+    }
+    $state.CooldownUntil = $now.AddSeconds($script:EntraFalconTokenRenewCooldownSeconds)
+
+    # Re-read: a partially completed renewal may still have installed a usable token.
+    $token = Get-EntraFalconPurposeToken $Purpose
+    $expiration = ConvertTo-EntraFalconLocalExpiration $token.Expiration_time
+    if ($null -ne $token -and -not [string]::IsNullOrWhiteSpace([string]$token.access_token) -and $null -ne $expiration -and [datetime]::Now -lt $expiration) {
+        return [string]$token.access_token
+    }
+
+    throw (New-Object System.Security.Authentication.AuthenticationException("The $Purpose access token has expired and could not be renewed."))
+}
+
+function New-EntraFalconGraphTokenProvider {
+    <#
+    .SYNOPSIS
+        Builds a token provider scriptblock for the Graph transports.
+
+    .DESCRIPTION
+        The returned scriptblock takes no arguments and emits exactly one non-empty access token
+        string. It is created in this module's session state, so it keeps access to the renewal
+        helpers and the shared per-purpose schedule when invoked from another module.
+
+    .PARAMETER Purpose
+        MainAuth for the general Graph token, PimForGroup for the PIM for Groups token.
+
+    .PARAMETER SkipAutoRefresh
+        Suppresses provider-driven renewal, including retries after a failure.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('MainAuth', 'PimForGroup')]
+        [string]$Purpose,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$SkipAutoRefresh = $false
+    )
+
+    $state = Get-EntraFalconProviderState $Purpose
+    $state.SkipAutoRefresh = $SkipAutoRefresh
+
+    # Plain scriptblock on purpose: it keeps this module's session state, so it still reaches the
+    # private helpers when the transport invokes it. GetNewClosure() rebinds that and loses them
+    # (verified on 5.1 and 7), so the purpose is hard-coded rather than captured.
+    if ($Purpose -eq 'MainAuth') {
+        return { Get-EntraFalconProviderToken 'MainAuth' }
+    }
+    return { Get-EntraFalconProviderToken 'PimForGroup' }
+}
+#endregion
+
+#region Batch completeness classification
+function Test-EntraFalconSuccessStatus ($Status) {
+    # Unanswered requests carry a non-numeric status, so parse rather than cast.
+    $parsed = 0
+    if (-not [int]::TryParse([string]$Status, [ref]$parsed)) { return $false }
+    return ($parsed -ge 200 -and $parsed -lt 300)
+}
+
+# Narrow on two axes: 403 is authorization and stays a per-ID coverage gap, and the status code
+# must be a standalone token - a digit-only boundary would match the "401" inside a GUID.
+function Test-EntraFalconAuthenticationFailureText ($Text) {
+    $value = [string]$Text
+    if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+    return ($value -match '(?i)InvalidAuthenticationToken|\bunauthorized\b|(?<![0-9A-Za-z])401(?![0-9A-Za-z])|CompactToken.*expired|Lifetime validation failed')
+}
+
+# Both forms of unusable credential: the provider's typed exception (possibly wrapped by the
+# engine) and the transport's own message when a provider yields nothing.
+function Test-EntraFalconAuthenticationFailure ($ErrorRecord) {
+    if ($null -eq $ErrorRecord) { return $false }
+
+    $exception = $ErrorRecord.Exception
+    while ($null -ne $exception) {
+        if ($exception -is [System.Security.Authentication.AuthenticationException]) { return $true }
+        $exception = $exception.InnerException
+    }
+
+    return ([string]$ErrorRecord.Exception.Message -match 'AccessTokenProvider returned an empty token')
+}
+
+function Invoke-EntraFalconGraphBatch {
+    <#
+    .SYNOPSIS
+        Calls Send-GraphBatchRequest with the error handling every migrated caller needs.
+
+    .DESCRIPTION
+        The transport reconciles unanswered request IDs on its normal return path, so a blanket
+        -ErrorAction Stop would discard results it had already collected. This wrapper keeps the
+        batch error non-terminating and captures it, while still catching provider failures and
+        other terminating errors, which escape before that reconciliation runs.
+
+        Only parameters the caller actually supplied are forwarded, so transport defaults such as
+        MaxBatchSize are never overridden by wrapper defaults.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Requests,
+        [Parameter(Mandatory = $true)][scriptblock]$Provider,
+        [Parameter(Mandatory = $false)][hashtable]$QueryParameters,
+        [Parameter(Mandatory = $false)][string]$UserAgent,
+        [Parameter(Mandatory = $false)][switch]$BetaAPI,
+        [Parameter(Mandatory = $false)][int]$MaxBatchSize,
+        [Parameter(Mandatory = $false)][double]$BatchDelay,
+        [Parameter(Mandatory = $false)][switch]$DisablePagination,
+        [Parameter(Mandatory = $false)][switch]$Silent
+    )
+
+    if (@($Requests).Count -eq 0) { return @() }
+
+    $splat = @{
+        AccessTokenProvider = $Provider
+        Requests            = $Requests
+    }
+    foreach ($name in @('QueryParameters', 'UserAgent', 'BetaAPI', 'MaxBatchSize', 'BatchDelay', 'DisablePagination', 'Silent')) {
+        if ($PSBoundParameters.ContainsKey($name)) { $splat[$name] = $PSBoundParameters[$name] }
+    }
+
+    $batchErrors = $null
+    try {
+        $responses = @(Send-GraphBatchRequest @splat -ErrorAction SilentlyContinue -ErrorVariable batchErrors)
+    } catch {
+        # An unusable credential is an activity failure, not a per-ID gap: continuing would turn
+        # every remaining chunk into an empty result that looks like real data.
+        if (Test-EntraFalconAuthenticationFailure $_) {
+            throw
+        }
+        Write-Log -Level Debug -Message "[GraphBatch] Terminating failure, no results reconciled: $($_.Exception.Message)"
+        return @()
+    }
+
+    # The transport retries 401 when a provider is supplied, so an authentication failure reaching
+    # this point has exhausted those attempts and renewal is not fixing it.
+    $authFailureDetail = $null
+
+    foreach ($batchError in @($batchErrors)) {
+        if ($null -ne $batchError) {
+            Write-Log -Level Debug -Message "[GraphBatch] $batchError"
+            if ($null -eq $authFailureDetail -and (Test-EntraFalconAuthenticationFailureText $batchError)) {
+                $authFailureDetail = "the batch request was rejected: $batchError"
+            }
+        }
+    }
+
+    if ($null -eq $authFailureDetail) {
+        foreach ($entry in @($responses)) {
+            if ($null -eq $entry) { continue }
+            $paginationStatus = 0
+            if (([int]::TryParse([string]$entry.paginationFailureStatus, [ref]$paginationStatus) -and $paginationStatus -eq 401) -or
+                [string]$entry.paginationFailureErrorCode -eq 'InvalidAuthenticationToken') {
+                $authFailureDetail = "a pagination request for '$($entry.id)' was rejected with an authentication failure"
+                break
+            }
+            $entryStatus = 0
+            if ([int]::TryParse([string]$entry.status, [ref]$entryStatus) -and $entryStatus -eq 401) {
+                $authFailureDetail = "request '$($entry.id)' returned HTTP 401 after the transport exhausted its retries"
+                break
+            }
+            if ([string]$entry.errorCode -eq 'InvalidAuthenticationToken') {
+                $authFailureDetail = "request '$($entry.id)' was rejected with InvalidAuthenticationToken"
+                break
+            }
+        }
+    }
+
+    if ($null -ne $authFailureDetail) {
+        throw (New-Object System.Security.Authentication.AuthenticationException("Microsoft Graph rejected the access token and renewal did not recover it - $authFailureDetail"))
+    }
+
+    return $responses
+}
+
+# An empty collection is still a collection, so test for the property, not for content.
+function Test-EntraFalconBatchCollectionBody ($Entry) {
+    if ($null -eq $Entry -or $null -eq $Entry.response) { return $false }
+
+    $response = $Entry.response
+    if ($response -is [System.Collections.IDictionary]) { return $response.Contains('value') }
+    return ($null -ne $response.PSObject.Properties['value'])
+}
+
+function Get-EntraFalconObjectRelationshipChunked {
+    <#
+    .SYNOPSIS
+        Collects one per-object relationship in memory-bounded chunks.
+
+    .DESCRIPTION
+        Each chunk's requests and responses are consumed into the result map and released before the
+        next chunk is built, so the transient allocation stays bounded regardless of tenant size.
+        Per-object coverage is recorded so an incomplete answer is never reported as an empty
+        relationship.
+
+    .PARAMETER Objects
+        Directory objects to expand. Only the id property is used.
+
+    .PARAMETER UrlTemplate
+        Relative Graph URL with {0} standing in for the object id.
+
+    .PARAMETER RequestQueryParameterTemplate
+        Per-request query parameters whose values are format strings receiving the object id, for
+        endpoints that identify the object through a filter rather than through the path. Kept as
+        data rather than a scriptblock so it cannot depend on the caller's local scope.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Objects,
+        [Parameter(Mandatory = $true)][string]$UrlTemplate,
+        [Parameter(Mandatory = $true)][scriptblock]$Provider,
+        [Parameter(Mandatory = $true)][int]$BatchSize,
+        [Parameter(Mandatory = $true)][hashtable]$QueryParameters,
+        [Parameter(Mandatory = $false)][hashtable]$RequestHeaders,
+        [Parameter(Mandatory = $false)][hashtable]$RequestQueryParameterTemplate,
+        [Parameter(Mandatory = $false)][string]$UserAgent
+    )
+
+    $values = @{}
+    $coverage = @{}
+    $total = @($Objects).Count
+    if ($total -eq 0) {
+        return [pscustomobject]@{ Values = $values; Coverage = $coverage }
+    }
+
+    $chunkCount = [math]::Ceiling($total / $BatchSize)
+    for ($chunkIndex = 0; $chunkIndex -lt $chunkCount; $chunkIndex++) {
+        $startIndex = $chunkIndex * $BatchSize
+        $endIndex = [math]::Min($startIndex + $BatchSize - 1, $total - 1)
+        $batch = $Objects[$startIndex..$endIndex]
+
+        $requests = New-Object System.Collections.Generic.List[Hashtable]
+        $expectedIds = New-Object System.Collections.Generic.List[string]
+        foreach ($item in $batch) {
+            $req = @{
+                "id"     = $item.id
+                "method" = "GET"
+                "url"    = ($UrlTemplate -f $item.id)
+            }
+            if ($RequestHeaders) { $req["headers"] = $RequestHeaders }
+            if ($RequestQueryParameterTemplate) {
+                $perRequest = @{}
+                foreach ($key in $RequestQueryParameterTemplate.Keys) {
+                    $perRequest[$key] = ([string]$RequestQueryParameterTemplate[$key] -f $item.id)
+                }
+                $req["queryParameters"] = $perRequest
+            }
+            $requests.Add($req)
+            $expectedIds.Add([string]$item.id)
+        }
+
+        $raw = Invoke-EntraFalconGraphBatch -Requests $requests -Provider $Provider -BetaAPI -UserAgent $UserAgent -QueryParameters $QueryParameters
+        $chunkCoverage = Get-EntraFalconBatchCoverage -Responses @($raw) -ExpectedIds $expectedIds
+
+        foreach ($id in $chunkCoverage.Records.Keys) {
+            $record = $chunkCoverage.Records[$id]
+            if ($record.State -ne 'Complete') { $coverage[$id] = $record.State }
+            $observed = @($record.Value)
+            if ($observed.Count -gt 0) { $values[$id] = $observed }
+        }
+
+        Remove-Variable -Name requests, expectedIds, raw, chunkCoverage, batch -ErrorAction SilentlyContinue
+    }
+
+    return [pscustomobject]@{ Values = $values; Coverage = $coverage }
+}
+
+function Get-EntraFalconBatchCoverage {
+    <#
+    .SYNOPSIS
+        Classifies a Send-GraphBatchRequest result set against the IDs that were requested.
+
+    .DESCRIPTION
+        Returns one record per expected ID with a State of Complete, Partial or Unknown, plus the
+        usable payload where one exists. Missing completeness metadata is treated as an unsupported
+        contract, never as success.
+
+    .PARAMETER PaginationDisabledExpected
+        Set by first-page probes that intentionally pass -DisablePagination. Their entries are
+        reported as PartialByDesign instead of Partial.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Responses,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$ExpectedIds,
+        [Parameter(Mandatory = $false)][switch]$PaginationDisabledExpected
+    )
+
+    $byId = @{}
+    $duplicateResponseIds = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in @($Responses)) {
+        if ($null -eq $entry) { continue }
+        $key = [string]$entry.id
+        if ($byId.ContainsKey($key)) {
+            $duplicateResponseIds.Add($key)
+            continue
+        }
+        $byId[$key] = $entry
+    }
+
+    $records = @{}
+    $completeIds = [System.Collections.Generic.List[string]]::new()
+    $partialIds = [System.Collections.Generic.List[string]]::new()
+    $unknownIds = [System.Collections.Generic.List[string]]::new()
+    $seen = @{}
+
+    foreach ($expected in @($ExpectedIds)) {
+        $key = [string]$expected
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+
+        $entry = $null
+        if ($byId.ContainsKey($key)) { $entry = $byId[$key] }
+
+        $state = 'Unknown'
+        $reason = $null
+        $value = @()
+        $status = $null
+
+        if ($null -eq $entry) {
+            $reason = 'NoResponse'
+        } elseif ($duplicateResponseIds -contains $key) {
+            # Two entries claimed this ID and may disagree, so the result is unusable, not
+            # first-wins.
+            $status = $entry.status
+            $reason = 'AmbiguousResponse'
+        } else {
+            $status = $entry.status
+            $completeValue = $null
+            $hasComplete = $false
+            if ($entry -is [System.Collections.IDictionary]) {
+                $hasComplete = $entry.Contains('complete')
+            } elseif ($null -ne $entry.PSObject.Properties['complete']) {
+                $hasComplete = $true
+            }
+            if ($hasComplete) { $completeValue = $entry.complete }
+
+            if (-not $hasComplete) {
+                # Never infer success from a transport that does not report completeness.
+                $reason = 'UnsupportedContract'
+            } elseif ($completeValue -isnot [bool]) {
+                # Malformed contract: casting would silently turn the string 'false' into $true.
+                $reason = 'UnsupportedContract'
+            } else {
+                $complete = $completeValue
+                $success = Test-EntraFalconSuccessStatus $status
+                $hasBody = Test-EntraFalconBatchCollectionBody $entry
+                # @($null) has a Count of 1 in PowerShell, so nulls are dropped rather than
+                # counted as one real object.
+                if ($hasBody) { $value = @($entry.response.value | Where-Object { $null -ne $_ }) }
+
+                if ($complete -and $success -and -not $hasBody) {
+                    # Without a body there is nothing to separate "no members" from "no answer".
+                    $reason = 'MalformedBody'
+                } elseif ($complete -and $success) {
+                    $state = 'Complete'
+                } elseif (-not $success) {
+                    $reason = [string]$entry.incompleteReason
+                    if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'RequestFailed' }
+                } else {
+                    $reason = [string]$entry.incompleteReason
+                    if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'Incomplete' }
+                    if ($reason -eq 'PaginationDisabled') {
+                        if ($PaginationDisabledExpected) {
+                            $state = 'PartialByDesign'
+                        } else {
+                            $state = 'Partial'
+                        }
+                    } elseif ($reason -eq 'PaginationFailed') {
+                        # First-page objects are real, but counts and absence are not.
+                        $state = 'Partial'
+                    }
+                }
+            }
+        }
+
+        if ($state -eq 'Complete') {
+            $completeIds.Add($key)
+        } elseif ($state -eq 'Partial' -or $state -eq 'PartialByDesign') {
+            $partialIds.Add($key)
+        } else {
+            $unknownIds.Add($key)
+            $value = @()
+        }
+
+        $records[$key] = [pscustomobject]@{
+            Id     = $key
+            State  = $state
+            Status = $status
+            Reason = $reason
+            Value  = $value
+        }
+    }
+
+    $outcome = 'Complete'
+    if ($unknownIds.Count -gt 0 -or $partialIds.Count -gt 0) { $outcome = 'Partial' }
+    if ($completeIds.Count -eq 0 -and ($unknownIds.Count -gt 0 -or $partialIds.Count -gt 0)) { $outcome = 'Unavailable' }
+
+    return [pscustomobject]@{
+        Outcome              = $outcome
+        Records              = $records
+        CompleteIds          = $completeIds
+        PartialIds           = $partialIds
+        UnknownIds           = $unknownIds
+        DuplicateResponseIds = $duplicateResponseIds
+    }
+}
+#endregion
 
 #Entra role rating (Tier level per role)
 $global:GLOBALEntraRoleRating = @{
@@ -9813,28 +10400,38 @@ function Get-PIMForGroupsAssignmentsDetails {
         [array]$TenantPimForGroupsAssignments
     )
 
-    foreach ($item in $TenantPimForGroupsAssignments) {
+    # Bulk resolve first, so the per-object type probe is skipped for anything resolved completely.
+    Initialize-EntraFalconObjectInfoCache -ObjectIds @(@($TenantPimForGroupsAssignments) | ForEach-Object { [string]$_.principalId })
 
-        $principalId = $item.principalId
-        
+    # Grouped once, so each distinct principal is resolved and stamped without rescanning.
+    $AssignmentsByPrincipal = @{}
+    foreach ($item in @($TenantPimForGroupsAssignments)) {
+        $principalKey = [string]$item.principalId
+        if ([string]::IsNullOrWhiteSpace($principalKey)) { continue }
+        if (-not $AssignmentsByPrincipal.ContainsKey($principalKey)) {
+            $AssignmentsByPrincipal[$principalKey] = [System.Collections.Generic.List[object]]::new()
+        }
+        $AssignmentsByPrincipal[$principalKey].Add($item)
+    }
+
+    foreach ($principalId in @($AssignmentsByPrincipal.Keys)) {
+
         # Lookup displayname and object type for each object
         $ObjectInfo = Get-ObjectInfo $principalId
 
         if ($ObjectInfo) {
             # Add properties to the matching entry
-            $TenantPimForGroupsAssignments | ForEach-Object {
-                if ($_.principalId -eq $principalId) {
-                    $_ | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $ObjectInfo.DisplayName -Force
-                    $_ | Add-Member -MemberType NoteProperty -Name "Type" -Value $ObjectInfo.Type -Force
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'UserPrincipalName') {$_ | Add-Member -MemberType NoteProperty -Name "UserPrincipalName" -Value $ObjectInfo.UserPrincipalName -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'AccountEnabled') {$_ | Add-Member -MemberType NoteProperty -Name "AccountEnabled" -Value $ObjectInfo.AccountEnabled -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'UserType') {$_ | Add-Member -MemberType NoteProperty -Name "UserType" -Value $ObjectInfo.UserType -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'OnPremisesSyncEnabled') {$_ | Add-Member -MemberType NoteProperty -Name "OnPremisesSyncEnabled" -Value $ObjectInfo.OnPremisesSyncEnabled -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'Department') {$_ | Add-Member -MemberType NoteProperty -Name "Department" -Value $ObjectInfo.Department -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'JobTitle') {$_ | Add-Member -MemberType NoteProperty -Name "JobTitle" -Value $ObjectInfo.JobTitle -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'SecurityEnabled') {$_ | Add-Member -MemberType NoteProperty -Name "SecurityEnabled" -Value $ObjectInfo.SecurityEnabled -Force}
-                    if ($ObjectInfo.PSObject.Properties.Name -contains 'IsAssignableToRole') {$_ | Add-Member -MemberType NoteProperty -Name "IsAssignableToRole" -Value $ObjectInfo.IsAssignableToRole -Force}
-                }
+            foreach ($assignment in $AssignmentsByPrincipal[$principalId]) {
+                $assignment | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $ObjectInfo.DisplayName -Force
+                $assignment | Add-Member -MemberType NoteProperty -Name "Type" -Value $ObjectInfo.Type -Force
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'UserPrincipalName') {$assignment | Add-Member -MemberType NoteProperty -Name "UserPrincipalName" -Value $ObjectInfo.UserPrincipalName -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'AccountEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "AccountEnabled" -Value $ObjectInfo.AccountEnabled -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'UserType') {$assignment | Add-Member -MemberType NoteProperty -Name "UserType" -Value $ObjectInfo.UserType -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'OnPremisesSyncEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "OnPremisesSyncEnabled" -Value $ObjectInfo.OnPremisesSyncEnabled -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'Department') {$assignment | Add-Member -MemberType NoteProperty -Name "Department" -Value $ObjectInfo.Department -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'JobTitle') {$assignment | Add-Member -MemberType NoteProperty -Name "JobTitle" -Value $ObjectInfo.JobTitle -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'SecurityEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "SecurityEnabled" -Value $ObjectInfo.SecurityEnabled -Force}
+                if ($ObjectInfo.PSObject.Properties.Name -contains 'IsAssignableToRole') {$assignment | Add-Member -MemberType NoteProperty -Name "IsAssignableToRole" -Value $ObjectInfo.IsAssignableToRole -Force}
             }
         }
     }
@@ -9843,38 +10440,81 @@ function Get-PIMForGroupsAssignmentsDetails {
 
 # Function to get all administrative units
 function Get-AdministrativeUnitsWithMembers {
+    Param (
+        [Parameter(Mandatory = $false)][int]$ApiTop = 999
+    )
+
     Write-Host "[*] Get Administrative units with members"
+
+    # Reset so an earlier run or early exit cannot leave stale state for the report warnings.
+    $global:GLOBALAdminUnitsUnavailable = $false
+    $global:GLOBALAdminUnitsIncompleteCount = 0
+
     $QueryParameters = @{
         '$select' = "Id,DisplayName,IsMemberManagementRestricted"
+        '$top' = $ApiTop
     }
-    $AdminUnits = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/directory/administrativeUnits" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+
+    # Reported as unknown rather than as a tenant without administrative units: membership feeds
+    # restricted-management conclusions in the group and user reports.
+    try {
+        $AdminUnits = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/directory/administrativeUnits" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        Write-Log -Level Debug -Message "Administrative unit enumeration failed: $($_.Exception.Message)"
+        Write-Host "[!] Administrative units could not be enumerated; administrative unit membership is unknown."
+        $global:GLOBALAdminUnitsUnavailable = $true
+        $GlobalAuditSummary.AdministrativeUnits.Count = 0
+        return @()
+    }
+
+    # The coverage map records units whose membership could not be fully retrieved.
+    $MembersResult = Get-EntraFalconObjectRelationshipChunked -Objects @($AdminUnits) `
+        -UrlTemplate "/directory/administrativeUnits/{0}/members" `
+        -Provider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) `
+        -BatchSize 10000 `
+        -QueryParameters @{ '$select' = 'id,displayName'; '$top' = $ApiTop } `
+        -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+
+    $global:GLOBALAdminUnitsIncompleteCount = $MembersResult.Coverage.Count
 
     $AdminUnitWithMembers = foreach ($AdminUnit in $AdminUnits) {
+        $auKey = [string]$AdminUnit.Id
+        $Members = if ($MembersResult.Values.ContainsKey($auKey)) { $MembersResult.Values[$auKey] } else { @() }
 
-        # Retrieve members of the current administrative unit
-        $Members = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/directory/administrativeUnits/$($AdminUnit.Id)/members" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $MembersUser = [System.Collections.Generic.List[object]]::new()
+        $MembersGroup = [System.Collections.Generic.List[object]]::new()
+        foreach ($Member in $Members) {
+            switch ($Member.'@odata.type') {
+                '#microsoft.graph.user' {
+                    $MembersUser.Add([pscustomobject]@{ id = $Member.id; Type = 'User'; displayName = $Member.displayName })
+                    break
+                }
+                '#microsoft.graph.group' {
+                    $MembersGroup.Add([pscustomobject]@{ id = $Member.id; Type = 'Group'; displayName = $Member.displayName })
+                    break
+                }
+            }
+        }
 
-        $MembersUser = $Members | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.user'} | Select-Object id,@{n='Type';e={'User'}},displayName
-        $MembersGroup = $Members | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.group'}  | Select-Object id,@{n='Type';e={'Group'}},displayName
-        $MembersDevices = $Members | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.device'} | Select-Object id,@{n='Type';e={'Device'}},displayName
-    
         # Create a custom object for the administrative unit with its members
         [pscustomobject]@{
             AuId                            = $AdminUnit.Id
             DisplayName                     = $AdminUnit.Displayname
             IsMemberManagementRestricted    = $AdminUnit.IsMemberManagementRestricted
-            MembersUser                     = $MembersUser
-            MembersGroup                    = $MembersGroup
-            MembersDevices                  = $MembersDevices
+            MembersUser                     = $MembersUser.ToArray()
+            MembersGroup                    = $MembersGroup.ToArray()
         }
     }
 
-    $AuCount = $($AdminUnitWithMembers | Measure-Object).Count
+    $AuCount = @($AdminUnitWithMembers).Count
 
     #Add information to the enumeration summary
     $GlobalAuditSummary.AdministrativeUnits.Count = $AuCount
 
     Write-Host "[+] Got $AuCount Administrative units with members"
+    if ($global:GLOBALAdminUnitsIncompleteCount -gt 0) {
+        Write-Host "[!] Membership could not be fully enumerated for $($global:GLOBALAdminUnitsIncompleteCount) administrative unit(s)."
+    }
     Return $AdminUnitWithMembers
 }
 
@@ -10009,6 +10649,18 @@ function Get-EntraPIMRoleAssignments {
         Return
     }
 
+    # Scope IDs are normalised the same way the loop below does it. The tenant root is skipped
+    # because it never reaches Get-ObjectInfo.
+    Initialize-EntraFalconObjectInfoCache -ObjectIds @(@($PimRoles) | ForEach-Object {
+        $scopeId = [string]$_.DirectoryScopeId
+        if ($scopeId -eq "/") { return }
+        if ($scopeId.Contains("administrativeUnits")) {
+            $scopeId.Replace("/administrativeUnits/", "")
+        } else {
+            $scopeId.Replace("/", "")
+        }
+    })
+
     $PimRoles | ForEach-Object {
         $ScopeResolved = $null
 
@@ -10140,6 +10792,16 @@ function Get-EntraRoleAssignments {
         '$expand' = "RoleDefinition"
     }
     $TenantRoleAssignmentsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/roleManagement/directory/roleAssignments" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+
+    Initialize-EntraFalconObjectInfoCache -ObjectIds @(@($TenantRoleAssignmentsRaw) | ForEach-Object {
+        $scopeId = [string]$_.DirectoryScopeId
+        if ($scopeId -eq "/") { return }
+        if ($scopeId.Contains("administrativeUnits")) {
+            $scopeId.Replace("/administrativeUnits/", "")
+        } else {
+            $scopeId.Replace("/", "")
+        }
+    })
 
     foreach ($role in $TenantRoleAssignmentsRaw) {
         $ScopeResolved = $null
@@ -10639,6 +11301,8 @@ function Get-PimforGroupsAssignments {
     $global:GLOBALPimForGroupsHT = @{}
     $global:GLOBALPimForGroupsResources = @()
     $global:GLOBALPimForGroupsAssignmentObjects = @()
+    # Reset so a later run or early exit cannot leave a stale count for the report warnings.
+    $global:GLOBALPimForGroupsIncompleteGroupCount = 0
     $isBroCiFlow = $false
     if ($GLOBALAuthMethods -and $GLOBALAuthMethods.ContainsKey("AuthFlow")) {
         $isBroCiFlow = @("BroCi", "BroCiManualCode", "BroCiToken") -contains [string]$GLOBALAuthMethods.AuthFlow
@@ -10711,23 +11375,63 @@ function Get-PimforGroupsAssignments {
             if ($PimEnabledGroupsCount -ge 1) {
                 Write-Host "[+] Got $PimEnabledGroupsCount PIM enabled groups"
                                      
-                $Requests = @()
-                $RequestID = 0
-                # Loop through each group and create a request entry
-                $PimEnabledGroups | ForEach-Object {
-                    $RequestID++
-                    $Requests += @{
-                        "id"     = $RequestID  # Unique request ID
-                        "method" = "GET"
-                        "url"    =   "/identityGovernance/privilegedAccess/group/eligibilitySchedules?`$select=accessId,groupId,principalId&`$filter=groupId eq '$($_.id)'"
-                    }
-                }
                 Write-Host "[*] Get eligible objects for those groups"
-                # Send Batch request
-                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -BatchDelay 1 -MaxBatchSize 8 -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
+
+                # Deliberately slow (small batches plus a delay), so this phase can outlast a
+                # token. The chunking below only bounds transient memory.
+                $PimGroupTokenProvider = New-EntraFalconGraphTokenProvider -Purpose PimForGroup
+                $PimEnabledGroupsArray = @($PimEnabledGroups)
+                $PimChunkSize = 10000
+                $PimChunkCount = [math]::Ceiling($PimEnabledGroupsArray.Count / $PimChunkSize)
+                $CollectedAssignments = [System.Collections.Generic.List[object]]::new()
+                $IncompleteEligibilityGroups = [System.Collections.Generic.List[string]]::new()
+                $RequestID = 0
+
+                for ($PimChunkIndex = 0; $PimChunkIndex -lt $PimChunkCount; $PimChunkIndex++) {
+                    $PimStart = $PimChunkIndex * $PimChunkSize
+                    $PimEnd = [math]::Min($PimStart + $PimChunkSize - 1, $PimEnabledGroupsArray.Count - 1)
+
+                    $Requests = [System.Collections.Generic.List[hashtable]]::new()
+                    $ExpectedIds = [System.Collections.Generic.List[string]]::new()
+                    $RequestGroupMap = @{}
+                    foreach ($PimGroup in $PimEnabledGroupsArray[$PimStart..$PimEnd]) {
+                        $RequestID++
+                        $RequestKey = [string]$RequestID
+                        $Requests.Add(@{
+                            "id"     = $RequestKey  # Unique request ID
+                            "method" = "GET"
+                            "url"    =   "/identityGovernance/privilegedAccess/group/eligibilitySchedules?`$select=accessId,groupId,principalId&`$filter=groupId eq '$($PimGroup.id)'"
+                        })
+                        $ExpectedIds.Add($RequestKey)
+                        $RequestGroupMap[$RequestKey] = [string]$PimGroup.id
+                    }
+
+                    $PimResponse = Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $PimGroupTokenProvider -BetaAPI -BatchDelay 1 -MaxBatchSize 8 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+                    $PimCoverage = Get-EntraFalconBatchCoverage -Responses @($PimResponse) -ExpectedIds $ExpectedIds
+
+                    # Request order, not hashtable order: this list is returned and written to
+                    # reports, so the sequence must stay stable across runs.
+                    foreach ($RequestKey in $ExpectedIds) {
+                        if (-not $PimCoverage.Records.ContainsKey($RequestKey)) { continue }
+                        $PimRecord = $PimCoverage.Records[$RequestKey]
+                        # Observed eligibility stays usable; a failed query must not read as none.
+                        foreach ($Assignment in @($PimRecord.Value)) { $CollectedAssignments.Add($Assignment) }
+                        if ($PimRecord.State -ne 'Complete') {
+                            $IncompleteEligibilityGroups.Add($RequestGroupMap[$RequestKey])
+                        }
+                    }
+
+                    Remove-Variable -Name Requests, ExpectedIds, RequestGroupMap, PimResponse, PimCoverage -ErrorAction SilentlyContinue
+                }
+
+                $PIMforGroupsAssignments = $CollectedAssignments.ToArray()
                 $global:GLOBALPimForGroupsAssignmentObjects = @($PIMforGroupsAssignments)
+                $global:GLOBALPimForGroupsIncompleteGroupCount = $IncompleteEligibilityGroups.Count
                 Write-Host "[+] Got $($PIMforGroupsAssignments.Count) objects eligible for a PIM-enabled group"
-                
+                if ($IncompleteEligibilityGroups.Count -gt 0) {
+                    Write-Host "[!] Eligibility could not be fully enumerated for $($IncompleteEligibilityGroups.Count) PIM-enabled group(s)."
+                }
+
             } else {
                 Write-Host "[!] No PIM enabled groups found"
                 $PIMforGroupsAssignments = ""
@@ -11178,7 +11882,7 @@ function Get-TenantReportAvailability {
         $requests.Add($req)
     }
 
-    $response = Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $requests -BetaAPI -UserAgent $GlobalAuditSummary.UserAgent.Name -QueryParameters @{ '$select' = 'id'; '$top' = '1' } -DisablePagination
+    $response = Send-GraphBatchRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Requests $requests -BetaAPI -UserAgent $GlobalAuditSummary.UserAgent.Name -QueryParameters @{ '$select' = 'id'; '$top' = '1' } -DisablePagination
 
     $result = [ordered]@{}
     foreach ($spec in $requestSpecs) {
@@ -11204,15 +11908,213 @@ function Get-TenantReportAvailability {
 if (-not $script:ObjectInfoCache) {
     $script:ObjectInfoCache = @{}
 }
+
+# Always sent explicitly: the documented default excludes CSP partner references, which
+# check_Roles depends on resolving.
+$script:EntraFalconBulkResolveTypes = @(
+    'user', 'group', 'servicePrincipal', 'device',
+    'directoryObjectPartnerReference', 'application', 'administrativeUnit'
+)
+
+# Seeded keys come from Graph, lookup keys from a caller's scope string. Both normalise here or
+# the cache misses silently and degrades to the full probe.
+function ConvertTo-EntraFalconObjectInfoCacheKey ($Type, $ObjectId) {
+    return ("{0}|{1}" -f ([string]$Type).ToLowerInvariant(), ([string]$ObjectId).ToLowerInvariant())
+}
+
+function Test-EntraFalconObjectProperty ($Object, $Name) {
+    if ($null -eq $Object) { return $false }
+    return ($null -ne $Object.PSObject.Properties[$Name])
+}
+
+# Returns $null when the payload is not complete enough to trust, which leaves the ID uncached
+# and sends Get-ObjectInfo down its probe path.
+function ConvertFrom-EntraFalconBulkDirectoryObject ($Item) {
+    if ($null -eq $Item) { return $null }
+    if (-not (Test-EntraFalconObjectProperty $Item 'id')) { return $null }
+    if (-not (Test-EntraFalconObjectProperty $Item '@odata.type')) { return $null }
+    if (-not (Test-EntraFalconObjectProperty $Item 'displayName')) { return $null }
+    if ([string]::IsNullOrWhiteSpace([string]$Item.displayName)) { return $null }
+
+    # Property sets mirror the Get-ObjectInfo literals exactly, order included. Callers gate on
+    # PSObject.Properties.Name, so a missing property changes behaviour even though reading it
+    # would yield $null either way.
+    switch ([string]$Item.'@odata.type') {
+
+        '#microsoft.graph.servicePrincipal' {
+            # Deliberately not differentiating managed identities: the probe branch does not either.
+            return @{
+                Prefix = 'serviceprincipal'
+                Object = [PSCustomObject]@{
+                    DisplayName = $Item.displayName
+                    Type        = "Enterprise Application"
+                }
+            }
+        }
+
+        '#microsoft.graph.application' {
+            return @{
+                Prefix = 'appregistration'
+                Object = [PSCustomObject]@{
+                    DisplayName = $Item.displayName
+                    Type        = "App Registration"
+                }
+            }
+        }
+
+        '#microsoft.graph.administrativeUnit' {
+            return @{
+                Prefix = 'administrativeunit'
+                Object = [PSCustomObject]@{
+                    DisplayName = $Item.displayName
+                    Type        = "Administrative Unit"
+                }
+            }
+        }
+
+        '#microsoft.graph.user' {
+            # Once cached, a limited-information response is indistinguishable from a real one.
+            foreach ($required in @('userPrincipalName', 'accountEnabled', 'userType', 'onPremisesSyncEnabled')) {
+                if (-not (Test-EntraFalconObjectProperty $Item $required)) { return $null }
+            }
+            if ($null -eq $Item.userPrincipalName) { return $null }
+            if ($null -eq $Item.accountEnabled) { return $null }
+
+            # Descriptive only, and Graph omits null-valued properties from default payloads, so
+            # absent and null are equivalent here.
+            $jobTitle = $null
+            if (Test-EntraFalconObjectProperty $Item 'jobTitle') { $jobTitle = $Item.jobTitle }
+            $department = $null
+            if (Test-EntraFalconObjectProperty $Item 'department') { $department = $Item.department }
+
+            return @{
+                Prefix = 'user'
+                Object = [PSCustomObject]@{
+                    DisplayName           = $Item.displayName
+                    UserPrincipalName     = $Item.userPrincipalName
+                    Type                  = "User"
+                    AccountEnabled        = $Item.accountEnabled
+                    UserType              = $Item.userType
+                    OnPremisesSyncEnabled = $Item.onPremisesSyncEnabled
+                    JobTitle              = $jobTitle
+                    Department            = $department
+                }
+            }
+        }
+
+        '#microsoft.graph.group' {
+            foreach ($required in @('securityEnabled', 'isAssignableToRole')) {
+                if (-not (Test-EntraFalconObjectProperty $Item $required)) { return $null }
+            }
+            if ($null -eq $Item.securityEnabled) { return $null }
+
+            # isAssignableToRole is legitimately nullable; apply the same conversion as the probe.
+            $isAssignableToRole = $false
+            if ($null -ne $Item.isAssignableToRole) { $isAssignableToRole = $Item.isAssignableToRole }
+
+            return @{
+                Prefix = 'group'
+                Object = [PSCustomObject]@{
+                    DisplayName        = $Item.displayName
+                    Type               = "Group"
+                    SecurityEnabled    = $Item.securityEnabled
+                    IsAssignableToRole = $isAssignableToRole
+                }
+            }
+        }
+    }
+
+    # Devices, partner references and the rest have no Get-ObjectInfo branch, so leave them
+    # uncached.
+    return $null
+}
+
+function Initialize-EntraFalconObjectInfoCache {
+    <#
+    .SYNOPSIS
+        Bulk-resolves directory objects so Get-ObjectInfo can skip its per-object type probe.
+
+    .DESCRIPTION
+        Get-ObjectInfo probes up to five endpoints in sequence to discover an object's type. This
+        resolves a whole set in one request per 1000 IDs and seeds the shared cache, leaving
+        anything it cannot resolve completely to the existing fallback. It is a fast path only:
+        callers never depend on it succeeding.
+    #>
+    [CmdletBinding()]
+    param(
+        # AllowEmptyString as well as AllowEmptyCollection: a mandatory [string[]] rejects an array
+        # containing an empty element at binding time, aborting the caller's whole collection.
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowEmptyString()][AllowNull()][string[]]$ObjectIds
+    )
+
+    $pending = New-Object 'System.Collections.Generic.List[string]'
+    $seen = @{}
+    foreach ($rawId in @($ObjectIds)) {
+        $id = ([string]$rawId).Trim()
+        if ([string]::IsNullOrWhiteSpace($id)) { continue }
+        if ($id -eq '/') { continue }
+
+        $normalized = $id.ToLowerInvariant()
+        if ($seen.ContainsKey($normalized)) { continue }
+        $seen[$normalized] = $true
+
+        if ($script:ObjectInfoCache.ContainsKey((ConvertTo-EntraFalconObjectInfoCacheKey 'unknown' $id))) { continue }
+        $pending.Add($id)
+    }
+
+    if ($pending.Count -eq 0) { return }
+
+    $provider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+    $resolved = 0
+
+    for ($offset = 0; $offset -lt $pending.Count; $offset += 1000) {
+        $endIndex = [math]::Min($offset + 999, $pending.Count - 1)
+        $chunk = @($pending[$offset..$endIndex])
+
+        $requestedIds = @{}
+        foreach ($chunkId in $chunk) { $requestedIds[$chunkId.ToLowerInvariant()] = $true }
+
+        try {
+            $body = @{
+                ids   = $chunk
+                types = $script:EntraFalconBulkResolveTypes
+            }
+            $response = Send-GraphRequest -AccessTokenProvider $provider -Method POST -Uri "/directoryObjects/getByIds" -Body $body -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+        } catch {
+            # One failed chunk must not abort the rest; its IDs stay uncached for the fallback.
+            Write-Log -Level Debug -Message "[ObjectInfo] Bulk resolution failed for $($chunk.Count) object(s); they will be resolved individually: $($_.Exception.Message)"
+            continue
+        }
+
+        foreach ($item in @($response)) {
+            if ($null -eq $item) { continue }
+            $itemId = [string]$item.id
+            if ([string]::IsNullOrWhiteSpace($itemId)) { continue }
+            if (-not $requestedIds.ContainsKey($itemId.ToLowerInvariant())) { continue }
+
+            $entry = ConvertFrom-EntraFalconBulkDirectoryObject $item
+            if ($null -eq $entry) { continue }
+
+            $script:ObjectInfoCache[(ConvertTo-EntraFalconObjectInfoCacheKey 'unknown' $itemId)] = $entry.Object
+            $script:ObjectInfoCache[(ConvertTo-EntraFalconObjectInfoCacheKey $entry.Prefix $itemId)] = $entry.Object
+            $resolved++
+        }
+    }
+
+    Write-Log -Level Verbose -Message "[ObjectInfo] Bulk resolved $resolved of $($pending.Count) object(s); the remainder use the individual lookup."
+    return
+}
+
 function Get-ObjectInfo {
     param(
         [Parameter(Mandatory)][string]$ObjectID,
         [string]$type = "unknown"
     )
 
-    # Caching
+    # The ID is normalised too, so an entry seeded from Graph's casing is found by a caller
+    # looking it up with the casing from a scope string.
     $normalizedType = $type.ToString().ToLowerInvariant()
-    $cacheKey = "$normalizedType|$ObjectID"
+    $cacheKey = ConvertTo-EntraFalconObjectInfoCacheKey $normalizedType $ObjectID
     if ($script:ObjectInfoCache.ContainsKey($cacheKey)) {
         Write-Log -Level Trace -Message "Cache hit for $ObjectID"
         return $script:ObjectInfoCache[$cacheKey]
@@ -11224,7 +12126,7 @@ function Get-ObjectInfo {
         $QueryParameters = @{
             '$select' = "Id,DisplayName"
         }
-        $EnterpriseApp = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/servicePrincipals/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $EnterpriseApp = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/servicePrincipals/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
         if ($EnterpriseApp) {
             $object = [PSCustomObject]@{ 
                 DisplayName = $EnterpriseApp.DisplayName
@@ -11240,7 +12142,7 @@ function Get-ObjectInfo {
         $QueryParameters = @{
             '$select' = "Id,DisplayName"
         }
-        $AppRegistration = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/applications/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $AppRegistration = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/applications/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
         if ($AppRegistration) {
             $object = [PSCustomObject]@{ 
                 DisplayName = $AppRegistration.DisplayName
@@ -11256,7 +12158,7 @@ function Get-ObjectInfo {
         $QueryParameters = @{
             '$select' = "DisplayName"
         }
-        $AdministrativeUnit = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/directory/administrativeUnits/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $AdministrativeUnit = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/directory/administrativeUnits/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
         if ($AdministrativeUnit) {
             $object = [PSCustomObject]@{ 
                 DisplayName = $AdministrativeUnit.DisplayName
@@ -11272,7 +12174,7 @@ function Get-ObjectInfo {
         $QueryParameters = @{
             '$select' = "Id,DisplayName,UserPrincipalName,AccountEnabled,UserType,OnPremisesSyncEnabled,JobTitle,Department"
         }
-        $user = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $user = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/users/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
         if ($user) {
             $object = [PSCustomObject]@{ 
                 DisplayName = $user.DisplayName
@@ -11294,7 +12196,7 @@ function Get-ObjectInfo {
         $QueryParameters = @{
             '$select' = "Id,DisplayName,SecurityEnabled,IsAssignableToRole"
         }
-        $group = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/groups/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $group = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method GET -Uri "/groups/$ObjectID" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
         
         if ($group) {
             $IsAssignabletoRole = if ($null -ne $group.IsAssignableToRole) { $group.IsAssignableToRole } else { $false }
@@ -12041,6 +12943,19 @@ function invoke-EntraFalconAuth {
                         $true
                     }
                 }
+                PimforGroup = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALPimForGroupAccessToken.refresh_token `
+                                                -ClientId '1b730954-1685-4b74-9bfd-dac224a7b894' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
+                        $true
+                    }
+                    ServicePrincipal = {
+                        $global:GLOBALPimForGroupAccessToken = & $InvokeCC
+                        $true
+                    }
+                }
                 SecurityFindings = @{
                     Any = {
                         $tokens = Invoke-Refresh -RefreshToken $GLOBALSecurityFindingsGraphAccessTokenSpecial.refresh_token `
@@ -12081,6 +12996,18 @@ function invoke-EntraFalconAuth {
                                                 -Origin 'https://portal.azure.com' `
                                                 -DisableJwtParsing @GLOBALAuthParameters
                         $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+                PimforGroup = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '50aaa389-5a33-4f1a-91d7-2c45ecd8dac8' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
                         $true
                     }
                 }
@@ -12149,6 +13076,7 @@ function invoke-EntraFalconAuth {
 
 # Remove global variables
 function start-CleanUp {
+    Reset-EntraFalconTokenProviderState
     remove-variable -Scope Global GLOBALMsGraphAccessToken -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALApiPermissionCategorizationList -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALGraphExtendedChecks -ErrorAction SilentlyContinue
@@ -12157,6 +13085,9 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALPimForGroupsHT -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsResources -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsAssignmentObjects -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALPimForGroupsIncompleteGroupCount -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAdminUnitsUnavailable -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAdminUnitsIncompleteCount -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsPolicySettingsSupported -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsPolicySettingsSkipReason -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuditSummary -ErrorAction SilentlyContinue
@@ -12517,4 +13448,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

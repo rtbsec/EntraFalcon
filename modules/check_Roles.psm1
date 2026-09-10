@@ -186,11 +186,13 @@ function Invoke-CheckRoles {
                     "group",
                     "servicePrincipal",
                     "device",
-                    "directoryObjectPartnerReference"
+                    "directoryObjectPartnerReference",
+                    "application",
+                    "administrativeUnit"
                 )
             }
 
-            $ResolvedDirectoryObject = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method POST -Uri "/directoryObjects/getByIds" -Body $Body -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+            $ResolvedDirectoryObject = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method POST -Uri "/directoryObjects/getByIds" -Body $Body -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
             if ($ResolvedDirectoryObject) {
 
@@ -216,6 +218,7 @@ function Invoke-CheckRoles {
                         "#microsoft.graph.group" { $resolvedType = "Group" }
                         "#microsoft.graph.servicePrincipal" { $resolvedType = "Service Principal" }
                         "#microsoft.graph.application" { $resolvedType = "App Registration" }
+                        "#microsoft.graph.administrativeUnit" { $resolvedType = "Administrative Unit" }
                         "#microsoft.graph.device" { $resolvedType = "Device" }
                         default { $resolvedType = "Unknown Object" }
                     }

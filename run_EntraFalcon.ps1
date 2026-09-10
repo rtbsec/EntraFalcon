@@ -390,7 +390,7 @@ if ($RawAccessPackages.IsAvailable -and -not $RawAccessPackages.IsSkipped) {
     $AccessPackageAutoAssignmentPolicyIndex = New-AccessPackageAutoAssignmentPolicyIndex -RawAccessPackages $RawAccessPackages
 }
 
-$AdminUnitWithMembers = Get-AdministrativeUnitsWithMembers
+$AdminUnitWithMembers = Get-AdministrativeUnitsWithMembers -ApiTop $ApiTop
 $Caps = Get-ConditionalAccessPolicies
 # Get PIM eligible role assignments
 if (Invoke-MsGraphAuthPIM) {

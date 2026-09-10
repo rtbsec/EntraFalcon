@@ -28,10 +28,16 @@ function Invoke-CheckManagedIdentities {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+
     #Define basic variables
     $Title = "ManagedIdentities"
     $ProgressCounter = 0
     $ManagedIdentitiesScriptWarningList = @()
+    # Declared here so the processing loop can consult them even when no managed identities exist.
+    $AppAssignmentsCoverage = @{}
+    $GroupMemberCoverage = @{}
+    $OwnedObjectsCoverage = @{}
     $AllServicePrincipal = [System.Collections.ArrayList]::new()
     $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $SPImpactScore = @{
@@ -82,7 +88,13 @@ function Invoke-CheckManagedIdentities {
         '$select' = "Id,DisplayName,AppId,AppRoles,servicePrincipalType,createdDateTime,PasswordCredentials,KeyCredentials,AlternativeNames"
         '$top' = $ApiTop
     }
-    $ManagedIdentities = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    # A partial list cannot be told apart from a complete one, so fail instead of reporting an
+    # empty tenant.
+    try {
+        $ManagedIdentities = @(Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    } catch {
+        throw "Managed identity enumeration failed and the report cannot be produced from a partial list: $($_.Exception.Message)"
+    }
 
     
     $ManagedIdentitiesCount = $($ManagedIdentities.count)
@@ -98,65 +110,30 @@ function Invoke-CheckManagedIdentities {
     }
 
     if ($ManagedIdentitiesCount -ge 1) {
+        $RelationshipBatchSize = 10000
+
         Write-Host "[*] Get all applications API permissions assignments"
-        $Requests = @()
-        $ManagedIdentities | ForEach-Object {
-            $Requests += @{
-                "id"     = $($_.id)
-                "method" = "GET"
-                "url"    =   "/servicePrincipals/$($_.id)/appRoleAssignments?`$select=AppRoleId,ResourceId,ResourceDisplayName"
-            }
-        }
-        # Send Batch request and create a hashtable
-        $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-        $AppAssignmentsRaw = @{}
-        foreach ($item in $RawResponse) {
-            if ($item.response.value -and $item.response.value.Count -gt 0) {
-                $AppAssignmentsRaw[$item.id] = $item.response.value
-            }
-        }
+        $AppAssignmentsResult = Get-EntraFalconObjectRelationshipChunked -Objects $ManagedIdentities -UrlTemplate "/servicePrincipals/{0}/appRoleAssignments?`$select=AppRoleId,ResourceId,ResourceDisplayName" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $AppAssignmentsRaw = $AppAssignmentsResult.Values
+        $AppAssignmentsCoverage = $AppAssignmentsResult.Coverage
         Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.count) assignments"
 
-
-
         Write-Host "[*] Get all applications group memberships"
-        $Requests = @()
-        $ManagedIdentities | ForEach-Object {
-            $Requests += @{
-                "id"     = $($_.id)
-                "method" = "GET"
-                "url"    =   "/servicePrincipals/$($_.id)/transitiveMemberOf/microsoft.graph.group?`$select=Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole"
-                "$top" = $ApiTop
-            }
-        }
-        # Send Batch request and create a hashtable
-        $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-        $GroupMemberRaw = @{}
-        foreach ($item in $RawResponse) {
-            if ($item.response.value -and $item.response.value.Count -gt 0) {
-                $GroupMemberRaw[$item.id] = $item.response.value
-            }
-        }
+        $GroupMemberResult = Get-EntraFalconObjectRelationshipChunked -Objects $ManagedIdentities -UrlTemplate "/servicePrincipals/{0}/transitiveMemberOf/microsoft.graph.group?`$select=Id,displayName,visibility,securityEnabled,groupTypes,isAssignableToRole" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $GroupMemberRaw = $GroupMemberResult.Values
+        $GroupMemberCoverage = $GroupMemberResult.Coverage
         Write-Log -Level Debug -Message "Got $($GroupMemberRaw.count) memberships"
 
         Write-Host "[*] Get all application object ownerships"
-        $Requests = @()
-        $ManagedIdentities | ForEach-Object {
-            $Requests += @{
-                "id"     = $($_.id)
-                "method" = "GET"
-                "url"    =   "/servicePrincipals/$($_.id)/ownedObjects"
-            }
-        }
-        # Send Batch request and create a hashtable
-        $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-        $OwnedObjectsRaw = @{}
-        foreach ($item in $RawResponse) {
-            if ($item.response.value -and $item.response.value.Count -gt 0) {
-                $OwnedObjectsRaw[$item.id] = $item.response.value
-            }
-        }
+        $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $ManagedIdentities -UrlTemplate "/servicePrincipals/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+        $OwnedObjectsRaw = $OwnedObjectsResult.Values
+        $OwnedObjectsCoverage = $OwnedObjectsResult.Coverage
         Write-Log -Level Debug -Message "Got $($OwnedObjectsRaw.count) ownerships"
+
+        $RelationshipCoverageTotal = $AppAssignmentsCoverage.Count + $GroupMemberCoverage.Count + $OwnedObjectsCoverage.Count
+        if ($RelationshipCoverageTotal -gt 0) {
+            $ManagedIdentitiesScriptWarningList += "Coverage gap: one or more managed identity relationships (API permissions, group memberships, owned objects) could not be fully enumerated. Affected identities are marked in the Warnings column; an absence of permissions must not be read as no access."
+        }
     }
 
 
@@ -175,6 +152,18 @@ function Invoke-CheckManagedIdentities {
         $ImpactScore = $SPImpactScore["Base"]
         $LikelihoodScore = $SPLikelihoodScore["Base"] 
         $warnings = @()
+
+        $miIdKey = [string]$item.Id
+        if ($AppAssignmentsCoverage.ContainsKey($miIdKey)) {
+            $warnings += "API permissions incomplete: application permission data could not be fully retrieved"
+        }
+        if ($GroupMemberCoverage.ContainsKey($miIdKey)) {
+            $warnings += "Group membership incomplete: inherited roles and impact are understated"
+        }
+        if ($OwnedObjectsCoverage.ContainsKey($miIdKey)) {
+            $warnings += "Owned objects incomplete: owned object data could not be fully retrieved"
+        }
+
         $WarningsHighPermission = $null
         $WarningsDangerousPermission = $null
         $AppCredentials = @()

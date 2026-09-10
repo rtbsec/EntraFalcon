@@ -307,7 +307,10 @@ function Invoke-CheckPIMGroups {
     Write-Host "[*] Query PIM for Groups policy assignments for $($PimEnabledGroups.Count) groups ($($Requests.Count) role requests)"
     Write-Log -Level Verbose -Message "Sending $($Requests.Count) role policy requests via Graph batch (MaxBatchSize=$BatchMaxSize, BatchDelay=${BatchDelaySeconds}s)"
     $PolicyQueryStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $PolicyAssignmentsRaw = @(Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -MaxBatchSize $BatchMaxSize -BatchDelay $BatchDelaySeconds -UserAgent $($GlobalAuditSummary.UserAgent.Name) -DisablePagination)
+    # Deliberately slow queries: this phase can outlast a token. MaxBatchSize and BatchDelay are
+    # preserved exactly.
+    $PimGroupTokenProvider = New-EntraFalconGraphTokenProvider -Purpose PimForGroup
+    $PolicyAssignmentsRaw = @(Invoke-EntraFalconGraphBatch -Requests $Requests -Provider $PimGroupTokenProvider -MaxBatchSize $BatchMaxSize -BatchDelay $BatchDelaySeconds -UserAgent $($GlobalAuditSummary.UserAgent.Name) -DisablePagination)
     $PolicyQueryStopwatch.Stop()
     Write-Log -Level Verbose -Message "Got $($PolicyAssignmentsRaw.Count) policy assignment responses in $([math]::Round($PolicyQueryStopwatch.Elapsed.TotalSeconds, 2))s"
 
@@ -349,9 +352,20 @@ function Invoke-CheckPIMGroups {
         $responseStatus = Get-ContainerValue -Container $response -Name 'status'
         $responseErrorCode = Get-ContainerValue -Container $response -Name 'errorCode'
         $responseErrorMessage = Get-ContainerValue -Container $response -Name 'errorMessage'
-        if ($null -ne $responseStatus -and [int]$responseStatus -ne 200) {
+        # Parsed rather than cast: an unanswered request carries a non-numeric status.
+        $parsedStatus = 0
+        $statusIsNumeric = [int]::TryParse([string]$responseStatus, [ref]$parsedStatus)
+        if ($null -ne $responseStatus -and (-not $statusIsNumeric -or $parsedStatus -ne 200)) {
             $PolicyQueryErrorCount++
             $warningMessages.Add(("Policy query failed with status {0}: {1} {2}" -f $responseStatus, $responseErrorCode, $responseErrorMessage).Trim())
+        }
+
+        # A truncated result still reports 200, so status alone does not mean complete.
+        $responseComplete = Get-ContainerValue -Container $response -Name 'complete'
+        $responseIncompleteReason = [string](Get-ContainerValue -Container $response -Name 'incompleteReason')
+        if ($responseComplete -is [bool] -and -not $responseComplete -and $responseIncompleteReason -ne 'PaginationDisabled') {
+            $PolicyQueryErrorCount++
+            $warningMessages.Add(("Policy query returned an incomplete result ({0})" -f $responseIncompleteReason).Trim())
         }
 
         if ($policyAssignments.Count -eq 0) {

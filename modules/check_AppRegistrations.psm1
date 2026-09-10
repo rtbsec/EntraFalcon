@@ -30,7 +30,7 @@ function Invoke-CheckAppRegistrations {
             $QueryParameters = @{
                 '$select' = "DisplayName,UserPrincipalName,UserType,OnPremisesSyncEnabled,AccountEnabled,jobTitle,Department"
             }
-            $user = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/users/$Object" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+            $user = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri "/users/$Object" -QueryParameters $QueryParameters -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
 
             if ($user) {
                 If ($Null -eq $User.OnPremisesSyncEnabled) {
@@ -160,6 +160,8 @@ function Invoke-CheckAppRegistrations {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
+    $GraphTokenProvider = New-EntraFalconGraphTokenProvider -Purpose MainAuth
+
     #Define basic variables
     $Title = "AppRegistration"
     $ScriptWarningList = @()
@@ -186,7 +188,13 @@ function Invoke-CheckAppRegistrations {
     $QueryParameters = @{
         '$select' = "Id,AppID,DisplayName,isDisabled,SignInAudience,RequiredResourceAccess,ServicePrincipalLockConfiguration,web,createdDateTime,KeyCredentials,PasswordCredentials,AppRoles,Spa,Windows,PublicClient,DefaultRedirectUri,isFallbackPublicClient"
     }
-    $AppRegistrations = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    # A partial list cannot be told apart from a complete one, so fail instead of reporting an
+    # empty tenant.
+    try {
+        $AppRegistrations = @(Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    } catch {
+        throw "App registration enumeration failed and the report cannot be produced from a partial list: $($_.Exception.Message)"
+    }
     $AppsTotalCount = $($AppRegistrations.count)
 
     # Filter out Agent Identity Blueprints
@@ -285,39 +293,20 @@ function Invoke-CheckAppRegistrations {
     $AppAdminTenantCount = ($AppAdminTenant | Measure-Object).Count
 
 
+    $RelationshipBatchSize = 10000
+
     Write-Host "[*] Get all owners"
-    $Requests = @()
-    $AppRegistrations | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    =   "/applications/$($_.id)/owners"
-        }
-    }
-    # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppOwnersRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppOwnersRaw[$item.id] = $item.response.value
-        }
-    }
+    $AppOwnersResult = Get-EntraFalconObjectRelationshipChunked -Objects $AppRegistrations -UrlTemplate "/applications/{0}/owners" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppOwnersRaw = $AppOwnersResult.Values
+    $AppOwnersCoverage = $AppOwnersResult.Coverage
 
     Write-Host "[*] Get all federated identity credentials"
-    $Requests = @()
-    $AppRegistrations | ForEach-Object {
-        $Requests += @{
-            "id"     = $($_.id)
-            "method" = "GET"
-            "url"    = "/applications/$($_.id)/federatedIdentityCredentials"
-        }
-    }
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
-    $AppFederatedCredsRaw = @{}
-    foreach ($item in $RawResponse) {
-        if ($item.response.value -and $item.response.value.Count -gt 0) {
-            $AppFederatedCredsRaw[$item.id] = $item.response.value
-        }
+    $AppFederatedCredsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AppRegistrations -UrlTemplate "/applications/{0}/federatedIdentityCredentials" -Provider $GraphTokenProvider -BatchSize $RelationshipBatchSize -QueryParameters @{} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $AppFederatedCredsRaw = $AppFederatedCredsResult.Values
+    $AppFederatedCredsCoverage = $AppFederatedCredsResult.Coverage
+
+    if (($AppOwnersCoverage.Count + $AppFederatedCredsCoverage.Count) -gt 0) {
+        $ScriptWarningList += "Coverage gap: owners or federated identity credentials could not be fully enumerated for some app registrations. Affected applications are marked in the Warnings column; an absence of owners or credentials must not be read as none configured."
     }
 
 
@@ -335,6 +324,14 @@ function Invoke-CheckAppRegistrations {
         $ImpactScore = 0
         $LikelihoodScore = $AppLikelihoodScore["AppBase"]
         $warnings = @()
+
+        $appIdKey = [string]$item.Id
+        if ($AppOwnersCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Ownership incomplete: owner data could not be fully retrieved"
+        }
+        if ($AppFederatedCredsCoverage.ContainsKey($appIdKey)) {
+            $warnings += "Federated credentials incomplete: federated identity credential data could not be fully retrieved"
+        }
         $AppRolesDetails = @()
         $AppCredentials = @()
         $SPObjectID = @()
