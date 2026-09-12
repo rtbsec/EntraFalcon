@@ -3,6 +3,334 @@
        Generates the security findings HTML report.
 
 #>
+function Format-AzureRoleEvidenceScope {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Role
+    )
+
+    $rawScope = if ($Role.PSObject.Properties['RawScope']) { ([string]$Role.RawScope).Trim() } else { '' }
+    $resolvedScope = if ($Role.PSObject.Properties['Scope']) { ([string]$Role.Scope).Trim() } else { '' }
+    $fallbackScope = if (-not [string]::IsNullOrWhiteSpace($resolvedScope)) {
+        $resolvedScope
+    } elseif (-not [string]::IsNullOrWhiteSpace($rawScope)) {
+        $rawScope
+    } elseif ($Role.PSObject.Properties['ScopeResolved'] -and $Role.ScopeResolved -and $Role.ScopeResolved.DisplayName) {
+        ([string]$Role.ScopeResolved.DisplayName).Trim()
+    } else {
+        'Unknown scope'
+    }
+
+    $parseScope = if (-not [string]::IsNullOrWhiteSpace($rawScope)) { $rawScope } else { $resolvedScope }
+    if ([string]::IsNullOrWhiteSpace($parseScope)) { return $fallbackScope }
+    if ($parseScope -eq '/') { return 'Tenant root' }
+
+    $normalizedScope = $parseScope.TrimEnd('/')
+    if (-not $normalizedScope.StartsWith('/')) { return $fallbackScope }
+    $segments = @($normalizedScope.Trim('/') -split '/')
+    if ($segments.Count -eq 0 -or @($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        return $fallbackScope
+    }
+
+    $decodeSegment = {
+        param([string]$Value)
+        try { return [System.Uri]::UnescapeDataString($Value) } catch { return $Value }
+    }
+
+    if (
+        $segments.Count -eq 4 -and
+        $segments[0] -ieq 'providers' -and
+        $segments[1] -ieq 'Microsoft.Management' -and
+        $segments[2] -ieq 'managementGroups'
+    ) {
+        $managementGroupName = & $decodeSegment $segments[3]
+        $mappedName = $null
+        if (
+            $global:GLOBALAzureManagementGroupScopeMap -and
+            $global:GLOBALAzureManagementGroupScopeMap.ContainsKey(([string]$segments[3]).ToLowerInvariant())
+        ) {
+            $mappedName = $global:GLOBALAzureManagementGroupScopeMap[([string]$segments[3]).ToLowerInvariant()]
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$mappedName)) {
+            $managementGroupName = ([string]$mappedName).Trim()
+        } elseif ($resolvedScope -imatch '^/providers/Microsoft\.Management/managementGroups/([^/]+)/?$') {
+            $managementGroupName = & $decodeSegment $Matches[1]
+        }
+        return "Management group: $managementGroupName"
+    }
+
+    if ($segments.Count -lt 2 -or $segments[0] -ine 'subscriptions') { return $fallbackScope }
+
+    $subscriptionId = [string]$segments[1]
+    $subscriptionName = & $decodeSegment $subscriptionId
+    $mappedName = $null
+    if (
+        $global:GLOBALAzureSubscriptionScopeMap -and
+        $global:GLOBALAzureSubscriptionScopeMap.ContainsKey($subscriptionId.ToLowerInvariant())
+    ) {
+        $mappedName = $global:GLOBALAzureSubscriptionScopeMap[$subscriptionId.ToLowerInvariant()]
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$mappedName)) {
+        $subscriptionName = ([string]$mappedName).Trim()
+    } elseif ($resolvedScope -imatch '^/subscriptions/([^/]+)(?:/|$)') {
+        $subscriptionName = & $decodeSegment $Matches[1]
+    }
+    if ($segments.Count -eq 2) { return "Subscription: $subscriptionName" }
+
+    $resourceGroupName = $null
+    $providerIndex = 2
+    if ($segments.Count -ge 4 -and $segments[2] -ieq 'resourceGroups') {
+        $resourceGroupName = & $decodeSegment $segments[3]
+        $providerIndex = 4
+        if ($segments.Count -eq 4) { return "Resource group: $resourceGroupName ($subscriptionName)" }
+    }
+
+    if ($segments.Count -le ($providerIndex + 2) -or $segments[$providerIndex] -ine 'providers') {
+        return $fallbackScope
+    }
+
+    $providerNamespace = [string]$segments[$providerIndex + 1]
+    $resourceSegments = @($segments[($providerIndex + 2)..($segments.Count - 1)])
+    if ($resourceSegments.Count -lt 2 -or ($resourceSegments.Count % 2) -ne 0) { return $fallbackScope }
+    if (@($resourceSegments | Where-Object { $_ -ieq 'providers' }).Count -gt 0) { return $fallbackScope }
+
+    $typeParts = [System.Collections.Generic.List[string]]::new()
+    $nameParts = [System.Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $resourceSegments.Count; $index += 2) {
+        [void]$typeParts.Add([string]$resourceSegments[$index])
+        [void]$nameParts.Add((& $decodeSegment ([string]$resourceSegments[$index + 1])))
+    }
+
+    $canonicalType = "$providerNamespace/$($typeParts -join '/')"
+    $friendlyTypes = @{
+        'Microsoft.Web/sites' = 'App Service app'
+        'Microsoft.Web/sites/slots' = 'App Service deployment slot'
+        'Microsoft.Web/serverfarms' = 'App Service plan'
+        'Microsoft.Web/hostingEnvironments' = 'App Service Environment'
+        'Microsoft.Web/connections' = 'API connection'
+        'Microsoft.Logic/workflows' = 'Logic app'
+        'Microsoft.Logic/integrationAccounts' = 'Logic Apps integration account'
+        'Microsoft.KeyVault/vaults' = 'Key vault'
+        'Microsoft.OperationalInsights/workspaces' = 'Log Analytics workspace'
+        'Microsoft.Storage/storageAccounts' = 'Storage account'
+        'Microsoft.Compute/virtualMachines' = 'Virtual machine'
+        'Microsoft.Compute/virtualMachineScaleSets' = 'Virtual machine scale set'
+        'Microsoft.Compute/virtualMachineScaleSets/virtualMachines' = 'Scale set VM'
+        'Microsoft.Sql/servers' = 'SQL server'
+        'Microsoft.Sql/servers/databases' = 'SQL database'
+        'Microsoft.ContainerService/managedClusters' = 'AKS cluster'
+        'Microsoft.KeyVault/managedHSMs' = 'Managed HSM'
+        'Microsoft.ManagedIdentity/userAssignedIdentities' = 'User-assigned managed identity'
+        'Microsoft.Automation/automationAccounts' = 'Automation account'
+        'Microsoft.ContainerRegistry/registries' = 'Container registry'
+        'Microsoft.Kubernetes/connectedClusters' = 'Azure Arc-enabled Kubernetes cluster'
+        'Microsoft.HybridCompute/machines' = 'Azure Arc-enabled server'
+        'Microsoft.Network/virtualNetworks' = 'Virtual network'
+        'Microsoft.Network/virtualNetworks/subnets' = 'Subnet'
+        'Microsoft.Network/networkSecurityGroups' = 'Network security group'
+        'Microsoft.Network/applicationGateways' = 'Application gateway'
+        'Microsoft.Network/azureFirewalls' = 'Azure Firewall'
+        'Microsoft.EventHub/namespaces' = 'Event Hubs namespace'
+        'Microsoft.DocumentDB/databaseAccounts' = 'Cosmos DB account'
+        'Microsoft.DBforPostgreSQL/flexibleServers' = 'PostgreSQL flexible server'
+    }
+    $resourceLabel = if ($friendlyTypes.ContainsKey($canonicalType)) { $friendlyTypes[$canonicalType] } else { $canonicalType }
+    $resourcePath = $nameParts -join '/'
+    $context = if ([string]::IsNullOrWhiteSpace($resourceGroupName)) {
+        $subscriptionName
+    } else {
+        "$subscriptionName / $resourceGroupName"
+    }
+    return "${resourceLabel}: $resourcePath ($context)"
+}
+
+function Format-AzurePrincipalRoleEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$Principal,
+        [Parameter(Mandatory = $false)][hashtable]$AzureIAMAssignments = @{},
+        [Parameter(Mandatory = $false)][hashtable]$AzureGroupExposureImpactIndex = @{},
+        [Parameter(Mandatory = $false)][hashtable]$AllGroupsDetails = @{},
+        [Parameter(Mandatory = $false)][string]$TenantId
+    )
+
+    $roleEntries = [System.Collections.Generic.List[object]]::new()
+    $sparseGroupsBySource = @{
+        GroupMember = @{}
+        GroupOwner = @{}
+    }
+    $detailedGroupIdsBySource = @{
+        GroupMember = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        GroupOwner = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    }
+
+    $principalId = if ($Principal.PSObject.Properties['Id']) { ([string]$Principal.Id).Trim() } else { $null }
+    if (-not [string]::IsNullOrWhiteSpace($principalId) -and $AzureIAMAssignments.ContainsKey($principalId)) {
+        foreach ($role in @($AzureIAMAssignments[$principalId])) {
+            if ($null -ne $role) {
+                [void]$roleEntries.Add([pscustomobject]@{ Source='Direct'; GroupDisplayName=$null; Role=$role })
+            }
+        }
+    }
+    foreach ($propertyName in @('AzureRoleDetails', 'EligibleAzureRoleDetails')) {
+        if (-not $Principal.PSObject.Properties[$propertyName]) { continue }
+        foreach ($role in @($Principal.$propertyName)) {
+            if ($null -ne $role) {
+                [void]$roleEntries.Add([pscustomobject]@{ Source='Direct'; GroupDisplayName=$null; Role=$role })
+            }
+        }
+    }
+
+    foreach ($sourceDefinition in @(
+        @{ Source='GroupMember'; Properties=@('UserMemberGroups', 'GroupMember') },
+        @{ Source='GroupOwner'; Properties=@('GroupOwnerDetails', 'GroupOwner') }
+    )) {
+        $source = [string]$sourceDefinition.Source
+        foreach ($propertyName in $sourceDefinition.Properties) {
+            if (-not $Principal.PSObject.Properties[$propertyName]) { continue }
+            foreach ($group in @($Principal.$propertyName)) {
+                if ($null -eq $group) { continue }
+                $groupId = if ($group.PSObject.Properties['Id']) { ([string]$group.Id).Trim() } else { $null }
+                $resolvedGroup = if (-not [string]::IsNullOrWhiteSpace($groupId) -and $AllGroupsDetails.ContainsKey($groupId)) { $AllGroupsDetails[$groupId] } else { $null }
+                $groupDisplayName = if ($null -ne $resolvedGroup -and $resolvedGroup.PSObject.Properties['DisplayName']) {
+                    ([string]$resolvedGroup.DisplayName).Trim()
+                } elseif ($group.PSObject.Properties['DisplayName']) {
+                    ([string]$group.DisplayName).Trim()
+                } else {
+                    $groupId
+                }
+                if ([string]::IsNullOrWhiteSpace($groupDisplayName)) { $groupDisplayName = 'Unknown group' }
+
+                $groupRoleDetails = if ($group.PSObject.Properties['AzureRoleDetails']) {
+                    @($group.AzureRoleDetails)
+                } elseif ($null -ne $resolvedGroup -and $resolvedGroup.PSObject.Properties['AzureRoleDetails']) {
+                    @($resolvedGroup.AzureRoleDetails)
+                } else {
+                    @()
+                }
+                $addedDetailedRole = $false
+                foreach ($role in $groupRoleDetails) {
+                    if ($null -eq $role) { continue }
+                    $addedDetailedRole = $true
+                    [void]$roleEntries.Add([pscustomobject]@{ Source=$source; GroupDisplayName=$groupDisplayName; Role=$role })
+                }
+                if ($addedDetailedRole -and -not [string]::IsNullOrWhiteSpace($groupId)) {
+                    [void]$detailedGroupIdsBySource[$source].Add($groupId)
+                }
+
+                if (-not $addedDetailedRole -and -not [string]::IsNullOrWhiteSpace($groupId) -and $AzureGroupExposureImpactIndex.ContainsKey($groupId)) {
+                    $impact = 0
+                    [void][int]::TryParse([string]$AzureGroupExposureImpactIndex[$groupId], [ref]$impact)
+                    if ($impact -lt 1) { continue }
+                    if (-not $sparseGroupsBySource[$source].ContainsKey($groupId) -or [int]$sparseGroupsBySource[$source][$groupId].Impact -lt $impact) {
+                        $sparseGroupsBySource[$source][$groupId] = [pscustomobject]@{
+                            GroupId = $groupId
+                            DisplayName = $groupDisplayName
+                            Impact = $impact
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $roleLinesByText = @{}
+    $evidenceSeparator = ' ' + [char]0x2014 + ' '
+    $detailSeparator = ' ' + [char]0x00B7 + ' '
+    foreach ($entry in $roleEntries) {
+        $role = $entry.Role
+        $roleName = if ($role.RoleName) {
+            ([string]$role.RoleName).Trim()
+        } elseif ($role.RoleDefinitionName) {
+            ([string]$role.RoleDefinitionName).Trim()
+        } elseif ($role.DisplayName) {
+            ([string]$role.DisplayName).Trim()
+        } else {
+            ([string]$role.RoleDefinitionId).Trim()
+        }
+        if ([string]::IsNullOrWhiteSpace($roleName)) { $roleName = 'Azure role' }
+
+        $scope = Format-AzureRoleEvidenceScope -Role $role
+        if ([string]::IsNullOrWhiteSpace($scope)) { $scope = 'Unknown scope' }
+        $assignmentType = if ($role.AssignmentType) { ([string]$role.AssignmentType).Trim() } else { $null }
+        $assignmentText = if ([string]::IsNullOrWhiteSpace($assignmentType) -or $assignmentType -eq 'Unknown') { '' } else { " ($assignmentType)" }
+        $sourceText = switch ([string]$entry.Source) {
+            'GroupMember' { "${detailSeparator}via group $(([string]$entry.GroupDisplayName).Trim())" }
+            'GroupOwner' { "${detailSeparator}via ownership of group $(([string]$entry.GroupDisplayName).Trim())" }
+            default { '' }
+        }
+        $lineText = "$roleName$assignmentText$evidenceSeparator$scope$sourceText"
+        $lineImpact = Get-AzureRoleExposureImpact -RoleDetails @($role) -TenantId $TenantId
+        if (-not $roleLinesByText.ContainsKey($lineText) -or [int]$roleLinesByText[$lineText].Impact -lt $lineImpact) {
+            $roleLinesByText[$lineText] = [pscustomobject]@{
+                Text = $lineText
+                Impact = [int]$lineImpact
+                SortClass = 0
+            }
+        }
+    }
+
+    foreach ($source in @('GroupMember', 'GroupOwner')) {
+        $sparseEntries = @($sparseGroupsBySource[$source].Values | Where-Object {
+            -not $detailedGroupIdsBySource[$source].Contains([string]$_.GroupId)
+        } | Sort-Object DisplayName,GroupId)
+        if ($sparseEntries.Count -eq 0) { continue }
+
+        $shownEntries = @($sparseEntries | Select-Object -First 3)
+        $groupNames = @($shownEntries | ForEach-Object { ([string]$_.DisplayName).Trim() })
+        $groupList = $groupNames -join ', '
+        if ($sparseEntries.Count -gt $shownEntries.Count) {
+            $groupList += ", and $($sparseEntries.Count - $shownEntries.Count) more"
+        }
+        $maximumImpact = [int](($sparseEntries | Measure-Object -Property Impact -Maximum).Maximum)
+        $sourceLabel = if ($source -eq 'GroupOwner') { 'Access as group owner' } else { 'Group-inherited access' }
+        $lineText = "$sourceLabel$evidenceSeparator$groupList${detailSeparator}highest impact $maximumImpact"
+        $roleLinesByText[$lineText] = [pscustomobject]@{
+            Text = $lineText
+            Impact = $maximumImpact
+            SortClass = 1
+        }
+    }
+
+    $orderedLines = @($roleLinesByText.Values | Sort-Object `
+        @{ Expression = 'Impact'; Descending = $true },
+        @{ Expression = 'SortClass'; Descending = $false },
+        @{ Expression = 'Text'; Descending = $false } | Select-Object -ExpandProperty Text)
+    return ($orderedLines -join '<br>')
+}
+
+function Sort-AzureFindingAffectedObjects {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$Objects
+    )
+
+    return @($Objects | Sort-Object `
+        @{ Expression = {
+            $value = 0
+            [void][int]::TryParse([string]$_.'_SortAzureImpact', [ref]$value)
+            $value
+        }; Descending = $true },
+        @{ Expression = {
+            $value = 0
+            [void][int]::TryParse([string]$_.'Azure Roles', [ref]$value)
+            $value
+        }; Descending = $true },
+        @{ Expression = {
+            $displayValue = if ($_.PSObject.Properties['DisplayName']) {
+                [string]$_.DisplayName
+            } elseif ($_.PSObject.Properties['UPN']) {
+                [string]$_.UPN
+            } else {
+                ''
+            }
+            $plainText = [regex]::Replace($displayValue, '<[^>]+>', '')
+            [System.Net.WebUtility]::HtmlDecode($plainText).Trim()
+        }; Descending = $false })
+}
+
 function Invoke-CheckTenant {
     ############################## Parameter section ########################
     #region Parameters
@@ -28,7 +356,9 @@ function Invoke-CheckTenant {
         [Parameter(Mandatory=$false)][hashtable]$AccessPackages,
         [Parameter(Mandatory=$false)][bool]$AccessPackagesAssessmentAvailable = $false,
         [Parameter(Mandatory=$false)][bool]$AccessPackagesAssessmentApplicable = $true,
-        [Parameter(Mandatory=$false)][object]$CatalogAssessment
+        [Parameter(Mandatory=$false)][object]$CatalogAssessment,
+        [Parameter(Mandatory=$false)][hashtable]$AzureIAMAssignments = @{},
+        [Parameter(Mandatory=$false)][hashtable]$AzureGroupExposureImpactIndex = @{}
     )
     #endregion
 
@@ -55,6 +385,129 @@ function Invoke-CheckTenant {
         return $n
     }
 
+    $AzureForeignExposureThreshold = 50
+    $AzureHighExposureThreshold = 100
+    $AzureCriticalExposureThreshold = 200
+    $AzurePrincipalExposureCache = @{}
+
+    function Get-AzurePrincipalExposure {
+        param(
+            [Parameter(Mandatory = $false)]
+            [string]$PrincipalId,
+
+            [Parameter(Mandatory = $true)]
+            [object]$Principal
+        )
+
+        if ($null -eq $Principal) {
+            return [pscustomobject]@{ Impact = 0; UsedFallback = $false }
+        }
+        if ([string]::IsNullOrWhiteSpace($PrincipalId) -and $Principal.PSObject.Properties['Id']) {
+            $PrincipalId = [string]$Principal.Id
+        }
+        if (-not [string]::IsNullOrWhiteSpace($PrincipalId) -and $AzurePrincipalExposureCache.ContainsKey($PrincipalId)) {
+            return $AzurePrincipalExposureCache[$PrincipalId]
+        }
+
+        $maximumImpact = 0
+        $usedFallback = $false
+        $directRoles = [System.Collections.Generic.List[object]]::new()
+        if (-not [string]::IsNullOrWhiteSpace($PrincipalId) -and $AzureIAMAssignments.ContainsKey($PrincipalId)) {
+            foreach ($role in @($AzureIAMAssignments[$PrincipalId])) {
+                if ($null -ne $role) { [void]$directRoles.Add($role) }
+            }
+        }
+        foreach ($propertyName in @('AzureRoleDetails', 'EligibleAzureRoleDetails')) {
+            if (-not $Principal.PSObject.Properties[$propertyName]) { continue }
+            foreach ($role in @($Principal.$propertyName)) {
+                if ($null -ne $role) { [void]$directRoles.Add($role) }
+            }
+        }
+        foreach ($role in $directRoles) {
+            $parsedAssignmentImpact = 0
+            $hasAssignmentImpact = $role.PSObject.Properties['AssignmentImpact'] -and [int]::TryParse([string]$role.AssignmentImpact, [ref]$parsedAssignmentImpact) -and $parsedAssignmentImpact -ge 1
+            $hasScopeContext = ($role.PSObject.Properties['RawScope'] -and -not [string]::IsNullOrWhiteSpace([string]$role.RawScope)) -or
+                ($role.PSObject.Properties['DirectoryScopeId'] -and -not [string]::IsNullOrWhiteSpace([string]$role.DirectoryScopeId)) -or
+                ($role.PSObject.Properties['Scope'] -and [string]$role.Scope -match '^/')
+            if (-not $hasAssignmentImpact -and -not $hasScopeContext) { $usedFallback = $true }
+        }
+        $directImpact = Get-AzureRoleExposureImpact -RoleDetails @($directRoles) -TenantId ([string]$CurrentTenant.Id)
+        if ($directImpact -gt $maximumImpact) { $maximumImpact = $directImpact }
+
+        $groupReferences = [System.Collections.Generic.List[object]]::new()
+        foreach ($propertyName in @('UserMemberGroups', 'GroupOwnerDetails', 'GroupMember', 'GroupOwner')) {
+            if (-not $Principal.PSObject.Properties[$propertyName]) { continue }
+            foreach ($group in @($Principal.$propertyName)) {
+                if ($null -ne $group) { [void]$groupReferences.Add($group) }
+            }
+        }
+        foreach ($group in $groupReferences) {
+            $groupId = if ($group.PSObject.Properties['Id']) { [string]$group.Id } else { $null }
+            $groupImpact = 0
+            if (-not [string]::IsNullOrWhiteSpace($groupId) -and $AzureGroupExposureImpactIndex.ContainsKey($groupId)) {
+                $groupImpact = Get-IntSafe $AzureGroupExposureImpactIndex[$groupId]
+            } else {
+                if ($group.PSObject.Properties['AzureRoleDetails']) {
+                    foreach ($role in @($group.AzureRoleDetails)) {
+                        $parsedAssignmentImpact = 0
+                        $hasAssignmentImpact = $role.PSObject.Properties['AssignmentImpact'] -and [int]::TryParse([string]$role.AssignmentImpact, [ref]$parsedAssignmentImpact) -and $parsedAssignmentImpact -ge 1
+                        $hasScopeContext = ($role.PSObject.Properties['RawScope'] -and -not [string]::IsNullOrWhiteSpace([string]$role.RawScope)) -or
+                            ($role.PSObject.Properties['DirectoryScopeId'] -and -not [string]::IsNullOrWhiteSpace([string]$role.DirectoryScopeId)) -or
+                            ($role.PSObject.Properties['Scope'] -and [string]$role.Scope -match '^/')
+                        if (-not $hasAssignmentImpact -and -not $hasScopeContext) { $usedFallback = $true }
+                    }
+                    $groupImpact = Get-AzureRoleExposureImpact -RoleDetails @($group.AzureRoleDetails) -TenantId ([string]$CurrentTenant.Id)
+                }
+                if ($groupImpact -lt 1 -and (Get-IntSafe $group.AzureRoles) -gt 0) {
+                    $normalizedTier = Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier
+                    $groupImpact = Get-AzureRoleBaseImpact -RoleTier $normalizedTier
+                    $usedFallback = $true
+                }
+            }
+            if ($groupImpact -gt $maximumImpact) { $maximumImpact = $groupImpact }
+        }
+
+        if ($maximumImpact -lt 1 -and (Get-IntSafe $Principal.AzureRoles) -gt 0) {
+            $normalizedTier = Get-NormalizedRoleTierLabel -RoleTier $Principal.AzureMaxTier
+            $maximumImpact = Get-AzureRoleBaseImpact -RoleTier $normalizedTier
+            $usedFallback = $true
+        }
+
+        $result = [pscustomobject]@{
+            Impact = [int]$maximumImpact
+            UsedFallback = [bool]$usedFallback
+        }
+        if (-not [string]::IsNullOrWhiteSpace($PrincipalId)) {
+            $AzurePrincipalExposureCache[$PrincipalId] = $result
+        }
+        return $result
+    }
+
+    function Get-AzurePrincipalRoleEvidence {
+        param(
+            [Parameter(Mandatory = $true)]
+            [object]$Principal
+        )
+        return Format-AzurePrincipalRoleEvidence -Principal $Principal -AzureIAMAssignments $AzureIAMAssignments -AzureGroupExposureImpactIndex $AzureGroupExposureImpactIndex -AllGroupsDetails $AllGroupsDetails -TenantId ([string]$CurrentTenant.Id)
+    }
+
+    function Set-AzureFindingFallbackConfidence {
+        param(
+            [string]$FindingId,
+            [object[]]$Candidates
+        )
+
+        foreach ($candidate in @($Candidates)) {
+            $principal = if ($candidate -and $candidate.PSObject.Properties['User']) { $candidate.User } else { $candidate }
+            if ($null -eq $principal) { continue }
+            $principalId = if ($candidate -and $candidate.PSObject.Properties['Id']) { [string]$candidate.Id } elseif ($principal.PSObject.Properties['Id']) { [string]$principal.Id } else { $null }
+            if ((Get-AzurePrincipalExposure -PrincipalId $principalId -Principal $principal).UsedFallback) {
+                Set-FindingOverride -FindingId $FindingId -Props @{ Confidence = 'Requires Verification' }
+                return
+            }
+        }
+    }
+
     function Test-SPNameFindingCritical {
         param([object]$ServicePrincipal)
 
@@ -66,10 +519,11 @@ function Invoke-CheckTenant {
             return $true
         }
 
-        if ("$($ServicePrincipal.EntraMaxTier)" -in @('Tier-0','Tier-1') -or
-            "$($ServicePrincipal.AzureMaxTier)" -in @('Tier-0','Tier-1')) {
+        if ("$($ServicePrincipal.EntraMaxTier)" -in @('Tier-0','Tier-1')) {
             return $true
         }
+
+        if ((Get-AzurePrincipalExposure -Principal $ServicePrincipal).Impact -ge $AzureHighExposureThreshold) { return $true }
 
         return (Get-IntSafe $ServicePrincipal.Impact) -ge 100
     }
@@ -303,10 +757,14 @@ function Invoke-CheckTenant {
         $detailsProperty = if ($RoleSystem -eq "Entra") { "EntraRoleDetails" } else { "AzureRoleDetails" }
         $entries = [System.Collections.Generic.List[object]]::new()
 
-        foreach ($role in @($AgentIdentity.$detailsProperty)) {
+        $directRoleDetails = @($AgentIdentity.$detailsProperty)
+        if ($RoleSystem -eq 'Azure' -and $AgentIdentity.PSObject.Properties['EligibleAzureRoleDetails']) {
+            $directRoleDetails += @($AgentIdentity.EligibleAzureRoleDetails)
+        }
+        foreach ($role in $directRoleDetails) {
             if (-not $role) { continue }
             if ($role.PSObject -and $role.PSObject.Properties.Count -eq 0) { continue }
-            if ("$($role.AssignmentType)".Trim() -ne "Active") { continue }
+            if ($RoleSystem -eq 'Entra' -and "$($role.AssignmentType)".Trim() -ne "Active") { continue }
             $hasMeaningfulFields = (
                 -not [string]::IsNullOrWhiteSpace("$($role.RoleTier)") -or
                 -not [string]::IsNullOrWhiteSpace("$($role.DisplayName)") -or
@@ -333,7 +791,7 @@ function Invoke-CheckTenant {
                 foreach ($role in @($group.$detailsProperty)) {
                     if (-not $role) { continue }
                     if ($role.PSObject -and $role.PSObject.Properties.Count -eq 0) { continue }
-                    if ("$($role.AssignmentType)".Trim() -ne "Active") { continue }
+                    if ($RoleSystem -eq 'Entra' -and "$($role.AssignmentType)".Trim() -ne "Active") { continue }
                     $hasMeaningfulFields = (
                         -not [string]::IsNullOrWhiteSpace("$($role.RoleTier)") -or
                         -not [string]::IsNullOrWhiteSpace("$($role.DisplayName)") -or
@@ -858,7 +1316,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "USR-008",
-    "Title": "Hybrid Users with Tier-0 Azure Roles",
+    "Title": "Hybrid Users with High-Impact Azure Access",
     "Category": "Users",
     "Severity": 2,
     "Description": "",
@@ -870,7 +1328,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "USR-009",
-    "Title": "Least Privilege Principle Not Applied (Azure)",
+    "Title": "Excessive Users with High-Impact Azure Access",
     "Category": "Users",
     "Severity": 2,
     "Description": "",
@@ -894,7 +1352,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "USR-011",
-    "Title": "Weak Protection of Privileged Users (Azure)",
+    "Title": "Weak Protection of Users with High-Impact Azure Access",
     "Category": "Users",
     "Severity": 2,
     "Description": "",
@@ -1195,7 +1653,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "ENT-007",
-    "Title": "Foreign Enterprise Applications with Azure Roles",
+    "Title": "Foreign Enterprise Applications with Impactful Azure Access",
     "Category": "Enterprise Applications",
     "Severity": 3,
     "Description": "",
@@ -1255,7 +1713,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "ENT-012",
-    "Title": "Internal Enterprise Applications with Privileged Azure Roles",
+    "Title": "Internal Enterprise Applications with High-Impact Azure Access",
     "Category": "Enterprise Applications",
     "Severity": 2,
     "Description": "",
@@ -1375,7 +1833,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-005",
-    "Title": "Foreign Agent Identities with Azure Roles",
+    "Title": "Foreign Agent Identities with Impactful Azure Access",
     "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
@@ -1423,7 +1881,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-009",
-    "Title": "Internal Agent Identities with Privileged Azure Roles",
+    "Title": "Internal Agent Identities with High-Impact Azure Access",
     "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
@@ -1459,7 +1917,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-012",
-    "Title": "Foreign Agent Users with Azure Roles",
+    "Title": "Foreign Agent Users with Impactful Azure Access",
     "Category": "Agent Identities",
     "Severity": 3,
     "Description": "",
@@ -1483,7 +1941,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "AGT-014",
-    "Title": "Internal Agent Users with Privileged Azure Roles",
+    "Title": "Internal Agent Users with High-Impact Azure Access",
     "Category": "Agent Identities",
     "Severity": 2,
     "Description": "",
@@ -1567,7 +2025,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "MAI-003",
-    "Title": "Managed Identities with Privileged Azure Roles",
+    "Title": "Managed Identities with High-Impact Azure Access",
     "Category": "Managed Identities",
     "Severity": 2,
     "Description": "",
@@ -2054,7 +2512,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No hybrid users with Tier-0 Azure roles were identified.</p>"
+            Description = "<p>No hybrid users with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2065,13 +2523,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     }
     $USR009VariantProps = @{
         Default = @{
-            Threat = '<p>A large number of Tier-0 role assignments increases the likelihood of a highly privileged identity being compromised. Because these roles grant direct privileged access to scoped resources, attackers may be able to access sensitive information or leverage secrets and service principals to further escalate their privileges.</p>'
-            Remediation = '<p>Reduce Tier-0 role assignments to the minimum required and grant access strictly according to the least-privilege principle. Avoid assigning broad privileged roles when more specific job-function roles can be used. For example, if a user primarily manages virtual machines, use the <code>Virtual Machine Contributor</code> role instead of <code>Contributor</code> to reduce the impact of credential compromise. Additionally, use the narrowest possible scope (for example, resource group or individual resource) instead of broader scopes such as management group or subscription.</p><p>Reference:</p><ul><li><a href="https://learn.microsoft.com/en-us/azure/role-based-access-control/best-practices#limit-privileged-administrator-role-assignments" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/azure/role-based-access-control/best-practices#limit-privileged-administrator-role-assignments</a></li></ul>'
+            Threat = '<p>A large number of users with high-impact Azure access increases the likelihood that one of those identities is compromised. The affected access paths can grant direct or indirect control over sensitive Azure resources, including through eligible assignments and group membership or ownership.</p>'
+            Remediation = '<p>Reduce high-impact Azure access to the minimum required and grant access according to the least-privilege principle. Avoid broad privileged roles when a specific job-function role is sufficient, and use the narrowest practical scope. Review active and eligible assignments as well as role-bearing group membership and ownership.</p><p>Reference:</p><ul><li><a href="https://learn.microsoft.com/en-us/azure/role-based-access-control/best-practices#limit-privileged-administrator-role-assignments" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/azure/role-based-access-control/best-practices#limit-privileged-administrator-role-assignments</a></li></ul>'
         }
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>Fewer than 8 users with Tier-0 Azure roles were identified.</p>"
+            Description = "<p>Fewer than 8 enabled users with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2099,7 +2557,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No users with Tier-0 Azure roles were identified that are not protected against modifications by lower-tier administrators or applications.</p>"
+            Description = "<p>No unprotected users with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2222,7 +2680,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $GRP005VariantProps = @{
         Default = @{
             Threat = '<p>Various roles (for example, Knowledge Manager, Groups Administrator, or User Administrator) and applications with permissions such as <code>Group.ReadWrite.All</code> can manage the membership of these groups. Additionally, several administrative roles can reset credentials or MFA methods for users who are active members of the group (for example, Authentication Administrator, Helpdesk Administrator, or User Administrator). An attacker with one of these roles may therefore add themselves or another account to a highly privileged group.</p><p>An attacker might be able to:</p><ul><li>Exclude accounts from Conditional Access if exclusions rely on an unprotected group.</li><li>Gain elevated Entra ID privileges if unprotected groups are eligible members of groups with Entra ID roles (PIM for Groups).</li><li>Obtain elevated privileges on Azure resources.</li><li>Inherit high-impact Catalog RBAC and configure or assign resources through Access Packages.</li></ul>'
-            Remediation = '<p>Protect sensitive groups (for example, Tier-0 Azure role assignments, high-impact Catalog RBAC, or groups used in Conditional Access policies).</p><p>Consider the following hardening measures:</p><ul><li>Add the group to a Restricted Management Administrative Unit and assign scoped administrative roles only to dedicated administrators. This limits who can modify group membership.</li><li>Alternatively, recreate the group as a <code>role-assignable</code> group, even if no roles are currently assigned. This ensures that only privileged roles or group owners can manage membership and modify authentication methods of active members.</li><li>Remove unnecessary Catalog RBAC assignments and review which catalog resources or existing Access Packages the role can control.</li></ul><p>References:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/admin-units-restricted-management" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/admin-units-restricted-management</a></li><li><a href="https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/groups-concept#how-are-role-assignable-groups-protected" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/groups-concept#how-are-role-assignable-groups-protected</a></li><li><a href="https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups#what-are-entra-id-role-assignable-groups" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups#what-are-entra-id-role-assignable-groups</a></li></ul>'
+            Remediation = '<p>Protect sensitive groups (for example, groups with high-impact Azure access, high-impact Catalog RBAC, or groups used in Conditional Access policies).</p><p>Consider the following hardening measures:</p><ul><li>Add the group to a Restricted Management Administrative Unit and assign scoped administrative roles only to dedicated administrators. This limits who can modify group membership.</li><li>Alternatively, recreate the group as a <code>role-assignable</code> group, even if no roles are currently assigned. This ensures that only privileged roles or group owners can manage membership and modify authentication methods of active members.</li><li>Remove unnecessary Catalog RBAC assignments and review which catalog resources or existing Access Packages the role can control.</li></ul><p>References:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/admin-units-restricted-management" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/admin-units-restricted-management</a></li><li><a href="https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/groups-concept#how-are-role-assignable-groups-protected" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/groups-concept#how-are-role-assignable-groups-protected</a></li><li><a href="https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups#what-are-entra-id-role-assignable-groups" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups#what-are-entra-id-role-assignable-groups</a></li></ul>'
         }
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
@@ -2461,7 +2919,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign enterprise applications were identified that have Azure roles assigned.</p>"
+            Description = "<p>No enabled foreign enterprise applications with Azure exposure impact of at least 50 were identified.</p>"
         }
     }
     $ENT008VariantProps = @{
@@ -2519,7 +2977,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal enterprise applications were identified that have privileged Azure roles (tier-0 or tier-1) assigned.</p>"
+            Description = "<p>No enabled internal enterprise applications with Azure exposure impact of at least 100 were identified.</p>"
         }
     }
     $ENT013VariantProps = @{
@@ -2676,7 +3134,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities were identified that have Azure roles assigned.</p>"
+            Description = "<p>No enabled foreign agent identities with Azure exposure impact of at least 50 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2752,7 +3210,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent identities were identified that have privileged Azure roles assigned.</p>"
+            Description = "<p>No enabled internal agent identities with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2815,7 +3273,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent users were identified that have Azure roles assigned.</p>"
+            Description = "<p>No enabled foreign agent users with Azure exposure impact of at least 50 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2853,7 +3311,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent users were identified that have privileged Azure roles assigned.</p>"
+            Description = "<p>No enabled internal agent users with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2981,7 +3439,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No managed identities were identified which have privileged Azure roles (tier-0 or tier-1) assigned.</p>"
+            Description = "<p>No managed identities with Azure exposure impact of at least 100 were identified.</p>"
         }
     }
     #endregion
@@ -3317,10 +3775,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     # ENT-001/ENT-002/ENT-003/ENT-004/ENT-005/ENT-006/ENT-007/ENT-008/ENT-009/ENT-010/ENT-011/ENT-012/ENT-013/ENT-014: Reuse a single pass over enterprise apps.
     # ENT-001 = effectively enabled + non-SAML + credentials; ENT-002 = locally enabled + inactive; ENT-003 = effectively enabled + owners + impact>=threshold;
     # ENT-004 = enabled + foreign + extensive API permissions (application); ENT-005 = enabled + foreign + extensive API permissions (delegated);
-    # ENT-006 = enabled + foreign + Entra ID roles; ENT-007 = enabled + foreign + Azure roles; ENT-008 = enabled + foreign + owns groups/apps/SPs;
+    # ENT-006 = enabled + foreign + Entra ID roles; ENT-007 = enabled + foreign + medium-or-higher Azure exposure; ENT-008 = enabled + foreign + owns groups/apps/SPs;
     # ENT-009 = enabled + internal + extensive API permissions (application) excluding ConnectSyncProvisioning_;
     # ENT-010 = enabled + internal + extensive API permissions (delegated);
-    # ENT-011 = enabled + internal + Entra max tier 0/1; ENT-012 = enabled + internal + Azure max tier 0/1; ENT-013 = known malicious AppId match;
+    # ENT-011 = enabled + internal + Entra max tier 0/1; ENT-012 = enabled + internal + high-impact Azure exposure; ENT-013 = known malicious AppId match;
     # ENT-014 = foreign + non-Microsoft + suspicious cached name assessment.
     $ownerFindingMinImpact = 50
     $blueprintOwnerFindingMinImpact = 200
@@ -3410,7 +3868,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             } elseif ($null -ne $app.AzureRoles) {
                 [int]::TryParse("$($app.AzureRoles)", [ref]$azureRolesValue) | Out-Null
             }
-            if ($app.Enabled -eq $true -and $app.Foreign -eq $true -and $azureRolesValue -gt 0) {
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Key) -Principal $app
+            if ($app.Enabled -eq $true -and $app.Foreign -eq $true -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
                 $entAppsForeignAzureRoles.Add($app)
             }
             $grpOwnValue = Get-IntSafe $app.GrpOwn
@@ -3434,8 +3893,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if ($app.Enabled -eq $true -and $app.Foreign -ne $true -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
                 $entAppsInternalTier0.Add($app)
             }
-            $azureMaxTier = "$($app.AzureMaxTier)"
-            if ($app.Enabled -eq $true -and $app.Foreign -ne $true -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+            if ($app.Enabled -eq $true -and $app.Foreign -ne $true -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                 $entAppsInternalAzureTier.Add($app)
             }
         }
@@ -3573,15 +4031,11 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $internalAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
 
-                $azureMaxTier = "$($agentIdentity.AzureMaxTier)"
-                $effectiveAzureRoleEntries = @()
-                if ($agentIdentity.Enabled -eq $true) {
-                    $effectiveAzureRoleEntries = @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)
-                }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $effectiveAzureRoleEntries.Count -gt 0) {
+                $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Key) -Principal $agentIdentity
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
                     $foreignAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                     $internalAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
             }
@@ -3592,7 +4046,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
     #region Enumeration: Users
     # USR-005/USR-006/USR-007/USR-008/USR-009/USR-010/USR-011/USR-012/USR-013 and AGT-011/AGT-012/AGT-013/AGT-014/AGT-015/AGT-016: Reuse a single pass over users.
-    # Track inactive users, tier-0 Entra users, tier-0 Azure users (all + hybrid), users without MFA capability, and likely unnecessary synced accounts.
+    # Track inactive users, tier-0 Entra users, high-impact Azure users (all + hybrid), users without MFA capability, and likely unnecessary synced accounts.
     $inactiveEnabledUsers = [System.Collections.Generic.List[object]]::new()
     $enabledTier0Users = [System.Collections.Generic.List[object]]::new()
     $enabledTier0OnPremUsers = [System.Collections.Generic.List[object]]::new()
@@ -3628,6 +4082,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $isUnknownMfaCap = $mfaCapabilityState -eq "Unknown"
             $entraMaxTier = "$($user.EntraMaxTier)".Trim()
             $azureMaxTier = "$($user.AzureMaxTier)".Trim()
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Key) -Principal $user
             $lastSignInDays = "$($user.LastSignInDays)".Trim()
             $createdDays = Get-IntSafe $user.CreatedDays
             $excludeSyncUser = Test-IsExcludedSyncUser -UserObject $user
@@ -3694,13 +4149,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and $isForeignAgent -and (Get-IntSafe $user.AzureRoles) -gt 0) {
+            if ($isEnabled -and $isAgent -and $isForeignAgent -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
                 $foreignAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1")) {
+            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                 $internalAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
@@ -3725,7 +4180,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     })
                 }
             }
-            if ($isEnabled -and $azureMaxTier -eq "Tier-0") {
+            if ($isEnabled -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                 $enabledTier0AzureUsers.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
@@ -3828,13 +4283,19 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not $isProtected) {
                 $capsCount = Get-IntSafe $group.CAPs
                 $entraRolesCount = Get-IntSafe $group.EntraRoles
-                $azureRolesCount = Get-IntSafe $group.AzureRoles
                 $intuneRolesCount = Get-IntSafe $group.IntuneRoles
-                $azureMaxTierNormalized = Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier
+                if ($AzureGroupExposureImpactIndex.ContainsKey([string]$entry.Key)) {
+                    $azureExposureImpact = Get-IntSafe $AzureGroupExposureImpactIndex[[string]$entry.Key]
+                } else {
+                    $azureExposureImpact = Get-AzureRoleExposureImpact -RoleDetails @($group.AzureRoleDetails) -TenantId ([string]$CurrentTenant.Id)
+                    if ($azureExposureImpact -lt 1 -and (Get-IntSafe $group.AzureRoles) -gt 0) {
+                        $azureExposureImpact = Get-AzureRoleBaseImpact -RoleTier (Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier)
+                    }
+                }
 
                 $hasCapsUsage = $capsCount -gt 0
                 $hasEntraRolesUsage = $entraRolesCount -gt 0
-                $hasAzureRolesUsage = $azureRolesCount -gt 0 -and @("0", "1", "Uncategorized") -contains $azureMaxTierNormalized
+                $hasAzureRolesUsage = $azureExposureImpact -ge $AzureHighExposureThreshold
                 $hasIntuneRolesUsage = $intuneRolesCount -gt 0
                 $hasCatalogRbacUsage = $false
                 foreach ($catalogRole in @($group.CatalogRbacDetails)) {
@@ -3853,6 +4314,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                         Group = $group
                         HasCapsUsage = $hasCapsUsage
                         HasAzureRolesUsage = $hasAzureRolesUsage
+                        AzureExposureImpact = $azureExposureImpact
                         HasEntraRolesUsage = $hasEntraRolesUsage
                         HasIntuneRolesUsage = $hasIntuneRolesUsage
                         HasCatalogRbacUsage = $hasCatalogRbacUsage
@@ -3937,9 +4399,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $managedIdentitiesWithPrivRoles.Add($app)
             }
 
-            $azureMaxTier = "$($app.AzureMaxTier)"
-            # Track identities with tier-0 or tier-1 Azure roles.
-            if ($azureMaxTier -eq "Tier-0" -or $azureMaxTier -eq "Tier-1") {
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Key) -Principal $app
+            # Track identities with high-impact Azure access.
+            if ($azureExposure.Impact -ge $AzureHighExposureThreshold) {
                 $managedIdentitiesWithAzurePrivRoles.Add($app)
             }
 
@@ -5739,13 +6201,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "ENT-006" -Props $ENT006VariantProps.Secure
     }
 
-    # ENT-007: Apply result for foreign apps with Azure roles assigned.
+    # ENT-007: Apply result for foreign apps with medium-or-higher Azure exposure.
     if ($entAppsForeignAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[ENT-007] Found $($entAppsForeignAzureRoles.Count) foreign enterprise apps with Azure roles."
+        Write-Log -Level Verbose -Message "[ENT-007] Found $($entAppsForeignAzureRoles.Count) foreign enterprise apps with Azure exposure impact of at least $AzureForeignExposureThreshold."
         Set-FindingOverride -FindingId "ENT-007" -Props $ENT007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-007" -Props @{
             RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&AzureRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortImpact"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
 
@@ -5754,8 +6216,19 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $azTier1 = 0
         $azTier2 = 0
         $azTierUncat = 0
+        $azMedium = 0
+        $azHigh = 0
+        $azCritical = 0
         $entAzureRoleAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($app in $entAppsForeignAzureRoles) {
+            $azureExposure = Get-AzurePrincipalExposure -Principal $app
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $azCritical += 1
+            } elseif ($azureExposure.Impact -ge $AzureHighExposureThreshold) {
+                $azHigh += 1
+            } else {
+                $azMedium += 1
+            }
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
             foreach ($role in @($app.AzureRoleDetails)) {
                 if ($role) {
@@ -5798,8 +6271,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             foreach ($tier in @("0", "1", "2", "Uncategorized")) {
                 foreach ($entry in $azureRoleEntries) {
                     $role = $entry.Role
-                    # Group membership path is evaluated as active-only; ownership can include eligible paths.
-                    if ($entry.Source -eq "GroupMember" -and "$($role.AssignmentType)" -ne "Active") { continue }
                     $roleTier = Get-NormalizedRoleTierLabel -RoleTier $role.RoleTier
                     if ($roleTier -ne $tier) { continue }
                     $tiersSeen[$roleTier] = $true
@@ -5809,16 +6280,16 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $scope = $role.Scope
                     if (-not $scope -and $role.ScopeResolved) { $scope = $role.ScopeResolved.DisplayName }
                     if (-not $scope) { $scope = "Unknown scope" }
+                    $assignmentType = if ($role.AssignmentType) { $role.AssignmentType } else { "Unknown" }
                     if ($roleName) {
                         switch ($entry.Source) {
                             "Direct" {
-                                $roleLines.Add("Tier ${roleTier}: $roleName scoped to $scope")
+                                $roleLines.Add("Tier ${roleTier}: $roleName ($assignmentType) scoped to $scope")
                             }
                             "GroupMember" {
-                                $roleLines.Add("Tier ${roleTier}: $roleName through group membership '$($entry.GroupDisplayName)' scoped to $scope")
+                                $roleLines.Add("Tier ${roleTier}: $roleName through group membership '$($entry.GroupDisplayName)' ($assignmentType) scoped to $scope")
                             }
                             "GroupOwner" {
-                                $assignmentType = if ($role.AssignmentType) { $role.AssignmentType } else { "Unknown" }
                                 $roleLines.Add("Tier ${roleTier}: $roleName through group ownership '$($entry.GroupDisplayName)' ($assignmentType) scoped to $scope")
                             }
                         }
@@ -5844,24 +6315,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Role Count" = $roleCount
+                "Max Azure Impact" = $azureExposure.Impact
                 "Roles" = $roleDisplay
-                "_SortImpact" = $app.Impact
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "ENT-007" -Props @{
-            Description = "<p>$($entAppsForeignAzureRoles.Count) enabled foreign enterprise applications have Azure roles assigned.</p><p>Applications by role tier:</p><ul><li>Tier 0: $azTier0</li><li>Tier 1: $azTier1</li><li>Tier 2: $azTier2</li><li>Uncategorized tier: $azTierUncat</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
+            Description = "<p>$($entAppsForeignAzureRoles.Count) enabled foreign enterprise applications have impactful Azure access with a contextual assignment impact of at least $AzureForeignExposureThreshold.</p><p>Applications by Azure exposure impact:</p><ul><li>Medium (50-99): $azMedium</li><li>High (100-199): $azHigh</li><li>Critical (200 or higher): $azCritical</li></ul><p><strong>Important:</strong> The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
             AffectedObjects = $entAzureRoleAffected
         }
-        if ($azTier0 -gt 0) {
-            # Escalate severity and threat when tier-0 roles exist.
+        if ($azCritical -gt 0) {
             Set-FindingOverride -FindingId "ENT-007" -Props @{
                 Severity = 4
-                Threat = "<p>If the external tenant of an enterprise application is compromised or its client credentials are leaked, attackers can gain control of the application. They can then authenticate in all tenants where the enterprise application exists without a user account and abuse its privileges. Conditional Access Policies do not apply to multi-tenant applications.</p><p>Since at least one application has a tier-0 role assigned, attackers may be able to compromise important Azure resources.</p>"
+                Threat = "<p>If the external tenant of an enterprise application is compromised or its client credentials are leaked, attackers can gain control of the application. They can then authenticate in all tenants where the enterprise application exists without a user account and abuse its privileges. Conditional Access Policies do not apply to multi-tenant applications.</p><p>At least one application has critical Azure exposure impact and may provide control over important Azure resources.</p>"
             }
         }
     } else {
-        Write-Log -Level Verbose -Message "[ENT-007] No foreign enterprise apps with Azure roles found."
+        Write-Log -Level Verbose -Message "[ENT-007] No foreign enterprise apps with impactful Azure access found."
         Set-FindingOverride -FindingId "ENT-007" -Props $ENT007VariantProps.Secure
     }
 
@@ -6206,20 +6677,28 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "ENT-011" -Props $ENT011VariantProps.Secure
     }
 
-    # ENT-012: Apply result for internal apps with privileged Azure roles.
+    # ENT-012: Apply result for internal apps with high-impact Azure access.
     if ($entAppsInternalAzureTier.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[ENT-012] Found $($entAppsInternalAzureTier.Count) internal enterprise apps with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[ENT-012] Found $($entAppsInternalAzureTier.Count) internal enterprise apps with high-impact Azure access."
         Set-FindingOverride -FindingId "ENT-012" -Props $ENT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortImpact"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
 
         $entAzureTier0Apps = 0
         $entAzureTier1Apps = 0
+        $entAzureHighApps = 0
+        $entAzureCriticalApps = 0
         $entAzureAffected = [System.Collections.Generic.List[object]]::new()
         foreach ($app in $entAppsInternalAzureTier) {
+            $azureExposure = Get-AzurePrincipalExposure -Principal $app
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $entAzureCriticalApps += 1
+            } else {
+                $entAzureHighApps += 1
+            }
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
             foreach ($role in @($app.AzureRoleDetails)) {
                 if ($role) {
@@ -6262,8 +6741,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $role = $entry.Role
                 if (-not $role) { continue }
                 if ($role.RoleTier -ne 0 -and $role.RoleTier -ne 1) { continue }
-                # Group membership path is evaluated as active-only; ownership can include eligible paths.
-                if ($entry.Source -eq "GroupMember" -and "$($role.AssignmentType)" -ne "Active") { continue }
                 $azureTierEntries += $entry
             }
 
@@ -6320,22 +6797,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
             }
 
-            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $app
             $entAzureAffected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
+                "Max Azure Impact" = $azureExposure.Impact
                 "Azure Roles" = $roleDisplay
-                "_SortImpact" = $app.Impact
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            Description = "<p>$($entAppsInternalAzureTier.Count) enabled internal enterprise applications which have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $entAzureTier0Apps</li><li>Tier 1: $entAzureTier1Apps</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
+            Description = "<p>$($entAppsInternalAzureTier.Count) enabled internal enterprise applications have high-impact Azure access.</p><p>Applications by Azure exposure impact:</p><ul><li>High (100-199): $entAzureHighApps</li><li>Critical (200 or higher): $entAzureCriticalApps</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
             AffectedObjects = $entAzureAffected
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'ENT-012' -Candidates @($entAppsInternalAzureTier)
     } else {
-        Write-Log -Level Verbose -Message "[ENT-012] No internal enterprise apps with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[ENT-012] No internal enterprise apps with high-impact Azure access found."
         Set-FindingOverride -FindingId "ENT-012" -Props $ENT012VariantProps.Secure
     }
 
@@ -7238,17 +7717,17 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Secure
     }
 
-    # AGT-005: Apply result for enabled foreign agent identities with Azure roles.
+    # AGT-005: Apply result for enabled foreign agent identities with medium-or-higher Azure exposure.
     if ($agentIdentityCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-005] Skipped because no agent identities were found."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Skipped
     } elseif ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-005] Found $($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities with impactful Azure access."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-005" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortRisk"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
 
@@ -7256,8 +7735,19 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt005Tier1 = 0
         $agt005Tier2 = 0
         $agt005TierUncat = 0
+        $agt005Medium = 0
+        $agt005High = 0
+        $agt005Critical = 0
         $agt005Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $foreignAgentIdentitiesWithPrivilegedAzureRoles) {
+            $azureExposure = Get-AzurePrincipalExposure -Principal $agentIdentity
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $agt005Critical += 1
+            } elseif ($azureExposure.Impact -ge $AzureHighExposureThreshold) {
+                $agt005High += 1
+            } else {
+                $agt005Medium += 1
+            }
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
             foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)) {
                 if (-not $entry.Role) { continue }
@@ -7324,7 +7814,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             $tier0Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" }).Count
             $tier1Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" }).Count
-            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $agentIdentity
             $parentPrincipal = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
@@ -7338,23 +7828,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Publisher Name" = $agentIdentity.PublisherName
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
+                "Max Azure Impact" = $azureExposure.Impact
                 "Azure Roles" = $roleDisplay
-                "_SortRisk" = $agentIdentity.Risk
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have Azure roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt005Tier0</li><li>Tier 1: $agt005Tier1</li><li>Tier 2: $agt005Tier2</li><li>Uncategorized tier: $agt005TierUncat</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have impactful Azure access.</p><p>Agent identities by Azure exposure impact:</p><ul><li>Medium (50-99): $agt005Medium</li><li>High (100-199): $agt005High</li><li>Critical (200 or higher): $agt005Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
             AffectedObjects = $agt005Affected
         }
-        if ($agt005Tier0 -gt 0) {
+        if ($agt005Critical -gt 0) {
             Set-FindingOverride -FindingId "AGT-005" -Props @{
                 Severity = 4
-                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p><p>Since at least one foreign agent identity has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p><p>At least one foreign agent identity has critical Azure exposure impact and may provide control over critical Azure resources.</p>"
             }
         }
     } else {
-        Write-Log -Level Verbose -Message "[AGT-005] No enabled foreign agent identities with Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-005] No enabled foreign agent identities with impactful Azure access found."
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Secure
     }
 
@@ -7755,24 +8246,32 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Secure
     }
 
-    # AGT-009: Apply result for enabled internal agent identities with privileged Azure roles.
+    # AGT-009: Apply result for enabled internal agent identities with high-impact Azure access.
     if ($agentIdentityCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-009] Skipped because no agent identities were found."
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Skipped
     } elseif ($internalAgentIdentitiesWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-009] Found $($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-009] Found $($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities with high-impact Azure access."
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-009" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortRisk"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
 
         $agt009Tier0 = 0
         $agt009Tier1 = 0
+        $agt009High = 0
+        $agt009Critical = 0
         $agt009Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($agentIdentity in $internalAgentIdentitiesWithPrivilegedAzureRoles) {
+            $azureExposure = Get-AzurePrincipalExposure -Principal $agentIdentity
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $agt009Critical += 1
+            } else {
+                $agt009High += 1
+            }
             $azureRoleEntries = [System.Collections.Generic.List[object]]::new()
             foreach ($entry in @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Azure)) {
                 if (-not $entry.Role) { continue }
@@ -7885,7 +8384,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 }
             }
 
-            $roleDisplay = if ($roleLines.Count -gt 0) { ($roleLines | Sort-Object -Unique) -join "<br>" } else { "" }
+            $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $agentIdentity
             $parentPrincipal = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
@@ -7898,23 +8397,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Tier 0 Azure Roles" = $tier0Count
                 "Tier 1 Azure Roles" = $tier1Count
+                "Max Azure Impact" = $azureExposure.Impact
                 "Azure Roles" = $roleDisplay
-                "_SortRisk" = $agentIdentity.Risk
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "AGT-009" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities have privileged Azure roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt009Tier0</li><li>Tier 1: $agt009Tier1</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities have high-impact Azure access.</p><p>Agent identities by Azure exposure impact:</p><ul><li>High (100-199): $agt009High</li><li>Critical (200 or higher): $agt009Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
             AffectedObjects = $agt009Affected
         }
-        if ($agt009Tier0 -gt 0) {
+        if ($agt009Critical -gt 0) {
             Set-FindingOverride -FindingId "AGT-009" -Props @{
                 Severity = 3
-                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p><p>Since at least one internal agent identity has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may be able to take control of the agent identity and abuse its Azure role assignments. As agent identities authenticate without an interactive user, such a compromise could directly affect privileged Azure resources.</p><p>At least one internal agent identity has critical Azure exposure impact and may provide control over critical Azure resources.</p>"
             }
         }
     } else {
-        Write-Log -Level Verbose -Message "[AGT-009] No enabled internal agent identities with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-009] No enabled internal agent identities with high-impact Azure access found."
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Secure
     }
 
@@ -8028,25 +8528,36 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Secure
     }
 
-    # AGT-012: Apply result for enabled foreign agent users with Azure roles.
+    # AGT-012: Apply result for enabled foreign agent users with medium-or-higher Azure exposure.
     if ($agentUserCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-012] Skipped because no agent users were found."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Skipped
     } elseif ($foreignAgentUsersWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with impactful Azure access."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-012" -Props @{
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortRisk"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
         $agt012Tier0 = 0
         $agt012Tier1 = 0
         $agt012Tier2 = 0
         $agt012TierUncat = 0
+        $agt012Medium = 0
+        $agt012High = 0
+        $agt012Critical = 0
         $agt012Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($entry in $foreignAgentUsersWithPrivilegedAzureRoles) {
             $user = $entry.User
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Id) -Principal $user
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $agt012Critical += 1
+            } elseif ($azureExposure.Impact -ge $AzureHighExposureThreshold) {
+                $agt012High += 1
+            } else {
+                $agt012Medium += 1
+            }
             $azureMaxTier = "$($user.AzureMaxTier)".Trim()
             switch ($azureMaxTier) {
                 "Tier-0" { $agt012Tier0 += 1 }
@@ -8077,23 +8588,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
-                "Azure Max Tier" = $user.AzureMaxTier
-                "Warnings" = $user.Warnings
-                "_SortRisk" = $user.Risk
+                "Max Azure Impact" = $azureExposure.Impact
+                "Azure Access Summary" = Get-AzurePrincipalRoleEvidence -Principal $user
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt012Tier0</li><li>Tier 1: $agt012Tier1</li><li>Tier 2: $agt012Tier2</li><li>Uncategorized tier: $agt012TierUncat</li></ul><p><strong>Note:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
-            AffectedObjects = $agt012Affected
+            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have impactful Azure access.</p><p>Agent users by Azure exposure impact:</p><ul><li>Medium (50-99): $agt012Medium</li><li>High (100-199): $agt012High</li><li>Critical (200 or higher): $agt012Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt012Affected))
         }
-        if ($agt012Tier0 -gt 0) {
+        if ($agt012Critical -gt 0) {
             Set-FindingOverride -FindingId "AGT-012" -Props @{
                 Severity = 4
-                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure role assignments.</p><p>Since at least one foreign agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+                Threat = "<p>If the external tenant of the corresponding parent blueprint is compromised or its client credentials are leaked, attackers may gain control of the agent user and abuse its Azure role assignments.</p><p>At least one foreign agent user has critical Azure exposure impact and may provide control over critical Azure resources.</p>"
             }
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'AGT-012' -Candidates @($foreignAgentUsersWithPrivilegedAzureRoles)
     } else {
-        Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-012] No enabled foreign agent users with impactful Azure access found."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Secure
     }
 
@@ -8162,23 +8674,31 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Secure
     }
 
-    # AGT-014: Apply result for enabled internal agent users with privileged Azure roles.
+    # AGT-014: Apply result for enabled internal agent users with high-impact Azure access.
     if ($agentUserCount -eq 0) {
         Write-Log -Level Verbose -Message "[AGT-014] Skipped because no agent users were found."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Skipped
     } elseif ($internalAgentUsersWithPrivilegedAzureRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with high-impact Azure access."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortRisk"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
         $agt014Tier0 = 0
         $agt014Tier1 = 0
+        $agt014High = 0
+        $agt014Critical = 0
         $agt014Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($entry in $internalAgentUsersWithPrivilegedAzureRoles) {
             $user = $entry.User
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Id) -Principal $user
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) {
+                $agt014Critical += 1
+            } else {
+                $agt014High += 1
+            }
             $azureMaxTier = "$($user.AzureMaxTier)".Trim()
             switch ($azureMaxTier) {
                 "Tier-0" { $agt014Tier0 += 1 }
@@ -8207,23 +8727,24 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
-                "Azure Max Tier" = $user.AzureMaxTier
-                "Warnings" = $user.Warnings
-                "_SortRisk" = $user.Risk
+                "Max Azure Impact" = $azureExposure.Impact
+                "Azure Access Summary" = Get-AzurePrincipalRoleEvidence -Principal $user
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have privileged Azure roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt014Tier0</li><li>Tier 1: $agt014Tier1</li></ul><p><strong>Note:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
-            AffectedObjects = $agt014Affected
+            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have high-impact Azure access.</p><p>Agent users by Azure exposure impact:</p><ul><li>High (100-199): $agt014High</li><li>Critical (200 or higher): $agt014Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt014Affected))
         }
-        if ($agt014Tier0 -gt 0) {
+        if ($agt014Critical -gt 0) {
             Set-FindingOverride -FindingId "AGT-014" -Props @{
                 Severity = 3
-                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Azure role assignments.</p><p>Since at least one internal agent user has a Tier-0 Azure role assigned, attackers may be able to compromise critical Azure resources.</p>"
+                Threat = "<p>If attackers gain access to the corresponding blueprint's credentials, or if they are able to add their own credentials, they may gain control of the agent user and abuse its Azure role assignments.</p><p>At least one internal agent user has critical Azure exposure impact and may provide control over critical Azure resources.</p>"
             }
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'AGT-014' -Candidates @($internalAgentUsersWithPrivilegedAzureRoles)
     } else {
-        Write-Log -Level Verbose -Message "[AGT-014] No enabled internal agent users with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[AGT-014] No enabled internal agent users with high-impact Azure access found."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Secure
     }
 
@@ -8576,22 +9097,26 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "MAI-002" -Props $MAI002VariantProps.Secure
     }
 
-    # MAI-003: Managed identities with privileged Azure roles.
+    # MAI-003: Managed identities with high-impact Azure access.
     if ($managedIdentityCount -eq 0) {
         Write-Log -Level Verbose -Message "[MAI-003] Skipped because no managed identities were found."
         Set-FindingOverride -FindingId "MAI-003" -Props $maiSkippedProps
     } elseif ($managedIdentitiesWithAzurePrivRoles.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[MAI-003] Found $($managedIdentitiesWithAzurePrivRoles.Count) managed identities with privileged Azure roles."
+        Write-Log -Level Verbose -Message "[MAI-003] Found $($managedIdentitiesWithAzurePrivRoles.Count) managed identities with high-impact Azure access."
         Set-FindingOverride -FindingId "MAI-003" -Props $MAI003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "_SortImpact"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
         $maiAzureAffected = [System.Collections.Generic.List[object]]::new()
         $maiAzureTier0Count = 0
         $maiAzureTier1Count = 0
+        $maiAzureHighCount = 0
+        $maiAzureCriticalCount = 0
         foreach ($app in $managedIdentitiesWithAzurePrivRoles) {
+            $azureExposure = Get-AzurePrincipalExposure -Principal $app
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) { $maiAzureCriticalCount += 1 } else { $maiAzureHighCount += 1 }
             # Count identities by tier for summary text.
             $maxTier = "$($app.AzureMaxTier)"
             if ($maxTier -eq "Tier-0") { $maiAzureTier0Count += 1 }
@@ -8648,9 +9173,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $role = $entry.Role
                     if ("$($role.RoleTier)" -ne $tier) { continue }
 
-                    # Group membership path is evaluated as active-only; ownership can include eligible paths.
-                    if ($entry.Source -eq "GroupMember" -and "$($role.AssignmentType)" -ne "Active") { continue }
-
                     $scopeText = if ($role.Scope) { $role.Scope } elseif ($role.ScopeResolved.DisplayName) { $role.ScopeResolved.DisplayName } else { "scope" }
                     $roleName = if ($role.RoleName) { $role.RoleName } elseif ($role.DisplayName) { $role.DisplayName } else { $role.RoleDefinitionId }
                     if (-not $roleName) { continue }
@@ -8669,21 +9191,23 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     }
                 }
             }
-            $roleDisplay = if ($roles.Count -gt 0) { ($roles | Sort-Object -Unique) -join "<br>" } else { "" }
+            $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $app
 
             $maiAzureAffected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Role Count" = $roleCount
-                "Roles (>= Tier 1)" = $roleDisplay
-                "_SortImpact" = $app.Impact
+                "Max Azure Impact" = $azureExposure.Impact
+                "Azure Roles" = $roleDisplay
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) managed identities which have privileged Azure roles assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $maiAzureTier0Count</li><li>Tier 1: $maiAzureTier1Count</li></ul><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
+            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) managed identities have high-impact Azure access.</p><p>Managed identities by Azure exposure impact:</p><ul><li>High (100-199): $maiAzureHighCount</li><li>Critical (200 or higher): $maiAzureCriticalCount</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
             AffectedObjects = $maiAzureAffected
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'MAI-003' -Candidates @($managedIdentitiesWithAzurePrivRoles)
     } else {
-        Write-Log -Level Verbose -Message "[MAI-003] No managed identities with privileged Azure roles found."
+        Write-Log -Level Verbose -Message "[MAI-003] No managed identities with high-impact Azure access found."
         Set-FindingOverride -FindingId "MAI-003" -Props $MAI003VariantProps.Secure
     }
 
@@ -10616,42 +11140,47 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-007" -Props $USR007VariantProps.Secure
     }
 
-    # USR-008: Hybrid (on-prem synced) users with tier-0 Azure roles.
+    # USR-008: Hybrid (on-prem synced) users with high-impact Azure access.
     # Skip this check when Azure role assignment enumeration was not performed.
     if (-not $GLOBALAzurePsChecks) {
         Write-Log -Level Verbose -Message "[USR-008] Skipping check because Azure role assignments were not enumerated."
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Skipped
     } elseif ($enabledTier0AzureOnPremUsers.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[USR-008] Found $($enabledTier0AzureOnPremUsers.Count) hybrid users with tier-0 Azure roles."
+        Write-Log -Level Verbose -Message "[USR-008] Found $($enabledTier0AzureOnPremUsers.Count) hybrid users with high-impact Azure access."
         $usr008Affected = [System.Collections.Generic.List[object]]::new()
+        $usr008High = 0
+        $usr008Critical = 0
         foreach ($entry in $enabledTier0AzureOnPremUsers) {
             $user = $entry.User
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Id) -Principal $user
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) { $usr008Critical += 1 } else { $usr008High += 1 }
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr008Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "OnPrem" = $user.OnPrem
                 "Azure Roles" = $user.AzureRoles
-                "Azure Max Tier" = $user.AzureMaxTier
-                "Impact" = $user.Impact
-                "Warnings" = $user.Warnings
+                "Max Azure Impact" = $azureExposure.Impact
+                "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-008" -Props @{
-            Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid (on-premises synchronized) users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "Impact"
+            Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid users with high-impact Azure access.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr008High</li><li>Critical (200 or higher): $usr008Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally.</p>"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
-            AffectedObjects = $usr008Affected
+            AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr008Affected))
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'USR-008' -Candidates @($enabledTier0AzureOnPremUsers)
     } else {
-        Write-Log -Level Verbose -Message "[USR-008] No hybrid users with tier-0 Azure roles found."
+        Write-Log -Level Verbose -Message "[USR-008] No hybrid users with high-impact Azure access found."
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Secure
     }
 
-    # USR-009: Enabled users with tier-0 Azure roles.
+    # USR-009: Enabled users with high-impact Azure access.
     # Skip this check when Azure role assignment enumeration was not performed.
     if (-not $GLOBALAzurePsChecks) {
         Write-Log -Level Verbose -Message "[USR-009] Skipping check because Azure role assignments were not enumerated."
@@ -10659,35 +11188,40 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     } else {
         $usr009Count = $enabledTier0AzureUsers.Count
         if ($usr009Count -lt 8) {
-            Write-Log -Level Verbose -Message "[USR-009] Found $usr009Count users with tier-0 Azure roles (below threshold)."
+            Write-Log -Level Verbose -Message "[USR-009] Found $usr009Count users with high-impact Azure access (below threshold)."
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Secure
             Set-FindingOverride -FindingId "USR-009" -Props @{
                 AffectedObjects = @()
             }
         } else {
-            Write-Log -Level Verbose -Message "[USR-009] Found $usr009Count users with tier-0 Azure roles."
+            Write-Log -Level Verbose -Message "[USR-009] Found $usr009Count users with high-impact Azure access."
             $usr009Affected = [System.Collections.Generic.List[object]]::new()
+            $usr009High = 0
+            $usr009Critical = 0
             foreach ($entry in $enabledTier0AzureUsers) {
                 $user = $entry.User
+                $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Id) -Principal $user
+                if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) { $usr009Critical += 1 } else { $usr009High += 1 }
                 $displayName = "$($user.UPN)"
                 if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
                 $usr009Affected.Add([pscustomobject][ordered]@{
                     "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                     "Azure Roles" = $user.AzureRoles
-                    "Azure Max Tier" = $user.AzureMaxTier
-                    "Impact" = $user.Impact
-                    "Warnings" = $user.Warnings
+                    "Max Azure Impact" = $azureExposure.Impact
+                    "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
+                    "_SortAzureImpact" = $azureExposure.Impact
                 })
             }
 
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Vulnerable
             Set-FindingOverride -FindingId "USR-009" -Props @{
-                Description = "<p>There are $usr009Count users with a Tier-0 Azure role assigned (directly or through groups).</p><p><strong>Important:</strong> Role tier describes the assigned role. Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available. Verify inferred environments and business criticality manually.</p>"
-                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureMaxTier=%3DTier-0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-                AffectedSortKey = "Impact"
+                Description = "<p>There are $usr009Count enabled users with high-impact Azure access.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr009High</li><li>Critical (200 or higher): $usr009Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally.</p>"
+                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                AffectedSortKey = "_SortAzureImpact"
                 AffectedSortDir = "DESC"
-                AffectedObjects = $usr009Affected
+                AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr009Affected))
             }
+            Set-AzureFindingFallbackConfidence -FindingId 'USR-009' -Candidates @($enabledTier0AzureUsers)
         }
     }
 
@@ -10723,38 +11257,43 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-010" -Props $USR010VariantProps.Secure
     }
 
-    # USR-011: Enabled tier-0 Azure users that are not protected.
+    # USR-011: Enabled users with high-impact Azure access that are not protected.
     # Skip this check when Azure role assignment enumeration was not performed.
     if (-not $GLOBALAzurePsChecks) {
         Write-Log -Level Verbose -Message "[USR-011] Skipping check because Azure role assignments were not enumerated."
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Skipped
     } elseif ($enabledTier0AzureUnprotectedUsers.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[USR-011] Found $($enabledTier0AzureUnprotectedUsers.Count) unprotected users with tier-0 Azure roles."
+        Write-Log -Level Verbose -Message "[USR-011] Found $($enabledTier0AzureUnprotectedUsers.Count) unprotected users with high-impact Azure access."
         $usr011Affected = [System.Collections.Generic.List[object]]::new()
+        $usr011High = 0
+        $usr011Critical = 0
         foreach ($entry in $enabledTier0AzureUnprotectedUsers) {
             $user = $entry.User
+            $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Id) -Principal $user
+            if ($azureExposure.Impact -ge $AzureCriticalExposureThreshold) { $usr011Critical += 1 } else { $usr011High += 1 }
             $displayName = "$($user.UPN)"
             if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "$($entry.Id)" }
             $usr011Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Protected" = $user.Protected
                 "Azure Roles" = $user.AzureRoles
-                "Azure Max Tier" = $user.AzureMaxTier
-                "Impact" = $user.Impact
-                "Warnings" = $user.Warnings
+                "Max Azure Impact" = $azureExposure.Impact
+                "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
+                "_SortAzureImpact" = $azureExposure.Impact
             })
         }
 
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-011" -Props @{
-            Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with Tier-0 Azure roles assigned (directly or through groups) who are not protected against modifications by lower-tier administrators or applications. They are considered unprotected because they are:</p><ul><li>Not direct members of a privileged role</li><li>Not members of a role-assignable group</li><li>Not members of a Restricted Management Administrative Unit</li></ul><p><strong>Important:</strong> This finding requires manual verification. Exploitability also depends on additional factors such as password hash synchronization or password write-back. Role tier describes the assigned role; Impact and Risk additionally consider Azure scope, naming-based environment classification, and observed resource counts for the assignment scope where available.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureMaxTier=%3DTier-0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
-            AffectedSortKey = "Impact"
+            Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with high-impact Azure access who are not protected against modifications by lower-tier administrators or applications.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr011High</li><li>Critical (200 or higher): $usr011Critical</li></ul><p>They are considered unprotected because they are not direct members of a privileged role, members of a role-assignable group, or members of a Restricted Management Administrative Unit. Active and eligible Azure assignments are treated equally.</p>"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
-            AffectedObjects = $usr011Affected
+            AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr011Affected))
         }
+        Set-AzureFindingFallbackConfidence -FindingId 'USR-011' -Candidates @($enabledTier0AzureUnprotectedUsers)
     } else {
-        Write-Log -Level Verbose -Message "[USR-011] No unprotected users with tier-0 Azure roles found."
+        Write-Log -Level Verbose -Message "[USR-011] No unprotected users with high-impact Azure access found."
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Secure
     }
 
@@ -11021,6 +11560,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $grp005Affected = [System.Collections.Generic.List[object]]::new()
         $groupsUsedInCaps = 0
         $groupsUsedInAzureRoles = 0
+        $groupsWithHighAzureImpact = 0
+        $groupsWithCriticalAzureImpact = 0
         $groupsUsedInEntraRoles = 0
         $groupsUsedInIntuneRoles = 0
         $groupsUsedInCatalogRbac = 0
@@ -11034,7 +11575,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if ([string]::IsNullOrWhiteSpace($groupDisplayName)) { $groupDisplayName = "$($entry.Id)" }
 
             if ($entry.HasCapsUsage) { $groupsUsedInCaps += 1 }
-            if ($entry.HasAzureRolesUsage) { $groupsUsedInAzureRoles += 1 }
+            if ($entry.HasAzureRolesUsage) {
+                $groupsUsedInAzureRoles += 1
+                if ($entry.AzureExposureImpact -ge $AzureCriticalExposureThreshold) {
+                    $groupsWithCriticalAzureImpact += 1
+                } else {
+                    $groupsWithHighAzureImpact += 1
+                }
+            }
             if ($entry.HasEntraRolesUsage) { $groupsUsedInEntraRoles += 1 }
             if ($entry.HasIntuneRolesUsage) { $groupsUsedInIntuneRoles += 1 }
             if ($entry.HasCatalogRbacUsage) { $groupsUsedInCatalogRbac += 1 }
@@ -11046,6 +11594,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Entra Tier" = $group.EntraMaxTier
                 "Azure Roles" = $group.AzureRoles
                 "Azure Tier" = $group.AzureMaxTier
+                "Max Azure Impact" = $entry.AzureExposureImpact
                 "Intune Roles" = $group.IntuneRoles
                 "CAPs" = $group.CAPs
             }
@@ -11053,7 +11602,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $affectedGroup["CatalogRBAC"] = $group.CatalogRBAC
             }
             $affectedGroup["Warnings"] = $group.Warnings
-            $affectedGroup["_SortImpact"] = $group.Impact
+            $affectedGroup["_SortAzureImpact"] = $entry.AzureExposureImpact
             $grp005Affected.Add([pscustomobject]$affectedGroup)
         }
 
@@ -11067,9 +11616,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
         Set-FindingOverride -FindingId "GRP-005" -Props $GRP005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "GRP-005" -Props @{
-            Description = "<p>There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul><li>$groupsUsedInCaps groups are used in Conditional Access policies</li><li>$groupsUsedInAzureRoles groups are used for Azure role assignments with a highest tier of Tier-0, Tier-1, or Uncategorized</li><li>$groupsUsedInEntraRoles groups are used for Entra ID role assignments</li><li>$groupsUsedInIntuneRoles groups are used for Intune RBAC role assignments</li>$catalogUsageDescription</ul><p><strong>Important:</strong> This finding requires manual verification. Assess the impact if a lower-tier administrator or application can manage the membership of these groups.</p>"
-            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureMaxTier=Tier-0%7C%7CTier-1%7C%7CUncategorized&or_IntuneRoles=%3E0&or_CAPs=%3E0$catalogRbacFilter&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CEntraMaxTier%2CAzureMaxTier%2CNestedInGroups%2CAppRoles%2CIntuneRoles%2CCAPs$catalogRbacColumn%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
-            AffectedSortKey = "_SortImpact"
+            Description = "<p>There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul><li>$groupsUsedInCaps groups are used in Conditional Access policies</li><li>$groupsUsedInAzureRoles groups have Azure exposure impact of at least 100 ($groupsWithHighAzureImpact high and $groupsWithCriticalAzureImpact critical)</li><li>$groupsUsedInEntraRoles groups are used for Entra ID role assignments</li><li>$groupsUsedInIntuneRoles groups are used for Intune RBAC role assignments</li>$catalogUsageDescription</ul><p><strong>Important:</strong> Azure exposure uses the strongest active or eligible direct, membership, or ownership path. Assess the impact if a lower-tier administrator or application can manage these groups.</p>"
+            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureRoles=%3E0&or_IntuneRoles=%3E0&or_CAPs=%3E0$catalogRbacFilter&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CEntraMaxTier%2CAzureMaxTier%2CNestedInGroups%2CAppRoles%2CIntuneRoles%2CCAPs$catalogRbacColumn%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = $grp005Affected
         }
@@ -16340,3 +16889,5 @@ $FindingsJson
     return $Findings
     #endregion
 }
+
+Export-ModuleMember -Function Invoke-CheckTenant

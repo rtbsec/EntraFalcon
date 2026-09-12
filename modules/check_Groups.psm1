@@ -3,6 +3,65 @@
 	   Enumerates groups and evaluates their configurations, ownership, roles, and risk posture.
 #>
 
+function Resolve-AzureGroupExposureImpactIndex {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)][hashtable]$SeedImpactByGroupId = @{},
+        [Parameter(Mandatory=$false)][hashtable]$DirectGroupMemberIdsByParent = @{},
+        [Parameter(Mandatory=$false)][hashtable]$PimEligibleMembersByGroupId = @{}
+    )
+
+    $impactIndex = @{}
+    $seedGroupIdsByImpact = @{}
+    foreach ($seed in $SeedImpactByGroupId.GetEnumerator()) {
+        $groupId = [string]$seed.Key
+        $impact = [int]$seed.Value
+        if ([string]::IsNullOrWhiteSpace($groupId) -or $impact -lt 1) { continue }
+
+        if (-not $seedGroupIdsByImpact.ContainsKey($impact)) {
+            $seedGroupIdsByImpact[$impact] = [System.Collections.Generic.List[string]]::new()
+        }
+        [void]$seedGroupIdsByImpact[$impact].Add($groupId)
+    }
+
+    foreach ($impactValue in @($seedGroupIdsByImpact.Keys | Sort-Object -Descending)) {
+        $impact = [int]$impactValue
+        $queue = [System.Collections.Generic.Queue[string]]::new()
+        foreach ($seedGroupId in $seedGroupIdsByImpact[$impactValue]) {
+            $queue.Enqueue([string]$seedGroupId)
+        }
+
+        while ($queue.Count -gt 0) {
+            $groupId = $queue.Dequeue()
+            if ([string]::IsNullOrWhiteSpace($groupId)) { continue }
+            if ($impactIndex.ContainsKey($groupId) -and [int]$impactIndex[$groupId] -ge $impact) { continue }
+
+            $impactIndex[$groupId] = $impact
+
+            if ($DirectGroupMemberIdsByParent.ContainsKey($groupId)) {
+                foreach ($memberGroupIdValue in $DirectGroupMemberIdsByParent[$groupId]) {
+                    $memberGroupId = [string]$memberGroupIdValue
+                    if (-not [string]::IsNullOrWhiteSpace($memberGroupId)) {
+                        $queue.Enqueue($memberGroupId)
+                    }
+                }
+            }
+
+            if ($PimEligibleMembersByGroupId.ContainsKey($groupId)) {
+                foreach ($eligibleMember in $PimEligibleMembersByGroupId[$groupId]) {
+                    if ([string]$eligibleMember.type -ne 'group') { continue }
+                    $memberGroupId = [string]$eligibleMember.Id
+                    if (-not [string]::IsNullOrWhiteSpace($memberGroupId)) {
+                        $queue.Enqueue($memberGroupId)
+                    }
+                }
+            }
+        }
+    }
+
+    return $impactIndex
+}
+
 function Invoke-CheckGroups {
 
     ############################## Parameter section ########################
@@ -30,11 +89,27 @@ function Invoke-CheckGroups {
         [Parameter(Mandatory=$false)][object]$AccessPackageAutoAssignmentPolicyIndex = @{},
         [Parameter(Mandatory=$false)][hashtable]$CatalogRbacPrincipalIndex = @{},
         [Parameter(Mandatory=$false)][bool]$CatalogRbacAssessmentAvailable = $false,
+        [Parameter(Mandatory=$false)][ref]$AzureGroupExposureImpactIndexOut,
         [Parameter(Mandatory=$false)][switch]$Csv = $false,
         [Parameter(Mandatory=$false)][switch]$ExportDataJson = $false
     )
 
     ############################## Function section ########################
+
+    $AzureGroupExposureImpactIndex = @{}
+    $AzureGroupExposureSeedImpact = @{}
+
+    function Set-AzureGroupExposureSeedImpact {
+        param(
+            [string]$GroupId,
+            [int]$Impact
+        )
+
+        if ([string]::IsNullOrWhiteSpace($GroupId) -or $Impact -lt 1) { return }
+        if (-not $AzureGroupExposureSeedImpact.ContainsKey($GroupId) -or [int]$AzureGroupExposureSeedImpact[$GroupId] -lt $Impact) {
+            $AzureGroupExposureSeedImpact[$GroupId] = $Impact
+        }
+    }
 
     # Normalize non-user owners/members so agent-backed service principals can share the same flow.
     function CheckSP {
@@ -251,6 +326,7 @@ function Invoke-CheckGroups {
     }
 
     
+    $PimForGroupsEligibleMembersHT = @{}
     if ($TenantPimForGroupsAssignments) {
         Write-Log -Level Verbose -Message "Processing $($TenantPimForGroupsAssignments.Count) PIM for Groups Assignments"
         # Hashtable for all owners for faster lookup in each group
@@ -412,6 +488,9 @@ function Invoke-CheckGroups {
     #Abort if no groups are present
     if (@($AllGroups).count -eq 0) {
         $AllGroupsDetailsHT = @{}
+        if ($null -ne $AzureGroupExposureImpactIndexOut) {
+            $AzureGroupExposureImpactIndexOut.Value = $AzureGroupExposureImpactIndex
+        }
         if ($ExportDataJson) {
             Export-EntraFalconDataJson -OutputFolder $OutputFolder -DatasetName "Groups" -Data @() | Out-Null
         }
@@ -639,12 +718,18 @@ function Invoke-CheckGroups {
     
     Write-Host "[*] Calculate all group-to-parent-group relationships"
     
-    # Build reverse group membership map: child -> parent
+    # Build reverse group membership map and a compact forward map containing group IDs only.
     $ReverseGroupMembershipMap = @{}
+    $DirectGroupMemberIdsByParent = @{}
     foreach ($parentGroupId in $GroupMembers.Keys) {
         foreach ($member in $GroupMembers[$parentGroupId]) {
             if ($member.'@odata.type' -eq '#microsoft.graph.group') {
-                $childGroupId = $member.id
+                $childGroupId = [string]$member.id
+
+                if (-not $DirectGroupMemberIdsByParent.ContainsKey($parentGroupId)) {
+                    $DirectGroupMemberIdsByParent[$parentGroupId] = [System.Collections.Generic.List[string]]::new()
+                }
+                [void]$DirectGroupMemberIdsByParent[$parentGroupId].Add($childGroupId)
 
                 if (-not $ReverseGroupMembershipMap.ContainsKey($childGroupId)) {
                     $ReverseGroupMembershipMap[$childGroupId] = [System.Collections.Generic.List[object]]::new()
@@ -736,6 +821,7 @@ function Invoke-CheckGroups {
         $LikelihoodScore = 0
         $Warnings = [System.Collections.Generic.HashSet[string]]::new()
         $ownerGroup = @()
+        $AzureOwnerGroupIds = [System.Collections.Generic.List[string]]::new()
         $PfGOwnedGroups = @()
         $GroupNestedIn = [System.Collections.Generic.List[psobject]]::new()
         $AppRoleAssignments = [System.Collections.Generic.List[object]]::new()
@@ -866,7 +952,7 @@ function Invoke-CheckGroups {
                             }
                         )
                     }
-        
+
                     '#microsoft.graph.device' {
                         [void]$memberDevices.Add(
                             [PSCustomObject]@{
@@ -945,6 +1031,12 @@ function Invoke-CheckGroups {
                             }
                         )
                     }
+
+                    '#microsoft.graph.group' {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$Owner.Id)) {
+                            [void]$AzureOwnerGroupIds.Add([string]$Owner.Id)
+                        }
+                    }
         
                     default {
                         # Optional: log or handle unexpected owner types
@@ -968,6 +1060,11 @@ function Invoke-CheckGroups {
                     [void]$owneruser.Add($user)
                 }
                 $ownerGroup = $PfGownersGroup
+                foreach ($eligibleOwnerGroup in $PfGownersGroup) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$eligibleOwnerGroup.Id)) {
+                        [void]$AzureOwnerGroupIds.Add([string]$eligibleOwnerGroup.Id)
+                    }
+                }
             }
 
             #Find groups where this group is an eligible owner
@@ -1219,6 +1316,12 @@ function Invoke-CheckGroups {
             [void]$Warnings.Add($AzureRolesProcessedDetails.Warning)
             $ImpactScore += $AzureRolesProcessedDetails.ImpactScore
             $AzureRoleScore = $AzureRolesProcessedDetails.ImpactScore
+            $AzureRoleExposureImpact = Get-AzureRoleExposureImpact -RoleDetails $azureRoleDetails -TenantId ([string]$CurrentTenant.Id)
+
+            Set-AzureGroupExposureSeedImpact -GroupId ([string]$group.Id) -Impact $AzureRoleExposureImpact
+            foreach ($azureOwnerGroupId in @($AzureOwnerGroupIds)) {
+                Set-AzureGroupExposureSeedImpact -GroupId $azureOwnerGroupId -Impact $AzureRoleExposureImpact
+            }
 
             # Remove eligible Azure role contribution from inherited group impact only.
             $EligibleRoleImpactContribution += $AzureRolesProcessedDetails.EligibleImpactScore
@@ -1603,6 +1706,11 @@ function Invoke-CheckGroups {
 
     }
     #endregion
+
+    $AzureGroupExposureImpactIndex = Resolve-AzureGroupExposureImpactIndex `
+        -SeedImpactByGroupId $AzureGroupExposureSeedImpact `
+        -DirectGroupMemberIdsByParent $DirectGroupMemberIdsByParent `
+        -PimEligibleMembersByGroupId $PimForGroupsEligibleMembersHT
 
     $AutoAssignmentCorrelationTimer.Stop()
     Write-Log -Level Debug -Message ("[Groups] Automatic Access Package assignment correlation: CandidateGroups={0}, MatchedGroups={1}, AmbiguousGroups={2}, RuleKeys={3}, Elapsed={4:N3}s." -f $AutoAssignmentCandidateGroups, $AutoAssignmentMatchedGroups, $AutoAssignmentAmbiguousGroups, $AccessPackageAutoAssignmentPolicyIndex.Count, $AutoAssignmentCorrelationTimer.Elapsed.TotalSeconds)
@@ -3100,6 +3208,10 @@ $headerHtml = @"
         }
         $AllGroupsDetailsHT[$group.Id] = $groupLookupObject
     }
+
+    if ($null -ne $AzureGroupExposureImpactIndexOut) {
+        $AzureGroupExposureImpactIndexOut.Value = $AzureGroupExposureImpactIndex
+    }
        
     Remove-Variable Report
     Remove-Variable tableOutput
@@ -3122,3 +3234,5 @@ $headerHtml = @"
 
     return $AllGroupsDetailsHT
 }
+
+Export-ModuleMember -Function Invoke-CheckGroups

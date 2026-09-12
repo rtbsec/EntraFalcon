@@ -9052,7 +9052,7 @@ $global:GLOBALImpactScore = @{
 }
 
 $global:GLOBALAzureRoleImpactPolicy = @{
-    Version = "2.4"
+    Version = "2.5"
     MaximumAssignmentFactor = 1.20
     ScopeFactors = @{
         Root            = 1.20
@@ -9095,6 +9095,7 @@ $global:GLOBALAzureRoleImpactPolicy = @{
         "microsoft.compute/virtualmachines",
         "microsoft.compute/virtualmachinescalesets",
         "microsoft.keyvault/vaults",
+        "microsoft.keyvault/managedhsms",
         "microsoft.managedidentity/userassignedidentities",
         "microsoft.automation/automationaccounts",
         "microsoft.containerservice/managedclusters",
@@ -9102,7 +9103,7 @@ $global:GLOBALAzureRoleImpactPolicy = @{
         "microsoft.hybridcompute/machines",
         "microsoft.containerregistry/registries"
     )
-    SensitiveResourceMinimumScopeFactor = 0.50
+    SensitiveResourceMinimumScopeFactor = 0.30
 }
 
 $global:GLOBALApiPermissionCategorizationList= @{
@@ -9632,6 +9633,57 @@ function Get-AzureRoleAssignmentImpact {
         ImpactExplanation     = (($explanationParts.ToArray() -join " x ") + " = $assignmentImpact")
         ScoringPolicyVersion   = $policyVersion
     }
+}
+
+# Return the strongest contextual Azure assignment without accumulating unrelated assignments.
+function Get-AzureRoleExposureImpact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$RoleDetails,
+
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    $maximumImpact = 0
+    foreach ($role in @($RoleDetails)) {
+        if ($null -eq $role) { continue }
+
+        $roleImpact = 0
+        $hasContextualImpact = $false
+        if ($role.PSObject.Properties['AssignmentImpact'] -and $null -ne $role.AssignmentImpact) {
+            $hasContextualImpact = [int]::TryParse([string]$role.AssignmentImpact, [ref]$roleImpact) -and $roleImpact -ge 1
+        }
+
+        if (-not $hasContextualImpact) {
+            $roleTier = if ($role.PSObject.Properties['RoleTier']) { $role.RoleTier } else { $null }
+            $roleName = if ($role.PSObject.Properties['RoleName']) {
+                [string]$role.RoleName
+            } elseif ($role.PSObject.Properties['RoleDefinitionName']) {
+                [string]$role.RoleDefinitionName
+            } elseif ($role.PSObject.Properties['DisplayName']) {
+                [string]$role.DisplayName
+            } else {
+                'Azure role'
+            }
+            $rawScope = if ($role.PSObject.Properties['RawScope'] -and -not [string]::IsNullOrWhiteSpace([string]$role.RawScope)) {
+                [string]$role.RawScope
+            } elseif ($role.PSObject.Properties['DirectoryScopeId'] -and -not [string]::IsNullOrWhiteSpace([string]$role.DirectoryScopeId)) {
+                [string]$role.DirectoryScopeId
+            } elseif ($role.PSObject.Properties['Scope'] -and [string]$role.Scope -match '^/') {
+                [string]$role.Scope
+            } else {
+                $null
+            }
+            $impactDetails = Get-AzureRoleAssignmentImpact -RoleTier $roleTier -RoleName $roleName -RawScope $rawScope -TenantId $TenantId
+            $roleImpact = [int]$impactDetails.AssignmentImpact
+        }
+
+        if ($roleImpact -gt $maximumImpact) { $maximumImpact = $roleImpact }
+    }
+
+    return [int]$maximumImpact
 }
 
 function Invoke-AzureRoleProcessing {
@@ -13490,4 +13542,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleExposureImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
