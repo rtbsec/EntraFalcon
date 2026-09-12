@@ -62,6 +62,45 @@ function Resolve-AzureGroupExposureImpactIndex {
     return $impactIndex
 }
 
+# Maps each group id to the Conditional Access policies that reference it. Built once, so the group
+# loop does one lookup per group instead of scanning every policy for every group.
+function New-GroupCapIndex {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)][Object[]]$ConditionalAccessPolicies = @()
+    )
+
+    # Each list is assigned to a group's GroupCAPsDetails as-is, so it is shared by design and must
+    # not be modified.
+    $capsByGroupId = @{}
+    foreach ($cap in $ConditionalAccessPolicies) {
+        if ($null -eq $cap) { continue }
+
+        # One entry per group per policy; an exclusion takes precedence over an inclusion.
+        $usageByGroup = @{}
+        foreach ($groupId in @($cap.ExcludedGroup)) {
+            if ($null -ne $groupId) { $usageByGroup[[string]$groupId] = 'Excluded' }
+        }
+        foreach ($groupId in @($cap.IncludedGroup)) {
+            if ($null -ne $groupId -and -not $usageByGroup.ContainsKey([string]$groupId)) { $usageByGroup[[string]$groupId] = 'Included' }
+        }
+
+        foreach ($entry in $usageByGroup.GetEnumerator()) {
+            if (-not $capsByGroupId.ContainsKey($entry.Key)) {
+                $capsByGroupId[$entry.Key] = [System.Collections.Generic.List[object]]::new()
+            }
+            $capsByGroupId[$entry.Key].Add([PSCustomObject]@{
+                Id         = $cap.Id
+                CAPName    = $cap.CAPName
+                CAPExOrIn  = $entry.Value
+                CAPStatus  = $cap.CAPStatus
+            })
+        }
+    }
+
+    return $capsByGroupId
+}
+
 function Invoke-CheckGroups {
 
     ############################## Parameter section ########################
@@ -810,6 +849,12 @@ function Invoke-CheckGroups {
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($GroupsTotalCount / 10), 1)
     Write-Host "[*] Status: Processing group 1 of $GroupsTotalCount (updates every $StatusUpdateInterval groups)..."
 
+    # Policies are matched to groups once here; the loop below only looks each group up.
+    $CapsByGroupId = @{}
+    if ($GLOBALPermissionForCaps) {
+        $CapsByGroupId = New-GroupCapIndex -ConditionalAccessPolicies $ConditionalAccessPolicies
+    }
+
     #region Processing Loop
     # Loop through each group and get additional info
     foreach ($group in $AllGroups) {     
@@ -1269,37 +1314,12 @@ function Invoke-CheckGroups {
         # Check if the script has permission to enumerate CAPs
         if ($GLOBALPermissionForCaps) {
 
-            # Initialize a list to store CAP information for this group
-            $groupCAPs = [System.Collections.Generic.List[object]]::new()
-
-            # Loop through each conditional access policy in $CapGroups
-            foreach ($cap in $ConditionalAccessPolicies) {
-                # Check if the group ID is in the ExcludedGroup or IncludedGroup of the CAP
-                $isExcluded = $cap.ExcludedGroup -contains $group.Id
-                $isIncluded = $cap.IncludedGroup -contains $group.Id
-
-                if ($isExcluded -or $isIncluded) {
-
-                    # Determine if the group is "Included" or "Excluded"
-                    $groupUsage = if ($isExcluded) { "Excluded" } elseif ($isIncluded) { "Included" }
-
-                    # Add CAP information to the list for this group
-                    $groupCAPs.Add([PSCustomObject]@{
-                        Id         = $cap.Id
-                        CAPName    = $cap.CAPName
-                        CAPExOrIn  = $groupUsage
-                        CAPStatus  = $cap.CAPStatus
-                    })
-                }
-            }
-
-            # Add the CAP information to the group properties if any CAPs were found
-            if ($groupCAPs.Count -ge 1) {
+            $groupCAPs = $CapsByGroupId[[string]$group.Id]
+            if ($null -ne $groupCAPs) {
                 $CAPCount = $groupCAPs.Count
             } else {
                 $CAPCount = 0
                 $groupCAPs = $null
-
             }
         } else {
             # If no permission for CAPs, set CAPCount to "?"
