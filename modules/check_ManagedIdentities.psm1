@@ -68,7 +68,7 @@ function Invoke-CheckManagedIdentities {
 
         return [pscustomobject]@{
             Id                   = $resolvedObject.Id
-            AppId                = if ($resolvedObject.PSObject.Properties.Name -contains 'AppId') { $resolvedObject.AppId } else { $null }
+            AppId                = if ($null -ne $resolvedObject.PSObject.Properties['AppId']) { $resolvedObject.AppId } else { $null }
             DisplayName          = $resolvedObject.DisplayName
             Enabled              = $resolvedObject.Enabled
             PublisherName        = $resolvedObject.PublisherName
@@ -76,7 +76,7 @@ function Invoke-CheckManagedIdentities {
             Type                 = $resolvedObject.ObjectKind
             TargetReport         = $resolvedObject.TargetReport
             ServicePrincipalType = $resolvedObject.ServicePrincipalType
-            CreationDate         = if ($resolvedObject.PSObject.Properties.Name -contains 'CreationDate') { $resolvedObject.CreationDate } else { $null }
+            CreationDate         = if ($null -ne $resolvedObject.PSObject.Properties['CreationDate']) { $resolvedObject.CreationDate } else { $null }
         }
     }
 

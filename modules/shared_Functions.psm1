@@ -10518,14 +10518,14 @@ function Get-PIMForGroupsAssignmentsDetails {
             foreach ($assignment in $AssignmentsByPrincipal[$principalId]) {
                 $assignment | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $ObjectInfo.DisplayName -Force
                 $assignment | Add-Member -MemberType NoteProperty -Name "Type" -Value $ObjectInfo.Type -Force
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'UserPrincipalName') {$assignment | Add-Member -MemberType NoteProperty -Name "UserPrincipalName" -Value $ObjectInfo.UserPrincipalName -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'AccountEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "AccountEnabled" -Value $ObjectInfo.AccountEnabled -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'UserType') {$assignment | Add-Member -MemberType NoteProperty -Name "UserType" -Value $ObjectInfo.UserType -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'OnPremisesSyncEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "OnPremisesSyncEnabled" -Value $ObjectInfo.OnPremisesSyncEnabled -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'Department') {$assignment | Add-Member -MemberType NoteProperty -Name "Department" -Value $ObjectInfo.Department -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'JobTitle') {$assignment | Add-Member -MemberType NoteProperty -Name "JobTitle" -Value $ObjectInfo.JobTitle -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'SecurityEnabled') {$assignment | Add-Member -MemberType NoteProperty -Name "SecurityEnabled" -Value $ObjectInfo.SecurityEnabled -Force}
-                if ($ObjectInfo.PSObject.Properties.Name -contains 'IsAssignableToRole') {$assignment | Add-Member -MemberType NoteProperty -Name "IsAssignableToRole" -Value $ObjectInfo.IsAssignableToRole -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['UserPrincipalName']) {$assignment | Add-Member -MemberType NoteProperty -Name "UserPrincipalName" -Value $ObjectInfo.UserPrincipalName -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['AccountEnabled']) {$assignment | Add-Member -MemberType NoteProperty -Name "AccountEnabled" -Value $ObjectInfo.AccountEnabled -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['UserType']) {$assignment | Add-Member -MemberType NoteProperty -Name "UserType" -Value $ObjectInfo.UserType -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['OnPremisesSyncEnabled']) {$assignment | Add-Member -MemberType NoteProperty -Name "OnPremisesSyncEnabled" -Value $ObjectInfo.OnPremisesSyncEnabled -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['Department']) {$assignment | Add-Member -MemberType NoteProperty -Name "Department" -Value $ObjectInfo.Department -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['JobTitle']) {$assignment | Add-Member -MemberType NoteProperty -Name "JobTitle" -Value $ObjectInfo.JobTitle -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['SecurityEnabled']) {$assignment | Add-Member -MemberType NoteProperty -Name "SecurityEnabled" -Value $ObjectInfo.SecurityEnabled -Force}
+                if ($null -ne $ObjectInfo.PSObject.Properties['IsAssignableToRole']) {$assignment | Add-Member -MemberType NoteProperty -Name "IsAssignableToRole" -Value $ObjectInfo.IsAssignableToRole -Force}
             }
         }
     }
@@ -11167,7 +11167,7 @@ function Get-IntuneRbacRoleAssignments {
                 $assignmentForMembers = $assignment
                 $assignmentId = [string]$assignment.id
                 $listMembers = @()
-                if ($assignment.PSObject.Properties.Name -contains "members") {
+                if ($null -ne $assignment.PSObject.Properties["members"]) {
                     $listMembers = @($assignment.members | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 }
 
@@ -11183,13 +11183,13 @@ function Get-IntuneRbacRoleAssignments {
                     }
                 }
 
-                if (-not ($assignmentForMembers.PSObject.Properties.Name -contains "members")) { continue }
+                if ($null -eq $assignmentForMembers.PSObject.Properties["members"]) { continue }
 
                 $memberIds = @($assignmentForMembers.members | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 if ($memberIds.Count -eq 0) { continue }
 
                 $roleScopeTagIds = @()
-                if ($assignmentForMembers.PSObject.Properties.Name -contains "roleScopeTags") {
+                if ($null -ne $assignmentForMembers.PSObject.Properties["roleScopeTags"]) {
                     $roleScopeTagIds = @($assignmentForMembers.roleScopeTags | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 }
 
@@ -11204,12 +11204,12 @@ function Get-IntuneRbacRoleAssignments {
                 }
 
                 $scopeMembers = @()
-                if ($assignmentForMembers.PSObject.Properties.Name -contains "scopeMembers") {
+                if ($null -ne $assignmentForMembers.PSObject.Properties["scopeMembers"]) {
                     $scopeMembers = @($assignmentForMembers.scopeMembers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 }
 
                 $resourceScopes = @()
-                if ($assignmentForMembers.PSObject.Properties.Name -contains "resourceScopes") {
+                if ($null -ne $assignmentForMembers.PSObject.Properties["resourceScopes"]) {
                     $resourceScopes = @($assignmentForMembers.resourceScopes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 }
 
@@ -12464,7 +12464,7 @@ function Get-EffectiveEntraLicense {
     $skus =
         if ($null -eq $response) { @() }
         elseif ($response -is [System.Collections.IEnumerable] -and -not ($response -is [string])) { @($response) }
-        elseif ($response.PSObject.Properties.Name -contains 'value') { @($response.value) }
+        elseif ($null -ne $response.PSObject.Properties['value']) { @($response.value) }
         else { @($response) }
 
     # Entra Free does not have any SKUs
@@ -12742,7 +12742,7 @@ function invoke-EntraFalconAuth {
 
     $InvokeIntuneRbacBroCiRefresh = {
         $refreshToken = $null
-        if ($GLOBALBrociAccessToken -and $GLOBALBrociAccessToken.PSObject.Properties.Name -contains 'refresh_token') {
+        if ($GLOBALBrociAccessToken -and $null -ne $GLOBALBrociAccessToken.PSObject.Properties['refresh_token']) {
             $refreshToken = $GLOBALBrociAccessToken.refresh_token
         }
         if ([string]::IsNullOrWhiteSpace([string]$refreshToken)) {

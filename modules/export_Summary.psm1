@@ -688,7 +688,7 @@ return @"
         if (-not $GlobalAuditSummary.Contains('Catalogs')) {
             $GlobalAuditSummary['Catalogs'] = @{ Count = 0; CatalogResources = 0; RbacAssignments = 0 }
         }
-    } elseif ($GlobalAuditSummary.PSObject.Properties.Name -notcontains 'Catalogs') {
+    } elseif ($null -eq $GlobalAuditSummary.PSObject.Properties['Catalogs']) {
         $GlobalAuditSummary | Add-Member -NotePropertyName Catalogs -NotePropertyValue ([pscustomobject]@{ Count = 0; CatalogResources = 0; RbacAssignments = 0 })
     }
 

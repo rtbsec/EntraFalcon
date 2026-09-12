@@ -1085,7 +1085,7 @@ function Invoke-CheckTenant {
         Write-Log -Level Verbose -Message "Skipping device registration policy lookup: $specialDataUnavailabilityReason"
     } else {
         $specialAuthContext = $global:GLOBALSecurityFindingsAccessContext
-        $hasSpecialTokenContext = ($null -ne $specialAuthContext -and $specialAuthContext.PSObject.Properties.Name -contains "IsAvailable")
+        $hasSpecialTokenContext = ($null -ne $specialAuthContext -and $null -ne $specialAuthContext.PSObject.Properties["IsAvailable"])
 
         if ($hasSpecialTokenContext -and -not [bool]$specialAuthContext.IsAvailable) {
             $specialDataUnavailabilityReason = "Special authentication failed earlier ($($specialAuthContext.Reason))."
@@ -4791,10 +4791,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
                 $authStrengthResolved = $false
                 $authStrengthPhishingResistantOnly = $false
-                if ($policy.PSObject.Properties.Name -contains "AuthStrengthResolved") {
+                if ($null -ne $policy.PSObject.Properties["AuthStrengthResolved"]) {
                     try { $authStrengthResolved = [System.Convert]::ToBoolean($policy.AuthStrengthResolved) } catch { $authStrengthResolved = $false }
                 }
-                if ($policy.PSObject.Properties.Name -contains "AuthStrengthPhishingResistantOnly") {
+                if ($null -ne $policy.PSObject.Properties["AuthStrengthPhishingResistantOnly"]) {
                     try { $authStrengthPhishingResistantOnly = [System.Convert]::ToBoolean($policy.AuthStrengthPhishingResistantOnly) } catch { $authStrengthPhishingResistantOnly = $false }
                 }
                 if (-not $authStrengthResolved) {
@@ -4910,10 +4910,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $mfaBaselineCandidate = $false
             $mfaEquivalentEnforced = $false
             $mfaEvaluationWarning = "$($policy.MfaEvaluationWarning)".Trim()
-            if ($policy.PSObject.Properties.Name -contains "MfaBaselineCandidate") {
+            if ($null -ne $policy.PSObject.Properties["MfaBaselineCandidate"]) {
                 try { $mfaBaselineCandidate = [System.Convert]::ToBoolean($policy.MfaBaselineCandidate) } catch { $mfaBaselineCandidate = $false }
             }
-            if ($policy.PSObject.Properties.Name -contains "MfaEquivalentEnforced") {
+            if ($null -ne $policy.PSObject.Properties["MfaEquivalentEnforced"]) {
                 try { $mfaEquivalentEnforced = [System.Convert]::ToBoolean($policy.MfaEquivalentEnforced) } catch { $mfaEquivalentEnforced = $false }
             }
             $hasNoAuthFlow = [string]::IsNullOrWhiteSpace("$($policy.AuthFlow)".Trim())
@@ -5671,7 +5671,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             if (-not $FindingsById.ContainsKey($capFindingId)) { continue }
             $capFinding = $FindingsById[$capFindingId]
             $affectedObjects = @($capFinding.AffectedObjects)
-            if ($affectedObjects.Count -gt 0 -and @($affectedObjects | Where-Object { $_.PSObject.Properties.Name -contains "_SortEvaluationRank" }).Count -gt 0) {
+            if ($affectedObjects.Count -gt 0 -and @($affectedObjects | Where-Object { $null -ne $_.PSObject.Properties["_SortEvaluationRank"] }).Count -gt 0) {
                 Set-FindingOverride -FindingId $capFindingId -Props @{
                     AffectedSortKey = "_SortEvaluationRank"
                     AffectedSortDir = "ASC"

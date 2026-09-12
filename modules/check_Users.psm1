@@ -1823,9 +1823,9 @@ function Update-EntraFalconUserBlueprintOwnershipImpact {
             continue
         }
 
-        $baselineImpact = if ($user.PSObject.Properties.Name -contains 'BaselineImpact') { [double]$user.BaselineImpact } elseif ($user.PSObject.Properties.Name -contains 'Impact') { [double]$user.Impact } else { 0 }
-        $baselineRisk = if ($user.PSObject.Properties.Name -contains 'BaselineRisk') { [double]$user.BaselineRisk } elseif ($user.PSObject.Properties.Name -contains 'Risk') { [double]$user.Risk } else { 0 }
-        $baselineWarnings = if ($user.PSObject.Properties.Name -contains 'BaselineWarnings') { [string]$user.BaselineWarnings } else { [string]$user.Warnings }
+        $baselineImpact = if ($null -ne $user.PSObject.Properties['BaselineImpact']) { [double]$user.BaselineImpact } elseif ($null -ne $user.PSObject.Properties['Impact']) { [double]$user.Impact } else { 0 }
+        $baselineRisk = if ($null -ne $user.PSObject.Properties['BaselineRisk']) { [double]$user.BaselineRisk } elseif ($null -ne $user.PSObject.Properties['Risk']) { [double]$user.Risk } else { 0 }
+        $baselineWarnings = if ($null -ne $user.PSObject.Properties['BaselineWarnings']) { [string]$user.BaselineWarnings } else { [string]$user.Warnings }
 
         $user | Add-Member -NotePropertyName BaselineImpact -NotePropertyValue ([math]::Round($baselineImpact)) -Force
         $user | Add-Member -NotePropertyName BaselineRisk -NotePropertyValue ([math]::Round($baselineRisk)) -Force
@@ -1833,8 +1833,8 @@ function Update-EntraFalconUserBlueprintOwnershipImpact {
         $user | Add-Member -NotePropertyName BlueprintOwnerImpact -NotePropertyValue 0 -Force
         $user | Add-Member -NotePropertyName BlueprintOwnerDetails -NotePropertyValue @() -Force
         $user | Add-Member -NotePropertyName BlueprintOwn -NotePropertyValue 0 -Force
-        $catalogRbacImpact = if ($user.PSObject.Properties.Name -contains 'CatalogRbacImpact' -and $null -ne $user.CatalogRbacImpact) { [double]$user.CatalogRbacImpact } else { 0 }
-        $likelihood = if ($user.PSObject.Properties.Name -contains 'Likelihood' -and $null -ne $user.Likelihood) {
+        $catalogRbacImpact = if ($null -ne $user.PSObject.Properties['CatalogRbacImpact'] -and $null -ne $user.CatalogRbacImpact) { [double]$user.CatalogRbacImpact } else { 0 }
+        $likelihood = if ($null -ne $user.PSObject.Properties['Likelihood'] -and $null -ne $user.Likelihood) {
             [double]$user.Likelihood
         } elseif ($baselineImpact -ne 0) {
             [double]$baselineRisk / [double]$baselineImpact
@@ -1843,7 +1843,7 @@ function Update-EntraFalconUserBlueprintOwnershipImpact {
         }
         $impactWithoutBlueprint = [math]::Round($baselineImpact + $catalogRbacImpact)
         $composedWarnings = $baselineWarnings
-        $catalogRbacWarningDetails = if ($user.PSObject.Properties.Name -contains 'CatalogRbacDetails') { @($user.CatalogRbacDetails) } else { @() }
+        $catalogRbacWarningDetails = if ($null -ne $user.PSObject.Properties['CatalogRbacDetails']) { @($user.CatalogRbacDetails) } else { @() }
         if (@($catalogRbacWarningDetails | Where-Object { [string]$_.Role -in @('Catalog Owner','Access Package Manager','Access Package Assignment Manager') }).Count -gt 0) {
             $composedWarnings = Add-EntraFalconUserWarningText -ExistingWarnings $composedWarnings -NewWarning "Identity Governance management role assigned"
         }
@@ -1900,7 +1900,7 @@ function Write-EntraFalconUsersReport {
         'Timers'
     )
     foreach ($propertyName in $requiredProperties) {
-        if ($UserReportState.PSObject.Properties.Name -notcontains $propertyName -or $null -eq $UserReportState.$propertyName) {
+        if ($null -eq $UserReportState.PSObject.Properties[$propertyName] -or $null -eq $UserReportState.$propertyName) {
             throw "Users report state is missing required property '$propertyName'."
         }
     }
@@ -1938,21 +1938,21 @@ function Write-EntraFalconUsersReport {
 
     # Older replay dumps predate Catalog RBAC. Preserve replay compatibility without reporting a false zero.
     foreach ($user in @($AllUsersDetails)) {
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRBAC') {
-            $legacyCatalogRbac = if ($user.PSObject.Properties.Name -contains 'IGRBAC') { $user.IGRBAC } else { '-' }
+        if ($null -eq $user.PSObject.Properties['CatalogRBAC']) {
+            $legacyCatalogRbac = if ($null -ne $user.PSObject.Properties['IGRBAC']) { $user.IGRBAC } else { '-' }
             $user | Add-Member -NotePropertyName CatalogRBAC -NotePropertyValue $legacyCatalogRbac
         }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacDetails') { $user | Add-Member -NotePropertyName CatalogRbacDetails -NotePropertyValue @() }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacAssessmentAvailable') { $user | Add-Member -NotePropertyName CatalogRbacAssessmentAvailable -NotePropertyValue $false }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacAssessmentStatus') { $user | Add-Member -NotePropertyName CatalogRbacAssessmentStatus -NotePropertyValue 'Unavailable' }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacGrossImpact') { $user | Add-Member -NotePropertyName CatalogRbacGrossImpact -NotePropertyValue 0 }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacExistingAccessOffset') { $user | Add-Member -NotePropertyName CatalogRbacExistingAccessOffset -NotePropertyValue 0 }
-        if ($user.PSObject.Properties.Name -notcontains 'CatalogRbacImpact') { $user | Add-Member -NotePropertyName CatalogRbacImpact -NotePropertyValue 0 }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacDetails']) { $user | Add-Member -NotePropertyName CatalogRbacDetails -NotePropertyValue @() }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacAssessmentAvailable']) { $user | Add-Member -NotePropertyName CatalogRbacAssessmentAvailable -NotePropertyValue $false }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacAssessmentStatus']) { $user | Add-Member -NotePropertyName CatalogRbacAssessmentStatus -NotePropertyValue 'Unavailable' }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacGrossImpact']) { $user | Add-Member -NotePropertyName CatalogRbacGrossImpact -NotePropertyValue 0 }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacExistingAccessOffset']) { $user | Add-Member -NotePropertyName CatalogRbacExistingAccessOffset -NotePropertyValue 0 }
+        if ($null -eq $user.PSObject.Properties['CatalogRbacImpact']) { $user | Add-Member -NotePropertyName CatalogRbacImpact -NotePropertyValue 0 }
     }
 
     $PmDataPostProcessing = [System.Diagnostics.Stopwatch]::StartNew()
 
-    $blueprintOwnerUserCount = @($Users.Values | Where-Object { $_.PSObject.Properties.Name -contains 'BlueprintOwn' -and $null -ne $_.BlueprintOwn -and [double]$_.BlueprintOwn -gt 0 }).Count
+    $blueprintOwnerUserCount = @($Users.Values | Where-Object { $null -ne $_.PSObject.Properties['BlueprintOwn'] -and $null -ne $_.BlueprintOwn -and [double]$_.BlueprintOwn -gt 0 }).Count
     $totalBlueprintOwnerImpact = ($Users.Values | Measure-Object -Property BlueprintOwnerImpact -Sum).Sum
     if ($null -eq $totalBlueprintOwnerImpact) { $totalBlueprintOwnerImpact = 0 }
     Write-Log -Level Debug -Message "Users report final state: Users=$($Users.Count), BlueprintOwners=$blueprintOwnerUserCount, TotalBlueprintOwnerImpact=$([math]::Round([double]$totalBlueprintOwnerImpact))"
@@ -2112,7 +2112,7 @@ function Write-EntraFalconUsersReport {
         }
         [void]$DetailTxtBuilder.AppendLine("")
 
-        if (-not [string]::IsNullOrWhiteSpace($item.ParentAgentIdentityId) -and $ReportingUserInfo.PSObject.Properties.Name -contains "Parent Agent Identity") {
+        if (-not [string]::IsNullOrWhiteSpace($item.ParentAgentIdentityId) -and $null -ne $ReportingUserInfo.PSObject.Properties["Parent Agent Identity"]) {
             $ReportingUserInfo."Parent Agent Identity" = "<a href=AgentIdentities_$($StartTimestamp)_$($EscapedTenantName).html#$($item.ParentAgentIdentityId)>$($item.ParentAgentIdentityDisplayName)</a>"
         }
 

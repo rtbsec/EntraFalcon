@@ -174,10 +174,10 @@ function Invoke-CheckCaps {
         $externalTenants = $null
 
         if ($null -ne $StructuredSelector) {
-            if ($StructuredSelector.PSObject.Properties.Name -contains 'GuestOrExternalUserTypes') {
+            if ($null -ne $StructuredSelector.PSObject.Properties['GuestOrExternalUserTypes']) {
                 $existingExternalUserTypes = [string]$StructuredSelector.GuestOrExternalUserTypes
             }
-            if ($StructuredSelector.PSObject.Properties.Name -contains 'ExternalTenants') {
+            if ($null -ne $StructuredSelector.PSObject.Properties['ExternalTenants']) {
                 $externalTenants = $StructuredSelector.ExternalTenants
             }
         }
@@ -281,7 +281,7 @@ function Invoke-CheckCaps {
                 $groupUsers = 0
                 if ($null -ne $groupUsersRaw -and [int]::TryParse([string]$groupUsersRaw, [ref]$groupUsers)) {
                     $groupMetrics.FallbackGroups[$GroupId] = $groupUsers
-                    $groupDisplayName = if ($groupDetails.PSObject.Properties.Name -contains 'DisplayName') { [string]$groupDetails.DisplayName } else { "" }
+                    $groupDisplayName = if ($null -ne $groupDetails.PSObject.Properties['DisplayName']) { [string]$groupDetails.DisplayName } else { "" }
                     $groupDisplayNameSuffix = if (-not [string]::IsNullOrWhiteSpace($groupDisplayName)) { " ($groupDisplayName)" } else { "" }
                     Write-Log -Level Trace -Message "CAP group fallback for '$GroupId'${groupDisplayNameSuffix}: using raw group user count=$groupUsers because no Userdetails were available."
                 }
@@ -438,13 +438,13 @@ function Invoke-CheckCaps {
         $legacyGuestsOrExternalUsersSelector = $false
 
         if ($null -ne $ExternalSelector) {
-            if ($ExternalSelector.PSObject.Properties.Name -contains 'GuestOrExternalUserTypes') {
+            if ($null -ne $ExternalSelector.PSObject.Properties['GuestOrExternalUserTypes']) {
                 $guestOrExternalUserTypes = [string]$ExternalSelector.GuestOrExternalUserTypes
             }
-            if ($ExternalSelector.PSObject.Properties.Name -contains 'ExternalTenants') {
+            if ($null -ne $ExternalSelector.PSObject.Properties['ExternalTenants']) {
                 $externalTenants = $ExternalSelector.ExternalTenants
             }
-            if ($ExternalSelector.PSObject.Properties.Name -contains 'LegacyGuestsOrExternalUsersSelector') {
+            if ($null -ne $ExternalSelector.PSObject.Properties['LegacyGuestsOrExternalUsersSelector']) {
                 $legacyGuestsOrExternalUsersSelector = [bool]$ExternalSelector.LegacyGuestsOrExternalUsersSelector
             }
         }
@@ -462,10 +462,10 @@ function Invoke-CheckCaps {
         $membershipKind = ""
         $tenantMembers = @()
         if ($null -ne $externalTenants) {
-            if ($externalTenants.PSObject.Properties.Name -contains 'MembershipKind') {
+            if ($null -ne $externalTenants.PSObject.Properties['MembershipKind']) {
                 $membershipKind = [string]$externalTenants.MembershipKind
             }
-            if ($externalTenants.PSObject.Properties.Name -contains 'Members') {
+            if ($null -ne $externalTenants.PSObject.Properties['Members']) {
                 $tenantMembers = @($externalTenants.Members)
             }
         }
@@ -1546,7 +1546,7 @@ function Invoke-CheckCaps {
     foreach ($userEntry in $Users.GetEnumerator()) {
         $userObject = $userEntry.Value
         if ($null -eq $userObject) { continue }
-        if ($userObject.PSObject.Properties.Name -contains 'Agent' -and [bool]$userObject.Agent) { continue }
+        if ($null -ne $userObject.PSObject.Properties['Agent'] -and [bool]$userObject.Agent) { continue }
 
         $userId = "$($userObject.Id)".Trim()
         if ([string]::IsNullOrWhiteSpace($userId)) {
@@ -1590,9 +1590,9 @@ function Invoke-CheckCaps {
         if ($null -eq $userObject) { continue }
 
         $isEnabled = $false
-        if ($userObject.PSObject.Properties.Name -contains 'Enabled') {
+        if ($null -ne $userObject.PSObject.Properties['Enabled']) {
             $isEnabled = [bool]$userObject.Enabled
-        } elseif ($userObject.PSObject.Properties.Name -contains 'AccountEnabled') {
+        } elseif ($null -ne $userObject.PSObject.Properties['AccountEnabled']) {
             $isEnabled = [bool]$userObject.AccountEnabled
         }
         if (-not $isEnabled) { continue }

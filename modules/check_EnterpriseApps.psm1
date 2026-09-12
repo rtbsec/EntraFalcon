@@ -132,7 +132,7 @@ function Invoke-CheckEnterpriseApps {
 
         return [pscustomobject]@{
             Id                   = $resolvedObject.Id
-            AppId                = if ($resolvedObject.PSObject.Properties.Name -contains 'AppId') { $resolvedObject.AppId } else { $null }
+            AppId                = if ($null -ne $resolvedObject.PSObject.Properties['AppId']) { $resolvedObject.AppId } else { $null }
             DisplayName          = $resolvedObject.DisplayName
             Enabled              = $resolvedObject.Enabled
             PublisherName        = $resolvedObject.PublisherName
@@ -140,7 +140,7 @@ function Invoke-CheckEnterpriseApps {
             Type                 = $resolvedObject.ObjectKind
             TargetReport         = $resolvedObject.TargetReport
             ServicePrincipalType = $resolvedObject.ServicePrincipalType
-            CreationDate         = if ($resolvedObject.PSObject.Properties.Name -contains 'CreationDate') { $resolvedObject.CreationDate } else { $null }
+            CreationDate         = if ($null -ne $resolvedObject.PSObject.Properties['CreationDate']) { $resolvedObject.CreationDate } else { $null }
         }
     }
 
@@ -1451,7 +1451,7 @@ function Invoke-CheckEnterpriseApps {
                 $ReportingEntAppInfo | Add-Member -NotePropertyName "Malicious App Source" -NotePropertyValue "<a href=`"$($item.KnownMaliciousSourceUrl)`" target=`"_blank`">$($item.KnownMaliciousSourceUrl)</a>"
             }
             $TxtReportProps += "Known Malicious Application"
-            if ($ReportingEntAppInfo.PSObject.Properties.Name -contains "Malicious App Source") {
+            if ($null -ne $ReportingEntAppInfo.PSObject.Properties["Malicious App Source"]) {
                 $TxtReportProps += "Malicious App Source"
             }
         }
