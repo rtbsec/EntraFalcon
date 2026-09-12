@@ -1380,11 +1380,14 @@ function Invoke-CheckEnterpriseApps {
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
     write-host "[*] Generating reports"
 
+    # Sort once and reuse the same risk ordering for the overview and details.
+    $SortedServicePrincipalsByRisk = $AllServicePrincipal | Sort-Object Risk -Descending
+
     #Define output of the main table
-    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,EnabledInTenant,Inactive,SAML,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,Owners,Credentials,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedServicePrincipalsByRisk | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,EnabledInTenant,Inactive,SAML,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,Owners,Credentials,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings
     
-    #Define the apps to be displayed in detail and sort them by risk score
-    $details = $AllServicePrincipal | Sort-Object Risk -Descending
+    #Define the apps to be displayed in detail
+    $details = $SortedServicePrincipalsByRisk
 
     #Convert to Hashtable for faster searches and use for lookups in the details section
     $AllServicePrincipalHT = @{}

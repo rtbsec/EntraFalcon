@@ -1930,8 +1930,11 @@ function Invoke-CheckGroups {
     $GroupOutputProperties = @("DisplayName","Type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","Impact","Likelihood","Risk","Warnings")
     $GroupMainTableProperties = @(@{Name = "DisplayName"; Expression = { $_.DisplayNameLink }},"type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","Impact","Likelihood","Risk","Warnings")
 
+    # Sort once and reuse the same risk ordering for the overview and details.
+    $SortedGroupsByRisk = $AllGroupsDetails | Sort-Object Risk -Descending
+
     #Define output of the main table
-    $tableOutput = $AllGroupsDetails | Sort-Object Risk -Descending | Select-Object -Property $GroupOverviewProperties
+    $tableOutput = $SortedGroupsByRisk | Select-Object -Property $GroupOverviewProperties
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -1967,8 +1970,8 @@ function Invoke-CheckGroups {
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
 
-    #Define the apps to be displayed in detail and sort them by risk score
-    $details = $AllGroupsDetails | Sort-Object Risk -Descending
+    #Define the groups to be displayed in detail
+    $details = $SortedGroupsByRisk
     
     # Apply limit for details
     if ($LimitResults -and $LimitResults -gt 0) {

@@ -744,11 +744,14 @@ function Invoke-CheckManagedIdentities {
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
     write-host "[*] Generating reports"
 
+    # Sort once and reuse the same risk ordering for the overview and details.
+    $SortedManagedIdentitiesByRisk = $AllServicePrincipal | Sort-Object Risk -Descending
+
     #Define output of the main table
-    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedManagedIdentitiesByRisk | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     
-    #Define the apps to be displayed in detail and sort them by risk score
-    $details = $AllServicePrincipal | Sort-Object Risk -Descending
+    #Define the managed identities to be displayed in detail
+    $details = $SortedManagedIdentitiesByRisk
 
     #Define stringbuilder to avoid performance impact
     $DetailTxtBuilder = [System.Text.StringBuilder]::new()

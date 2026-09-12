@@ -777,12 +777,15 @@ function Invoke-CheckAppRegistrations {
     write-host "[*] Generating reports"
 
 
+    # Sort once and reuse the same risk ordering for the overview and details.
+    $SortedAppRegistrationsByRisk = $AllAppRegistrations | Sort-Object Risk -Descending
+
     #Define Table for output
-    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,FederatedCreds,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedAppRegistrationsByRisk | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,FederatedCreds,Impact,Likelihood,Risk,Warnings
     
 
-    #Define the apps to be displayed in detail and sort them by risk score
-    $details = $AllAppRegistrations | Sort-Object Risk -Descending
+    #Define the apps to be displayed in detail
+    $details = $SortedAppRegistrationsByRisk
 
 
     #Define stringbuilder to avoid performance impact

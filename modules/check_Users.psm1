@@ -1959,8 +1959,11 @@ function Write-EntraFalconUsersReport {
 
     write-host "[*] Processing results"
 
+    # Sort once and reuse the same risk ordering for the overview and details.
+    $SortedUsersByRisk = $AllUsersDetails | Sort-Object Risk -Descending
+
     #Define output of the main table
-    $tableOutput = $AllUsersDetails | Sort-Object Risk -Descending | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -1968,8 +1971,8 @@ function Write-EntraFalconUsersReport {
     }
 
 
-    #Define the apps to be displayed in detail and sort them by risk score
-    $details = $AllUsersDetails | Sort-Object Risk -Descending
+    #Define the users to be displayed in detail
+    $details = $SortedUsersByRisk
 
     # Apply limit for details
     if ($LimitResults -and $LimitResults -gt 0) {
