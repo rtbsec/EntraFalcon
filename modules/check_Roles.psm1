@@ -786,6 +786,9 @@ $headerHtml = @"
         $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-3" = $AzureTier3Count
         $GlobalAuditSummary.AzureRoleAssignments.Tiers.Uncategorized = $AzureTierUncatCount
 
+        $azureScopeTypeCounts = Get-AzureRoleScopeTypeCounts -Assignments $SortedAzureRoles
+        $GlobalAuditSummary.AzureRoleAssignments.ScopeType = $azureScopeTypeCounts
+
 
 
     }

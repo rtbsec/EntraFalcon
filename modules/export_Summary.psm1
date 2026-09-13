@@ -856,7 +856,7 @@ return @"
     $ChartsectionManagedIdentities += New-ChartSection -Title "Managed Identities" -Prefix "managedidentities" -ChartCount 2
     $ChartsectionAgentIdentities += New-ChartSection -Title "Agent Identities" -Prefix "agentidentities" -ChartCount 6
     $ChartsectionEntraRoles += New-ChartSection -Title "Entra ID Role Assignments" -Prefix "entraroles" -ChartCount 4
-    $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 4
+    $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 5
 
 
     #Dynamically generate sections
@@ -1099,6 +1099,14 @@ document.addEventListener('DOMContentLoaded', function () {
             'Agent Identity': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.AgentIdentity),
             'Blueprint Principal': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.BlueprintPrincipal),
             'Unknown': $($GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Unknown)
+        },
+        azureroles_scopetypes: {
+            'Root': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.Root),
+            'Management Group': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.ManagementGroup),
+            'Subscription': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.Subscription),
+            'Resource Group': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.ResourceGroup),
+            'Resource': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.Resource),
+            'Unknown': $([int]$GlobalAuditSummary.AzureRoleAssignments.ScopeType.Unknown)
         }        
     };
 
@@ -1474,6 +1482,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 }],
             };
         }
+        if (datasetKey === 'azureroles_scopetypes') {
+            const entries = Object.entries(dataSources.azureroles_scopetypes).filter(e => e[0] !== 'Unknown' || e[1] > 0);
+            return {
+                labels: entries.map(e => e[0]),
+                datasets: [{
+                    label: 'Assignments',
+                    data: entries.map(e => e[1]),
+                    backgroundColor: chartColorPalette
+                }],
+            };
+        }
 
         return null;
     }
@@ -1667,7 +1686,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'azureroles_chart1', title: 'Eligible vs Active', type: 'doughnut', dataset: 'azureroles_general' },
         { id: 'azureroles_chart2', title: 'Built-In vs Custom', type: 'bar', dataset: 'azureroles_builtin', showLegend: false },
         { id: 'azureroles_chart3', title: 'Role Tier Distribution', type: 'bar', dataset: 'azureroles_tiers', indexAxis: 'y', showLegend: false },
-        { id: 'azureroles_chart4', title: 'Principal Types', type: 'bar', dataset: 'azureroles_principaltypes', indexAxis: 'y', showLegend: false }
+        { id: 'azureroles_chart4', title: 'Principal Types', type: 'bar', dataset: 'azureroles_principaltypes', indexAxis: 'y', showLegend: false },
+        { id: 'azureroles_chart5', title: 'Assignments by Scope Level', type: 'bar', dataset: 'azureroles_scopetypes', indexAxis: 'y', showLegend: false }
     ];
 
     // === 4. Render all charts ===
