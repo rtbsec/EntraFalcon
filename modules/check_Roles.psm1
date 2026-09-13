@@ -379,7 +379,7 @@ function Invoke-CheckRoles {
             1 {$RoleTier = "Tier-1"; break}
             2 {$RoleTier = "Tier-2"; break}
             3 {$RoleTier = "Tier-3"; break}
-            "?" {$RoleTier = "Uncategorized"}
+            default {$RoleTier = "Uncategorized"}
         }
         [pscustomobject]@{ 
             "Role" = $($item.DisplayName)
@@ -578,9 +578,12 @@ function Invoke-CheckRoles {
                 "Contributor" { 2 }
                 "Role Based Access Control Administrator" { 3 }
                 "Reservations Administrator" { 4 }
-                default { 5 + [string]::Compare($_.Role, '') } # Alphabetical for others
+                default { 5 }
             }
         }
+    }, @{
+        # Alphabetical sorting for roles with the same priority
+        Expression = {$_.Role}
     }
 
 
@@ -649,7 +652,7 @@ $headerHtml = @"
         $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
-    write-host "[+] Details of $($SortedEntraRoles.count) Entra ID role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
+    write-host "[+] Details of $(@($SortedEntraRoles).count) Entra ID role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
 
     #Add information to the enumeration summary
     $EntraEligibleCount = 0
