@@ -1211,6 +1211,9 @@ $headerHtml = @"
     $GlobalAuditSummary.ManagedIdentities.ApiCategorization.Low = $AppApiLow
     $GlobalAuditSummary.ManagedIdentities.ApiCategorization.Misc = $AppApiMisc
 
+    $managedIdentityAzureRoleDetails = @($AllServicePrincipal | ForEach-Object { @($_.AzureRoleDetails) })
+    $GlobalAuditSummary.ManagedIdentities.AzureScopeType = Get-AzureRoleScopeTypeCounts -Assignments $managedIdentityAzureRoleDetails
+
 
     #Convert to Hashtable for faster searches
     $AllServicePrincipalHT = @{}

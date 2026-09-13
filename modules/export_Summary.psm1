@@ -853,7 +853,7 @@ return @"
     if ($GLOBALPimForGroupsChecked) { $ChartsectionGroups += New-ChartSection -Title "Groups" -Prefix "group" -ChartCount 4} else {$ChartsectionGroups += New-ChartSection -Title "Groups" -Prefix "group" -ChartCount 3}
     $ChartsectionEnterpriseApps += New-ChartSection -Title "Enterprise Applications" -Prefix "enterpriseapps" -ChartCount 4
     $ChartsectionAppRegistrations += New-ChartSection -Title "App Registrations" -Prefix "appregistrations" -ChartCount 3
-    $ChartsectionManagedIdentities += New-ChartSection -Title "Managed Identities" -Prefix "managedidentities" -ChartCount 2
+    $ChartsectionManagedIdentities += New-ChartSection -Title "Managed Identities" -Prefix "managedidentities" -ChartCount 3
     $ChartsectionAgentIdentities += New-ChartSection -Title "Agent Identities" -Prefix "agentidentities" -ChartCount 6
     $ChartsectionEntraRoles += New-ChartSection -Title "Entra ID Role Assignments" -Prefix "entraroles" -ChartCount 4
     $ChartsectionAzureRoles += New-ChartSection -Title "Azure Role Assignments" -Prefix "azureroles" -ChartCount 5
@@ -1011,6 +1011,14 @@ document.addEventListener('DOMContentLoaded', function () {
             'Medium': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Medium),
             'Low': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Low),
             'Uncategorized': $($GlobalAuditSummary.ManagedIdentities.ApiCategorization.Misc)
+        },
+        managedidentities_azurescopetypes: {
+            'Root': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.Root),
+            'Management Group': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.ManagementGroup),
+            'Subscription': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.Subscription),
+            'Resource Group': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.ResourceGroup),
+            'Resource': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.Resource),
+            'Unknown': $([int]$GlobalAuditSummary.ManagedIdentities.AzureScopeType.Unknown)
         },
 
         // ============ Agent Identities ============
@@ -1482,6 +1490,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 }],
             };
         }
+        if (datasetKey === 'managedidentities_azurescopetypes') {
+            const entries = Object.entries(dataSources.managedidentities_azurescopetypes).filter(e => e[0] !== 'Unknown' || e[1] > 0);
+            return {
+                labels: entries.map(e => e[0]),
+                datasets: [{
+                    label: 'Assignments',
+                    data: entries.map(e => e[1]),
+                    backgroundColor: chartColorPalette
+                }],
+            };
+        }
         if (datasetKey === 'azureroles_scopetypes') {
             const entries = Object.entries(dataSources.azureroles_scopetypes).filter(e => e[0] !== 'Unknown' || e[1] > 0);
             return {
@@ -1667,6 +1686,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // ============ Managed Identities  ============
         { id: 'managedidentities_chart1', title: 'System vs User Assigned', type: 'doughnut', dataset: 'managedidentities_general' },
         { id: 'managedidentities_chart2', title: 'API Permission Severity', type: 'bar', dataset: 'managedidentities_apicategorization', indexAxis: 'y', showLegend: false },
+        { id: 'managedidentities_chart3', title: 'Direct Azure Assignments by Scope Level', type: 'bar', dataset: 'managedidentities_azurescopetypes', indexAxis: 'y', showLegend: false },
 
         // ============ Agent Identities ============
         { id: 'agentidentities_chart1', title: 'Agent Identity Ecosystem', type: 'bar', dataset: 'agentidentities_overview', indexAxis: 'y', showLegend: false },
