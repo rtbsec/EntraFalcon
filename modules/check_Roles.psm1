@@ -192,7 +192,8 @@ function Invoke-CheckRoles {
                 )
             }
 
-            $ResolvedDirectoryObject = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method POST -Uri "/directoryObjects/getByIds" -Body $Body -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+            $GraphLookupError = $null
+            $ResolvedDirectoryObject = Send-GraphRequest -AccessTokenProvider (New-EntraFalconGraphTokenProvider -Purpose MainAuth) -Method POST -Uri "/directoryObjects/getByIds" -Body $Body -BetaAPI -Suppress404 -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorVariable GraphLookupError
 
             if ($ResolvedDirectoryObject) {
 
@@ -234,6 +235,10 @@ function Invoke-CheckRoles {
                     }
                 }
 
+                if ($normalizedType -eq "foreigngroup" -and $resolvedType -eq "Unknown Object") {
+                    $resolvedType = "Group"
+                }
+
                 $resolvedName = $null
                 if ($ResolvedDirectoryObject.PSObject.Properties.Match('userPrincipalName').Count -gt 0 -and $ResolvedDirectoryObject.userPrincipalName) {
                     $resolvedName = [string]$ResolvedDirectoryObject.userPrincipalName
@@ -245,7 +250,7 @@ function Invoke-CheckRoles {
                     $resolvedName = $ObjectID
                 }
 
-                if ($normalizedType -like "*foreign*") {
+                if ($normalizedType -like "*foreign*" -and $resolvedName -notlike "Foreign Principal*") {
                     $resolvedName = "$resolvedName (Foreign)"
                 }
 
@@ -320,6 +325,24 @@ function Invoke-CheckRoles {
                 }
 
                 $ObjectDetailsCache[$cacheKey] = $object
+                return $object
+            }
+
+            if ($normalizedType -like "*foreign*") {
+                $fallbackType = "Unknown Object"
+                if ($normalizedType -eq "foreigngroup") {
+                    $fallbackType = "Group"
+                }
+
+                $object = [PSCustomObject]@{
+                    DisplayName     = "$ObjectID (Foreign)"
+                    DisplayNameLink = "$ObjectID (Foreign)"
+                    Type            = $fallbackType
+                }
+
+                if (-not $GraphLookupError) {
+                    $ObjectDetailsCache[$cacheKey] = $object
+                }
                 return $object
             }
         }
@@ -507,7 +530,8 @@ function Invoke-CheckRoles {
                 })
             }
         } else {
-            $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId
+            $LookupType = if ($PrincipalType -like "Foreign*") { $PrincipalType } else { "unknown" }
+            $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId -type $LookupType
 
             foreach ($Assignment in $Assignments) {
                 switch ($Assignment.RoleTier) {
