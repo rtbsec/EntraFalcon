@@ -313,8 +313,16 @@ function Invoke-CheckAppRegistrations {
     ########################################## SECTION: Data Processing ##########################################
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($AppsTotalCount / 10), 1)
-    if ($AppsTotalCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($AppsTotalCount -ge 200) {
+        [Math]::Floor($AppsTotalCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($AppsTotalCount / 10), 1)
+    }
+    $IsSmallCollection = ($AppsTotalCount -gt 0 -and $AppsTotalCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($AppsTotalCount -eq 1) { 'app registration' } else { 'app registrations' }
+        Write-Host "[*] Processing $AppsTotalCount $ProcessingObjectLabel..."
+    } elseif ($AppsTotalCount -ge 200) {
         Write-Host "[*] Status: Processing app 1 of $AppsTotalCount (updates every $StatusUpdateInterval apps)..."
     }
     
@@ -355,7 +363,11 @@ function Invoke-CheckAppRegistrations {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $AppsTotalCount) {
-            Write-Host "[*] Status: Processing app $ProgressCounter of $AppsTotalCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing app $ProgressCounter of $AppsTotalCount..."
+            } else {
+                Write-Host "[*] Status: Processing app $ProgressCounter of $AppsTotalCount..."
+            }
         }
 
         # Check if it the Entra Connect Sync App
@@ -771,6 +783,9 @@ function Invoke-CheckAppRegistrations {
         [void]$AllAppRegistrations.Add($AppRegDetails)
         
     }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $AppsTotalCount $ProcessingObjectLabel."
+    }
     #endregion
     
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
@@ -1116,7 +1131,7 @@ function Invoke-CheckAppRegistrations {
 
     $DetailOutputTxt = $DetailTxtBuilder.ToString()
 
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
     write-host
 
     $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,Enabled,AppLock,CreationInDays,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings

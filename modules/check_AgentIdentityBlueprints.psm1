@@ -292,8 +292,16 @@ function Invoke-AgentIdentityBlueprints {
     ########################################## SECTION: Data Processing ##########################################
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($BlueprintCount / 10), 1)
-    if ($BlueprintCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($BlueprintCount -ge 200) {
+        [Math]::Floor($BlueprintCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($BlueprintCount / 10), 1)
+    }
+    $IsSmallCollection = ($BlueprintCount -gt 0 -and $BlueprintCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($BlueprintCount -eq 1) { 'agent identity blueprint' } else { 'agent identity blueprints' }
+        Write-Host "[*] Processing $BlueprintCount $ProcessingObjectLabel..."
+    } elseif ($BlueprintCount -ge 200) {
         Write-Host "[*] Status: Processing blueprint 1 of $BlueprintCount (updates every $StatusUpdateInterval objects)..."
     }
 
@@ -330,7 +338,11 @@ function Invoke-AgentIdentityBlueprints {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $BlueprintCount) {
-            Write-Host "[*] Status: Processing blueprint $ProgressCounter of $BlueprintCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing blueprint $ProgressCounter of $BlueprintCount..."
+            } else {
+                Write-Host "[*] Status: Processing blueprint $ProgressCounter of $BlueprintCount..."
+            }
         }
 
         # Check if it the Entra Connect Sync App
@@ -767,6 +779,9 @@ function Invoke-AgentIdentityBlueprints {
         }
         [void]$AllAgentIdentityBlueprints.Add($BlueprintDetails)
 
+    }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $BlueprintCount $ProcessingObjectLabel."
     }
     #endregion
 

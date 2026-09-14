@@ -422,8 +422,18 @@ function Invoke-CheckUsers {
     $PmDataProcessing = [System.Diagnostics.Stopwatch]::StartNew()
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($UsersTotalCount / 10), 1)
-    Write-Host "[*] Status: Processing user 1 of $UsersTotalCount (updates every $StatusUpdateInterval users)..."
+    $StatusUpdateInterval = if ($UsersTotalCount -ge 200) {
+        [Math]::Floor($UsersTotalCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($UsersTotalCount / 10), 1)
+    }
+    $IsSmallCollection = ($UsersTotalCount -gt 0 -and $UsersTotalCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($UsersTotalCount -eq 1) { 'user' } else { 'users' }
+        Write-Host "[*] Processing $UsersTotalCount $ProcessingObjectLabel..."
+    } elseif ($UsersTotalCount -ge 200) {
+        Write-Host "[*] Status: Processing user 1 of $UsersTotalCount (updates every $StatusUpdateInterval users)..."
+    }
 
     #region Processing Loop
     #Loop through all users and get additional info and store it in a custom object
@@ -496,7 +506,11 @@ function Invoke-CheckUsers {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $UsersTotalCount) {
-            Write-Host "[*] Status: Processing user $ProgressCounter of $UsersTotalCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing user $ProgressCounter of $UsersTotalCount..."
+            } else {
+                Write-Host "[*] Status: Processing user $ProgressCounter of $UsersTotalCount..."
+            }
         }
 
         if(($item.AssignedLicenses).Count -ne 0) {
@@ -1296,6 +1310,9 @@ function Invoke-CheckUsers {
         [void]$AllUsersDetails.Add($UserDetails)
 
 
+    }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $UsersTotalCount $ProcessingObjectLabel."
     }
     #endregion
 
@@ -2770,7 +2787,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
 
     $PmGeneratingDetails.Stop()
     $PmWritingReports = [System.Diagnostics.Stopwatch]::StartNew()
-    write-host "[+] Writing log files"
+    write-host "[+] Writing report files..."
     write-host ""
 
     $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,APTarget,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings

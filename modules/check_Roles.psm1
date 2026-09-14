@@ -612,7 +612,7 @@ function Invoke-CheckRoles {
 
 
 
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
 
     $mainEntraTable = $SortedEntraRoles | select-object -Property Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}},PrincipalType,@{Name = "Scope"; Expression = { $_.ScopeResolvedLink}}
     $mainEntraTableJson  = $mainEntraTable | ConvertTo-Json -Depth 5 -Compress

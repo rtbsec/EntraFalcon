@@ -7554,11 +7554,11 @@ function EnsureAuthMsGraph {
 # Check if ARM API authentication worked. If not, call the function for interactive sign-in
 function EnsureAuthAzurePsNative {
     if (AuthCheckAzPSNative) {
-        write-host "[+] Azure PS Session OK"
+        write-host "[+] Azure Resource Manager session OK"
         $result = $true
     } else {
         if (AuthenticationAzurePSNative) {
-            write-host "[+] Azure PS successfully authenticated"
+            write-host "[+] Azure Resource Manager successfully authenticated"
             $result = $true
         } else {
             $result = $false
@@ -8236,10 +8236,10 @@ function checkSubscriptionNative {
     $SubscriptionCount = $Subscription.Count
 
     if ($SubscriptionCount -gt 0) {
-        write-host "[+] User has access to $SubscriptionCount Subscription(s)."
+        write-host "[+] Authenticated identity has access to $SubscriptionCount subscriptions."
         $GlobalAuditSummary.Subscriptions.Count = $SubscriptionCount
     } else {
-        write-host "[-] User does not have access to a Subscription."
+        write-host "[-] No subscriptions are accessible to the authenticated identity."
         $result = $false
     }
     return $result
@@ -12253,7 +12253,11 @@ function Initialize-EntraFalconObjectInfoCache {
         }
     }
 
-    Write-Log -Level Verbose -Message "[ObjectInfo] Bulk resolved $resolved of $($pending.Count) object(s); the remainder use the individual lookup."
+    if ($resolved -eq $pending.Count) {
+        Write-Log -Level Verbose -Message "[ObjectInfo] Bulk resolved all $resolved objects."
+    } else {
+        Write-Log -Level Verbose -Message "[ObjectInfo] Bulk resolved $resolved of $($pending.Count) object(s); the remainder use the individual lookup."
+    }
     return
 }
 

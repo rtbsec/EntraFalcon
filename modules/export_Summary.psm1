@@ -697,7 +697,7 @@ return @"
 
     $chartJsEmbedded = $global:GLOBALJavaScript_Chart
 
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
 
     $GlobalAuditSummary.Time.End = Get-Date -Format "yyyyMMdd HH:mm:ss"
 

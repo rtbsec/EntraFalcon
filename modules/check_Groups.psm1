@@ -658,7 +658,7 @@ function Invoke-CheckGroups {
         $TotalGroupMembers += $group.Count
     }
     Write-Log -Level Verbose -Message "Got $TotalGroupMembers direct member relationships"
-    Write-Log -Level Verbose -Message "Build transitive member relationships"
+    Write-Host "[*] Calculating nested group memberships..."
 
     # Build transitive members for each group
     $TransitiveMembersRaw = @{}
@@ -672,7 +672,7 @@ function Invoke-CheckGroups {
         $TotalTransitiveMemberRelations += $members.Count
     }
 
-    Write-Log -Level Verbose -Message "Calculated $TotalTransitiveMemberRelations transitive member relationships"
+    Write-Host "[+] Calculated $TotalTransitiveMemberRelations transitive member relationships."
     #Show warning in large tenants
     if (-not $LimitResults) {
         if ($TotalTransitiveMemberRelations -ge 1500000 -or $GroupsTotalCount -ge 100000) {
@@ -907,8 +907,18 @@ function Invoke-CheckGroups {
     $AutoAssignmentAmbiguousGroups = 0
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($GroupsTotalCount / 10), 1)
-    Write-Host "[*] Status: Processing group 1 of $GroupsTotalCount (updates every $StatusUpdateInterval groups)..."
+    $StatusUpdateInterval = if ($GroupsTotalCount -ge 200) {
+        [Math]::Floor($GroupsTotalCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($GroupsTotalCount / 10), 1)
+    }
+    $IsSmallCollection = ($GroupsTotalCount -gt 0 -and $GroupsTotalCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($GroupsTotalCount -eq 1) { 'group' } else { 'groups' }
+        Write-Host "[*] Processing $GroupsTotalCount $ProcessingObjectLabel..."
+    } elseif ($GroupsTotalCount -ge 200) {
+        Write-Host "[*] Status: Processing group 1 of $GroupsTotalCount (updates every $StatusUpdateInterval groups)..."
+    }
 
     # Policies are matched to groups once here; the loop below only looks each group up.
     $CapsByGroupId = @{}
@@ -944,7 +954,11 @@ function Invoke-CheckGroups {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $GroupsTotalCount) {
-            Write-Host "[*] Status: Processing group $ProgressCounter of $GroupsTotalCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing group $ProgressCounter of $GroupsTotalCount..."
+            } else {
+                Write-Host "[*] Status: Processing group $ProgressCounter of $GroupsTotalCount..."
+            }
         }
 
         #Find parent groups if actual group
@@ -1785,6 +1799,9 @@ function Invoke-CheckGroups {
 		[void]$AllGroupsDetails.Add($groupDetails)
 
 
+    }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $GroupsTotalCount $ProcessingObjectLabel."
     }
     #endregion
 

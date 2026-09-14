@@ -355,8 +355,16 @@ function Invoke-CheckEnterpriseApps {
     }
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($EnterpriseAppsCount / 10), 1)
-    if ($EnterpriseAppsCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($EnterpriseAppsCount -ge 200) {
+        [Math]::Floor($EnterpriseAppsCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($EnterpriseAppsCount / 10), 1)
+    }
+    $IsSmallCollection = ($EnterpriseAppsCount -gt 0 -and $EnterpriseAppsCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($EnterpriseAppsCount -eq 1) { 'enterprise app' } else { 'enterprise apps' }
+        Write-Host "[*] Processing $EnterpriseAppsCount $ProcessingObjectLabel..."
+    } elseif ($EnterpriseAppsCount -ge 200) {
         Write-Host "[*] Status: Processing app 1 of $EnterpriseAppsCount (updates every $StatusUpdateInterval apps)..."
     }
 
@@ -400,7 +408,11 @@ function Invoke-CheckEnterpriseApps {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $EnterpriseAppsCount) {
-            Write-Host "[*] Status: Processing app $ProgressCounter of $EnterpriseAppsCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing app $ProgressCounter of $EnterpriseAppsCount..."
+            } else {
+                Write-Host "[*] Status: Processing app $ProgressCounter of $EnterpriseAppsCount..."
+            }
         }
 
         #Process API permissions (AKA. RoleAssignments) for this app
@@ -1305,6 +1317,9 @@ function Invoke-CheckEnterpriseApps {
         }
         [void]$AllServicePrincipal.Add($SPInfo)
     }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $EnterpriseAppsCount $ProcessingObjectLabel."
+    }
     #endregion
 
     ########################################## SECTION: POST-PROCESSING ##########################################
@@ -1944,7 +1959,7 @@ function Invoke-CheckEnterpriseApps {
 
     $DetailOutputTxt = $DetailTxtBuilder.ToString()
     
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
     write-host
 
     $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,EnabledInTenant,Inactive,SAML,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings

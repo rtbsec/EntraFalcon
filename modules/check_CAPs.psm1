@@ -1738,8 +1738,16 @@ function Invoke-CheckCaps {
     }
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($AllPoliciesCount / 10), 1)
-    if ($AllPoliciesCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($AllPoliciesCount -ge 200) {
+        [Math]::Floor($AllPoliciesCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($AllPoliciesCount / 10), 1)
+    }
+    $IsSmallCollection = ($AllPoliciesCount -gt 0 -and $AllPoliciesCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($AllPoliciesCount -eq 1) { 'Conditional Access policy' } else { 'Conditional Access policies' }
+        Write-Host "[*] Processing $AllPoliciesCount $ProcessingObjectLabel..."
+    } elseif ($AllPoliciesCount -ge 200) {
         Write-Host "[*] Status: Processing policy 1 of $AllPoliciesCount (updates every $StatusUpdateInterval policies)..."
     }
 
@@ -1768,7 +1776,11 @@ function Invoke-CheckCaps {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $AllPoliciesCount) {
-            Write-Host "[*] Status: Processing policy $ProgressCounter of $AllPoliciesCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing policy $ProgressCounter of $AllPoliciesCount..."
+            } else {
+                Write-Host "[*] Status: Processing policy $ProgressCounter of $AllPoliciesCount..."
+            }
         }
 
         ###################### Handling special Values like "All" etc.
@@ -2826,6 +2838,9 @@ function Invoke-CheckCaps {
             Write-Log -Level Trace -Message "Policy '$($policy.DisplayName)' warnings: $WarningPolicy"
         }
     }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $AllPoliciesCount $ProcessingObjectLabel."
+    }
     #endregion
 
     write-host "[*] Processing results"
@@ -3096,7 +3111,7 @@ $MissingPolicies
     }
 
     $DetailOutputTxt = $DetailTxtBuilder.ToString()
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
     write-host ""
 
     if ($AllPoliciesCount -gt 0) {

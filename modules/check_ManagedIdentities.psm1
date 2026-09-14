@@ -140,8 +140,16 @@ function Invoke-CheckManagedIdentities {
     ########################################## SECTION: Managed Identity Processing ##########################################
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($ManagedIdentitiesCount / 10), 1)
-    if ($ManagedIdentitiesCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($ManagedIdentitiesCount -ge 200) {
+        [Math]::Floor($ManagedIdentitiesCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($ManagedIdentitiesCount / 10), 1)
+    }
+    $IsSmallCollection = ($ManagedIdentitiesCount -gt 0 -and $ManagedIdentitiesCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($ManagedIdentitiesCount -eq 1) { 'managed identity' } else { 'managed identities' }
+        Write-Host "[*] Processing $ManagedIdentitiesCount $ProcessingObjectLabel..."
+    } elseif ($ManagedIdentitiesCount -ge 200) {
         Write-Host "[*] Status: Processing managed identity 1 of $ManagedIdentitiesCount (updates every $StatusUpdateInterval managed identities)..."
     }
     
@@ -171,7 +179,11 @@ function Invoke-CheckManagedIdentities {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $ManagedIdentitiesCount) {
-            Write-Host "[*] Status: Processing managed identity $ProgressCounter of $ManagedIdentitiesCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing managed identity $ProgressCounter of $ManagedIdentitiesCount..."
+            } else {
+                Write-Host "[*] Status: Processing managed identity $ProgressCounter of $ManagedIdentitiesCount..."
+            }
         }
 
         # Check AlternativeNames in a safe way
@@ -739,6 +751,9 @@ function Invoke-CheckManagedIdentities {
         }
         [void]$AllServicePrincipal.Add($SPInfo)
     }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $ManagedIdentitiesCount $ProcessingObjectLabel."
+    }
     #endregion
 
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
@@ -1062,7 +1077,7 @@ function Invoke-CheckManagedIdentities {
     }
 
     $DetailOutputTxt = $DetailTxtBuilder.ToString()
-    write-host "[*] Writing log files"
+    write-host "[*] Writing report files..."
     write-host
 
     $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings

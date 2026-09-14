@@ -938,7 +938,8 @@ Execution Warnings = $($WarningList -join ' / ')
         $Report | Out-File $htmlPath
 
         $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
-        Write-Host "[+] Details of $($TableOutput.Count) $Title objects stored in output files ($OutputFormats): $OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
+        $ReportDisplayName = $ReportName -replace ' Enumeration$', ''
+        Write-Host "[+] $ReportDisplayName report written: $($TableOutput.Count) objects ($OutputFormats): $OutputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
     }
 
     function Add-ObjectDetails {

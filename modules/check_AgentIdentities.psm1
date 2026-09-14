@@ -349,8 +349,16 @@ function Invoke-AgentIdentities {
     }
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($AgentIdentitiesCount / 10), 1)
-    if ($AgentIdentitiesCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($AgentIdentitiesCount -ge 200) {
+        [Math]::Floor($AgentIdentitiesCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($AgentIdentitiesCount / 10), 1)
+    }
+    $IsSmallCollection = ($AgentIdentitiesCount -gt 0 -and $AgentIdentitiesCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($AgentIdentitiesCount -eq 1) { 'agent identity' } else { 'agent identities' }
+        Write-Host "[*] Processing $AgentIdentitiesCount $ProcessingObjectLabel..."
+    } elseif ($AgentIdentitiesCount -ge 200) {
         Write-Host "[*] Status: Processing agent identity 1 of $AgentIdentitiesCount (updates every $StatusUpdateInterval objects)..."
     }
 
@@ -392,7 +400,11 @@ function Invoke-AgentIdentities {
         $OwnerSPDetails = @()
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $AgentIdentitiesCount) {
-            Write-Host "[*] Status: Processing agent identity $ProgressCounter of $AgentIdentitiesCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing agent identity $ProgressCounter of $AgentIdentitiesCount..."
+            } else {
+                Write-Host "[*] Status: Processing agent identity $ProgressCounter of $AgentIdentitiesCount..."
+            }
         }
 
         #Process API permissions (AKA. RoleAssignments) for this app
@@ -1111,6 +1123,9 @@ function Invoke-AgentIdentities {
             Warnings = $Warnings
         }
         [void]$AllServicePrincipal.Add($SPInfo)
+    }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $AgentIdentitiesCount $ProcessingObjectLabel."
     }
     #endregion
 

@@ -101,7 +101,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     $OwnersCoverage = $OwnersResult.Coverage
     Write-Log -Level Debug -Message "Got $($OwnersRaw.Count) owners"
 
-    Write-Host "[*] Build linked agent identity lookup from passed AgentIdentities"
+    Write-Host "[*] Resolving linked agent identities..."
     $LinkedAgentIdentitiesByBlueprintId = @{}
     foreach ($AgentIdentity in $AgentIdentities.Values) {
         $AgentIdentityBlueprintId = "$($AgentIdentity.AgentIdentityBlueprintId)".Trim()
@@ -204,8 +204,16 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
     }
 
     #Calc dynamic update interval
-    $StatusUpdateInterval = [Math]::Max([Math]::Floor($AgentIdentityBlueprintPrincipalsCount / 10), 1)
-    if ($AgentIdentityBlueprintPrincipalsCount -gt 0 -and $StatusUpdateInterval -gt 1) {
+    $StatusUpdateInterval = if ($AgentIdentityBlueprintPrincipalsCount -ge 200) {
+        [Math]::Floor($AgentIdentityBlueprintPrincipalsCount / 4)
+    } else {
+        [Math]::Max([Math]::Floor($AgentIdentityBlueprintPrincipalsCount / 10), 1)
+    }
+    $IsSmallCollection = ($AgentIdentityBlueprintPrincipalsCount -gt 0 -and $AgentIdentityBlueprintPrincipalsCount -lt 200)
+    if ($IsSmallCollection) {
+        $ProcessingObjectLabel = if ($AgentIdentityBlueprintPrincipalsCount -eq 1) { 'agent identity blueprint principal' } else { 'agent identity blueprint principals' }
+        Write-Host "[*] Processing $AgentIdentityBlueprintPrincipalsCount $ProcessingObjectLabel..."
+    } elseif ($AgentIdentityBlueprintPrincipalsCount -ge 200) {
         Write-Host "[*] Status: Processing agent identity blueprint principal 1 of $AgentIdentityBlueprintPrincipalsCount (updates every $StatusUpdateInterval objects)..."
     }
 
@@ -219,7 +227,11 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
         $OwnerSPDetails = @()
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $AgentIdentityBlueprintPrincipalsCount) {
-            Write-Host "[*] Status: Processing agent identity blueprint principal $ProgressCounter of $AgentIdentityBlueprintPrincipalsCount..."
+            if ($IsSmallCollection) {
+                Write-Log -Level Verbose -Message "Status: Processing agent identity blueprint principal $ProgressCounter of $AgentIdentityBlueprintPrincipalsCount..."
+            } else {
+                Write-Host "[*] Status: Processing agent identity blueprint principal $ProgressCounter of $AgentIdentityBlueprintPrincipalsCount..."
+            }
         }
 
         #Process API permissions (AKA. RoleAssignments) for this app
@@ -734,6 +746,9 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
             Warnings = $Warnings
         }
         [void]$AllServicePrincipal.Add($SPInfo)
+    }
+    if ($IsSmallCollection) {
+        Write-Host "[+] Processed $AgentIdentityBlueprintPrincipalsCount $ProcessingObjectLabel."
     }
     #endregion
 
