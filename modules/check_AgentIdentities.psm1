@@ -57,10 +57,6 @@ function Invoke-AgentIdentities {
         "AppRole"                   = 2
     }
 
-    $SPLikelihoodScore = @{
-        "ForeignApp"                = 30
-    }
-
     # Resolve sponsor objects into a stable reporting shape.
     function Resolve-AgentIdentitySponsor {
         param(
@@ -829,10 +825,6 @@ function Invoke-AgentIdentities {
             }
         }
         $AssignedAgentUsersCount = ($AssignedAgentUsers | Measure-Object).Count
-
-        if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
-            $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
-        }
 
         #Increase impact for each App role
         $AppRolesCount = ($MatchingAppRoles | Measure-Object).count
