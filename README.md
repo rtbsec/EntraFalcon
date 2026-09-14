@@ -16,6 +16,8 @@ The tool helps uncover privileged objects, potentially risky assignments and Con
 
 Findings are presented in interactive HTML reports to support efficient exploration and analysis.
 
+Agent identity and blueprint principal objects and CSV/JSON exports use `MSOwned` (formerly `DefaultMS`) to indicate that the application's owning tenant matches a known Microsoft tenant. Table columns use `MSOwned`; detail labels use “Microsoft-owned”. Consumers of these agent exports must update the field name. Agent inputs must use `MSOwned`; older `DefaultMS` fields are not converted automatically. Enterprise-app exports continue to use `DefaultMS`. This rename does not change classification, scoring, or security findings.
+
 
 ## 🚀 Features
 
@@ -241,7 +243,7 @@ This also skips the standalone `PIM for Groups` settings report.
 | **OutputFolder**       | Output folder where the reports are stored.                                                                                      | `Results_%TenantName%_YYYYMMDD_HHMM`              |
 | **LimitResults**       | Limits the number of groups and users in the report (after sorting by risk). Useful for large tenants.                           | -                                                 |
 | **LogLevel**           | Controls runtime cli logging verbosity. Supported values: `Off` (default), `Verbose`, `Debug`, `Trace`.                          | `Off`                                             |
-| **ApiTop**             | Sets the max number of objects returned from the API. Lower values reduce timeout risk (HTTP 504), but increase request count.   | `999` (Valid range: 5–999)                        |
+| **ApiTop**             | Sets the requested Graph API page size (objects per response). Lower values can reduce timeout risk (HTTP 504), but increase request count. | `999` (Valid range: 5–999)                        |
 | **AuthFlow**           | Preferred auth-flow selector. Values: `BroCi` (default), `AuthCode`, `DeviceCode`, `ManualCode`, `BroCiManualCode`, `BroCiToken`, `ServicePrincipal`. | `BroCi`                                         |
 | **BroCiToken**         | Azure Portal **refresh token** for `AuthFlow BroCiToken`.                                                                          | -                                                 |
 | **SPClientId**         | Application (client) ID of the service principal. Required for `-AuthFlow ServicePrincipal`.                                      | -                                                 |

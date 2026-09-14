@@ -850,9 +850,9 @@ function Invoke-AgentIdentities {
 
         #Check if the agent identity is owned by a Microsoft tenant
         if ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId) {
-            $DefaultMS = $true
+            $MSOwned = $true
         } else {
-            $DefaultMS = $false
+            $MSOwned = $false
         }
 
 
@@ -1076,7 +1076,7 @@ function Invoke-AgentIdentities {
             GroupOwner = $OwnedGroups
             AppPermission = $AppAssignments
             Foreign = $ForeignTenant
-            DefaultMS = $DefaultMS
+            MSOwned = $MSOwned
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
             Inactive = $Inactive

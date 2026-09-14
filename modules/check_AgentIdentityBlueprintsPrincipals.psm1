@@ -641,9 +641,9 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
 
         #Check if the blueprint principal is owned by a Microsoft tenant
         if ($item.AppOwnerOrganizationId -and $GLOBALMsTenantIds -contains $item.AppOwnerOrganizationId) {
-            $DefaultMS = $true
+            $MSOwned = $true
         } else {
-            $DefaultMS = $false
+            $MSOwned = $false
         }
 
 
@@ -652,9 +652,9 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
         $Inactive = Test-EntraFalconServicePrincipalInactive -SignInData $AppsignInData -CreationInDays $CreationInDays -ActivityAvailable ($global:GLOBALSpSignInActivityAvailable -ne $false)
 
         #Mark foreign non-default apps as risky
-        if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
+        if ($MSOwned -eq $false -and $ForeignTenant -eq $true) {
             $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
-        } elseif ($DefaultMS -eq $false -and $ForeignTenant -eq $false) {
+        } elseif ($MSOwned -eq $false -and $ForeignTenant -eq $false) {
             $LikelihoodScore += $SPLikelihoodScore["InternApp"]
         }
 
@@ -708,7 +708,7 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
             GroupOwner = $OwnedGroups
             AppPermission = $AppAssignments
             Foreign = $ForeignTenant
-            DefaultMS = $DefaultMS
+            MSOwned = $MSOwned
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
             Inactive = $Inactive

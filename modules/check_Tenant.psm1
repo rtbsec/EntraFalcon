@@ -3960,7 +3960,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     if ($AgentIdentityBlueprintsPrincipals) {
         foreach ($entry in $AgentIdentityBlueprintsPrincipals.GetEnumerator()) {
             $principal = $entry.Value
-            if (-not $principal -or $principal.Foreign -ne $true -or $principal.DefaultMS -ne $false) { continue }
+            if (-not $principal -or $principal.Foreign -ne $true -or $principal.MSOwned -ne $false) { continue }
 
             $agentBlueprintPrincipalSuspiciousNameInScopeCount += 1
             if ($principal.PSObject.Properties['SPNameAssessment'] -and $null -ne $principal.SPNameAssessment) {

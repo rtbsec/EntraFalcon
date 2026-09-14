@@ -167,7 +167,7 @@ function Invoke-CheckGroups {
             OwnerKind     = $resolvedObject.ObjectKind
             TargetReport  = $resolvedObject.TargetReport
             SPType        = $resolvedObject.ServicePrincipalType
-            DefaultMS     = $resolvedObject.DefaultMS
+            DefaultMS     = if ($resolvedObject.ObjectKind -in @('AgentIdentity', 'AgentIdentityBlueprintPrincipal')) { $resolvedObject.MSOwned } else { $resolvedObject.DefaultMS }
         }
     }   
 

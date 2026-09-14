@@ -1602,7 +1602,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Hide low-information columns by default when every row contains the same value. The column remains available in the Columns menu.
         const conditionalDefaultHiddenRules = [
@@ -2000,6 +2000,7 @@ $global:GLOBALJavaScript_Table = @'
             "InheritableScopes": "Number of APIs for which the blueprint permits child agent identities to inherit delegated permission scopes",
             "InheritableRoles": "Number of APIs for which the blueprint permits child agent identities to inherit application role permissions",
             "Agent": "User object parented to an agent identity (agent user)",
+            "MSOwned": "The application's owning tenant matches a known Microsoft tenant.",
             "ForeignAgent": "Agent user whose parent blueprint principal is foreign"
         };
 
@@ -7863,7 +7864,7 @@ function Get-AgentObjectBasics {
         $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
         $publisherName = if ([string]::IsNullOrWhiteSpace($item.PublisherName)) { "-" } else { $item.PublisherName }
         $foreign = (-not [string]::IsNullOrWhiteSpace($appOwnerOrganizationId) -and $appOwnerOrganizationId -ne $CurrentTenant.id)
-        $defaultMS = ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId)
+        $msOwned = ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId)
 
         $agentObjectBasics.AgentIdentities[$item.Id] = [pscustomobject]@{
             Id                   = $item.Id
@@ -7871,7 +7872,7 @@ function Get-AgentObjectBasics {
             Enabled              = $item.accountEnabled
             PublisherName        = $publisherName
             Foreign              = $foreign
-            DefaultMS            = $defaultMS
+            MSOwned            = $msOwned
             ObjectKind           = 'AgentIdentity'
             TargetReport         = 'AgentIdentities'
             ServicePrincipalType = $item.servicePrincipalType
@@ -7888,7 +7889,7 @@ function Get-AgentObjectBasics {
         $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
         $publisherName = if ([string]::IsNullOrWhiteSpace($item.PublisherName)) { "-" } else { $item.PublisherName }
         $foreign = ($appOwnerOrganizationId -ne $CurrentTenant.id)
-        $defaultMS = ($GLOBALMsTenantIds -contains $appOwnerOrganizationId)
+        $msOwned = ($GLOBALMsTenantIds -contains $appOwnerOrganizationId)
 
         $agentObjectBasics.AgentIdentityBlueprintsPrincipals[$item.Id] = [pscustomobject]@{
             Id                   = $item.Id
@@ -7896,7 +7897,7 @@ function Get-AgentObjectBasics {
             Enabled              = $item.accountEnabled
             PublisherName        = $publisherName
             Foreign              = $foreign
-            DefaultMS            = $defaultMS
+            MSOwned            = $msOwned
             ObjectKind           = 'AgentIdentityBlueprintPrincipal'
             TargetReport         = 'AgentIdentityBlueprintsPrincipals'
             ServicePrincipalType = $item.servicePrincipalType
