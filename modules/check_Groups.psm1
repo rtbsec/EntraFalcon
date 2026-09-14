@@ -592,11 +592,15 @@ function Invoke-CheckGroups {
     $ChunkCount = [math]::Ceiling($GroupsTotalCount / $BatchSize)
 
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-Log -Level Verbose -Message "Processing batch $($chunkIndex + 1) of $ChunkCount..."
-
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
         $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
+        $CollectionMessage = "Group memberships: chunk $($chunkIndex + 1)/$ChunkCount started (objects $($StartIndex + 1)-$($EndIndex + 1) of $GroupsTotalCount)."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
         $ExpectedIds = New-Object System.Collections.Generic.List[string]
         foreach ($group in $GroupBatch) {
@@ -629,6 +633,21 @@ function Invoke-CheckGroups {
         }
         if ($Coverage.Outcome -ne 'Complete') {
             Write-Log -Level Verbose -Message "Membership chunk $($chunkIndex + 1): $($Coverage.PartialIds.Count) partial, $($Coverage.UnknownIds.Count) unknown"
+        }
+
+        $IncompleteObjectCount = 0
+        foreach ($CollectionRecord in $Coverage.Records.Values) {
+            if ($CollectionRecord.State -ne 'Complete') { $IncompleteObjectCount++ }
+        }
+        $CollectionMessage = "Group memberships: chunk $($chunkIndex + 1)/$ChunkCount finished"
+        if ($IncompleteObjectCount -gt 0) {
+            $CollectionMessage += " (incomplete data for $IncompleteObjectCount objects)"
+        }
+        $CollectionMessage += "."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
         }
 
         Remove-Variable -Name Requests, ExpectedIds, Response, Coverage, GroupBatch -ErrorAction SilentlyContinue
@@ -675,6 +694,12 @@ function Invoke-CheckGroups {
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
         $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
+        $CollectionMessage = "Group owners: chunk $($chunkIndex + 1)/$ChunkCount started (objects $($StartIndex + 1)-$($EndIndex + 1) of $GroupsTotalCount)."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
         $ExpectedIds = New-Object System.Collections.Generic.List[string]
         foreach ($item in $GroupBatch) {
@@ -703,6 +728,21 @@ function Invoke-CheckGroups {
             }
         }
 
+        $IncompleteObjectCount = 0
+        foreach ($CollectionRecord in $Coverage.Records.Values) {
+            if ($CollectionRecord.State -ne 'Complete') { $IncompleteObjectCount++ }
+        }
+        $CollectionMessage = "Group owners: chunk $($chunkIndex + 1)/$ChunkCount finished"
+        if ($IncompleteObjectCount -gt 0) {
+            $CollectionMessage += " (incomplete data for $IncompleteObjectCount objects)"
+        }
+        $CollectionMessage += "."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
+
         Remove-Variable -Name Requests, ExpectedIds, RawResponse, Coverage, GroupBatch -ErrorAction SilentlyContinue
     }
 
@@ -721,6 +761,12 @@ function Invoke-CheckGroups {
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
         $GroupBatch = $AllGroups[$StartIndex..$EndIndex]
+        $CollectionMessage = "Group app role assignments: chunk $($chunkIndex + 1)/$ChunkCount started (objects $($StartIndex + 1)-$($EndIndex + 1) of $GroupsTotalCount)."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
         $ExpectedIds = New-Object System.Collections.Generic.List[string]
         foreach ($item in $GroupBatch) {
@@ -745,6 +791,21 @@ function Invoke-CheckGroups {
             if ($assignments.Count -gt 0) {
                 $AppRoleAssignmentsRaw[$groupResponseId] = $assignments
             }
+        }
+
+        $IncompleteObjectCount = 0
+        foreach ($CollectionRecord in $Coverage.Records.Values) {
+            if ($CollectionRecord.State -ne 'Complete') { $IncompleteObjectCount++ }
+        }
+        $CollectionMessage = "Group app role assignments: chunk $($chunkIndex + 1)/$ChunkCount finished"
+        if ($IncompleteObjectCount -gt 0) {
+            $CollectionMessage += " (incomplete data for $IncompleteObjectCount objects)"
+        }
+        $CollectionMessage += "."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
         }
 
         Remove-Variable -Name Requests, ExpectedIds, RawResponse, Coverage, GroupBatch -ErrorAction SilentlyContinue

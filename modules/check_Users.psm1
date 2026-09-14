@@ -302,11 +302,15 @@ function Invoke-CheckUsers {
     $ChunkCount = [math]::Ceiling($AllUsers.Count / $BatchSize)
 
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-Log -Level Verbose -Message "Processing user batch $($chunkIndex + 1) of $ChunkCount..."
-
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $AllUsers.Count - 1)
         $UserBatch = $AllUsers[$StartIndex..$EndIndex]
+        $CollectionMessage = "User memberships: chunk $($chunkIndex + 1)/$ChunkCount started (objects $($StartIndex + 1)-$($EndIndex + 1) of $UsersTotalCount)."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
 
         $Requests = New-Object System.Collections.Generic.List[Hashtable]
         $ExpectedIds = New-Object System.Collections.Generic.List[string]
@@ -342,6 +346,21 @@ function Invoke-CheckUsers {
             }
         }
 
+        $IncompleteObjectCount = 0
+        foreach ($CollectionRecord in $Coverage.Records.Values) {
+            if ($CollectionRecord.State -ne 'Complete') { $IncompleteObjectCount++ }
+        }
+        $CollectionMessage = "User memberships: chunk $($chunkIndex + 1)/$ChunkCount finished"
+        if ($IncompleteObjectCount -gt 0) {
+            $CollectionMessage += " (incomplete data for $IncompleteObjectCount objects)"
+        }
+        $CollectionMessage += "."
+        if ($ChunkCount -gt 1) {
+            Write-Host "[*] $CollectionMessage"
+        } else {
+            Write-Log -Level Verbose -Message $CollectionMessage
+        }
+
         Remove-Variable -Name Requests, ExpectedIds, Response, Coverage, UserBatch -ErrorAction SilentlyContinue
     }
     
@@ -365,7 +384,7 @@ function Invoke-CheckUsers {
 
     Write-Host "[*] Collecting user ownerships"
     #Get all users ownerships for later lookup
-    $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id' ;'$top'=$ApiTop} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $OwnedObjectsResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -CollectionLabel "User ownerships" -UrlTemplate "/users/{0}/ownedObjects" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id' ;'$top'=$ApiTop} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
     $UserOwnedObjectsRaw = $OwnedObjectsResult.Values
     $UserOwnedObjectsCoverage = $OwnedObjectsResult.Coverage
 
@@ -374,7 +393,7 @@ function Invoke-CheckUsers {
 
     Write-Host "[*] Collecting user device ownership"
     #Get all users device ownerships for later lookup
-    $DeviceOwnerResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/ownedDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DeviceOwnerResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -CollectionLabel "User device ownership" -UrlTemplate "/users/{0}/ownedDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
     $DeviceOwnerRaw = $DeviceOwnerResult.Values
     $DeviceOwnerCoverage = $DeviceOwnerResult.Coverage
 
@@ -383,7 +402,7 @@ function Invoke-CheckUsers {
 
     Write-Host "[*] Collecting user device registrations"
     #Get all users device registrations for later lookup
-    $DeviceRegisteredResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -UrlTemplate "/users/{0}/registeredDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $DeviceRegisteredResult = Get-EntraFalconObjectRelationshipChunked -Objects $AllUsers -CollectionLabel "User device registrations" -UrlTemplate "/users/{0}/registeredDevices" -Provider $GraphTokenProvider -BatchSize $BatchSize -QueryParameters @{'$select' = 'id'; '$top'=$ApiTop} -RequestHeaders @{"Accept"= "application/json;odata.metadata=none"} -UserAgent $($GlobalAuditSummary.UserAgent.Name)
     $DeviceRegisteredRaw = $DeviceRegisteredResult.Values
     $DeviceRegisteredCoverage = $DeviceRegisteredResult.Coverage
 

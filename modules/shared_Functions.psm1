@@ -8718,6 +8718,10 @@ function Get-EntraFalconObjectRelationshipChunked {
         Per-request query parameters whose values are format strings receiving the object id, for
         endpoints that identify the object through a filter rather than through the path. Kept as
         data rather than a scriptblock so it cannot depend on the caller's local scope.
+
+    .PARAMETER CollectionLabel
+        Optional display label for chunk messages. Multiple chunks use normal output; a single
+        chunk uses verbose logging. Omit the label to preserve silent collection.
     #>
     [CmdletBinding()]
     param(
@@ -8728,7 +8732,8 @@ function Get-EntraFalconObjectRelationshipChunked {
         [Parameter(Mandatory = $true)][hashtable]$QueryParameters,
         [Parameter(Mandatory = $false)][hashtable]$RequestHeaders,
         [Parameter(Mandatory = $false)][hashtable]$RequestQueryParameterTemplate,
-        [Parameter(Mandatory = $false)][string]$UserAgent
+        [Parameter(Mandatory = $false)][string]$UserAgent,
+        [Parameter(Mandatory = $false)][string]$CollectionLabel
     )
 
     $values = @{}
@@ -8743,6 +8748,14 @@ function Get-EntraFalconObjectRelationshipChunked {
         $startIndex = $chunkIndex * $BatchSize
         $endIndex = [math]::Min($startIndex + $BatchSize - 1, $total - 1)
         $batch = $Objects[$startIndex..$endIndex]
+        if (-not [string]::IsNullOrEmpty($CollectionLabel)) {
+            $CollectionMessage = "${CollectionLabel}: chunk $($chunkIndex + 1)/$ChunkCount started (objects $($StartIndex + 1)-$($EndIndex + 1) of $total)."
+            if ($ChunkCount -gt 1) {
+                Write-Host "[*] $CollectionMessage"
+            } else {
+                Write-Log -Level Verbose -Message $CollectionMessage
+            }
+        }
 
         $requests = New-Object System.Collections.Generic.List[Hashtable]
         $expectedIds = New-Object System.Collections.Generic.List[string]
@@ -8772,6 +8785,23 @@ function Get-EntraFalconObjectRelationshipChunked {
             if ($record.State -ne 'Complete') { $coverage[$id] = $record.State }
             $observed = @($record.Value)
             if ($observed.Count -gt 0) { $values[$id] = $observed }
+        }
+
+        if (-not [string]::IsNullOrEmpty($CollectionLabel)) {
+            $IncompleteObjectCount = 0
+            foreach ($CollectionRecord in $chunkCoverage.Records.Values) {
+                if ($CollectionRecord.State -ne 'Complete') { $IncompleteObjectCount++ }
+            }
+            $CollectionMessage = "${CollectionLabel}: chunk $($chunkIndex + 1)/$ChunkCount finished"
+            if ($IncompleteObjectCount -gt 0) {
+                $CollectionMessage += " (incomplete data for $IncompleteObjectCount objects)"
+            }
+            $CollectionMessage += "."
+            if ($ChunkCount -gt 1) {
+                Write-Host "[*] $CollectionMessage"
+            } else {
+                Write-Log -Level Verbose -Message $CollectionMessage
+            }
         }
 
         Remove-Variable -Name requests, expectedIds, raw, chunkCoverage, batch -ErrorAction SilentlyContinue
