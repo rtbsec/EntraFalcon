@@ -551,24 +551,6 @@ function Invoke-CheckTenant {
             }
         }
 
-        # Backward-compatible fallback for assessment objects created before the role lookup existed.
-        if ($Role -eq 'Catalog Reader') { return 0 }
-        $newImpact = 0
-        $existingImpact = 0
-        foreach ($contribution in @($catalogEntry.NewAPContributions)) {
-            $newImpact += [double]$contribution.Impact
-        }
-        foreach ($contribution in @($catalogEntry.ExistingAPContributions)) {
-            if ($Role -eq 'Access Package Assignment Manager' -or -not [bool]$contribution.DirectConfigurableType) {
-                $existingImpact += [double]$contribution.Impact
-            }
-        }
-        if ($Role -in @('Catalog Owner','Access Package Manager')) {
-            return [math]::Round([double]($newImpact + $existingImpact))
-        }
-        if ($Role -eq 'Access Package Assignment Manager') {
-            return [math]::Round([double]$existingImpact)
-        }
         return 0
     }
 

@@ -1972,20 +1972,6 @@ function Write-EntraFalconUsersReport {
     $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $UserCounter = 0
 
-    # Older replay dumps predate Catalog RBAC. Preserve replay compatibility without reporting a false zero.
-    foreach ($user in @($AllUsersDetails)) {
-        if ($null -eq $user.PSObject.Properties['CatalogRBAC']) {
-            $legacyCatalogRbac = if ($null -ne $user.PSObject.Properties['IGRBAC']) { $user.IGRBAC } else { '-' }
-            $user | Add-Member -NotePropertyName CatalogRBAC -NotePropertyValue $legacyCatalogRbac
-        }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacDetails']) { $user | Add-Member -NotePropertyName CatalogRbacDetails -NotePropertyValue @() }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacAssessmentAvailable']) { $user | Add-Member -NotePropertyName CatalogRbacAssessmentAvailable -NotePropertyValue $false }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacAssessmentStatus']) { $user | Add-Member -NotePropertyName CatalogRbacAssessmentStatus -NotePropertyValue 'Unavailable' }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacGrossImpact']) { $user | Add-Member -NotePropertyName CatalogRbacGrossImpact -NotePropertyValue 0 }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacExistingAccessOffset']) { $user | Add-Member -NotePropertyName CatalogRbacExistingAccessOffset -NotePropertyValue 0 }
-        if ($null -eq $user.PSObject.Properties['CatalogRbacImpact']) { $user | Add-Member -NotePropertyName CatalogRbacImpact -NotePropertyValue 0 }
-    }
-
     $PmDataPostProcessing = [System.Diagnostics.Stopwatch]::StartNew()
 
     $blueprintOwnerUserCount = @($Users.Values | Where-Object { $null -ne $_.PSObject.Properties['BlueprintOwn'] -and $null -ne $_.BlueprintOwn -and [double]$_.BlueprintOwn -gt 0 }).Count
