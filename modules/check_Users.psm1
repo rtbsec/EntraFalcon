@@ -2026,9 +2026,10 @@ function Write-EntraFalconUsersReport {
             $_.PSObject.Properties['CatalogRBAC'] -and [string]$_.CatalogRBAC -ne '-' -and [double]$_.CatalogRBAC -gt 0
         }).Count -gt 0
     }
+    $htmlMemberGroupLimit = 10
     if ($TotalMemberGroups -ge 50000) {
         $LimitGroupMembers = $true
-        $WarningReport.Add("GroupMembership: Only 10 groups are displayed to ensure HTML performance.")
+        [void]$WarningReport.Add("GroupMembership: Only the first $htmlMemberGroupLimit groups per user are displayed in the HTML report to ensure performance. See the TXT report for the full list.")
     } else {
         $LimitGroupMembers = $false
     }
@@ -2608,10 +2609,6 @@ function Write-EntraFalconUsersReport {
         #Group Memberships
         if (@($item.UserMemberGroups).count -ge 1) {
             $MatchingGroupRaw = [System.Collections.Generic.List[object]]::new()
-            #Limit the number of groups if needed
-            if ($LimitGroupMembers) {
-                $item.UserMemberGroups = $item.UserMemberGroups | select-object -First 10
-            }
 
             #Set lenght to 0
             $maxDisplayNameLength = 0
@@ -2665,7 +2662,9 @@ function Write-EntraFalconUsersReport {
             -ColumnWidths $memberGroupColumnWidths
             [void]$DetailTxtBuilder.AppendLine($formattedText)
         
-            foreach ($obj in $MatchingGroupRaw) {
+            # The limit applies to rendered HTML rows only; the user object and TXT keep every group.
+            $htmlMemberGroups = if ($LimitGroupMembers) { @($MatchingGroupRaw | Select-Object -First $htmlMemberGroupLimit) } else { $MatchingGroupRaw }
+            foreach ($obj in $htmlMemberGroups) {
                 $memberGroupRow = [pscustomobject]@{
                     AssignmentType          = $obj.AssignmentType
                     DisplayName             = $obj.DisplayNameLink
@@ -2688,6 +2687,28 @@ function Write-EntraFalconUsersReport {
                 $memberGroupRow | Add-Member -NotePropertyName Warnings -NotePropertyValue $obj.Warnings
                 $ReportingMemberGroup.Add($memberGroupRow)
 
+            }
+
+            if ($LimitGroupMembers -and $MatchingGroupRaw.Count -gt $htmlMemberGroupLimit) {
+                $limitRow = [pscustomobject]@{
+                    AssignmentType = "-"
+                    DisplayName    = "Showing first $htmlMemberGroupLimit of $($MatchingGroupRaw.Count) groups (see TXT for full list)"
+                    Type           = "-"
+                    OnPrem         = "-"
+                    EntraRoles     = "-"
+                    EntraMaxTier   = "-"
+                    AzureRoles     = "-"
+                    AzureMaxTier   = "-"
+                    AppRoles       = "-"
+                    IntuneRoles    = "-"
+                }
+                if ($ShowMemberGroupCatalogRbac) {
+                    $limitRow | Add-Member -NotePropertyName CatalogRBAC -NotePropertyValue "-"
+                }
+                foreach ($columnName in @('CAPs', 'APTarget', 'Users', 'Impact', 'Warnings')) {
+                    $limitRow | Add-Member -NotePropertyName $columnName -NotePropertyValue "-"
+                }
+                $ReportingMemberGroup.Add($limitRow)
             }
         }
 

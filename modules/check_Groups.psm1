@@ -2926,7 +2926,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
 
             if ($ExceedsLimit) {
                 [void]$NestedDevices.Add([pscustomobject]@{
-                    Displayname   = "List limited to $HTMLMemberLimit users. See TXT Report for full list"
+                    Displayname   = "List limited to $HTMLMemberLimit devices. See TXT Report for full list"
                     Type          = "-"
                     OS            = "-"
                 })
