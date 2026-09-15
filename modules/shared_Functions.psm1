@@ -266,7 +266,7 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         Agent: "=True"
                     },
-                    columns: ["UPN", "Enabled", "Agent", "ForeignAgent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "Agent", "ForeignAgent", "MSOwnedAgent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVU-012",
@@ -1602,7 +1602,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "MSOwnedAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Hide low-information columns by default when every row contains the same value. The column remains available in the Columns menu.
         const conditionalDefaultHiddenRules = [
@@ -2001,7 +2001,8 @@ $global:GLOBALJavaScript_Table = @'
             "InheritableRoles": "Number of APIs for which the blueprint permits child agent identities to inherit application role permissions",
             "Agent": "User object parented to an agent identity (agent user)",
             "MSOwned": "The application's owning tenant matches a known Microsoft tenant.",
-            "ForeignAgent": "Agent user whose parent blueprint principal is foreign"
+            "ForeignAgent": "Agent user whose parent blueprint principal is foreign",
+            "MSOwnedAgent": "Agent user whose parent blueprint principal is owned by a known Microsoft tenant"
         };
 
         function getColumnTooltip(column) {

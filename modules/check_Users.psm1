@@ -165,6 +165,7 @@ function Invoke-CheckUsers {
                 ParentBlueprintPrincipalId = if ($parentPrincipal) { $parentPrincipal.Id } else { $null }
                 ParentBlueprintPrincipalDisplayName = if ($parentPrincipal) { $parentPrincipal.DisplayName } else { $null }
                 ForeignBlueprintPrincipal = if ($parentPrincipal) { [bool]$parentPrincipal.Foreign } else { $false }
+                MSOwnedBlueprintPrincipal = if ($parentPrincipal) { [bool]$parentPrincipal.MSOwned } else { $false }
             }
         }
     }
@@ -488,6 +489,7 @@ function Invoke-CheckUsers {
         $ParentBlueprintPrincipalId = $null
         $ParentBlueprintPrincipalDisplayName = $null
         $ForeignBlueprintPrincipal = $false
+        $MSOwnedBlueprintPrincipal = $false
 
         # Enrich Agent Users with their parent Agent Identity and foreign blueprint principal state.
         if ($Agent -and $AgentUserParentContext.ContainsKey($item.Id)) {
@@ -497,6 +499,7 @@ function Invoke-CheckUsers {
             $ParentBlueprintPrincipalId = $agentParentContext.ParentBlueprintPrincipalId
             $ParentBlueprintPrincipalDisplayName = $agentParentContext.ParentBlueprintPrincipalDisplayName
             $ForeignBlueprintPrincipal = [bool]$agentParentContext.ForeignBlueprintPrincipal
+            $MSOwnedBlueprintPrincipal = [bool]$agentParentContext.MSOwnedBlueprintPrincipal
         }
         
         # Check the token lifetime after a specific amount of objects
@@ -1103,7 +1106,8 @@ function Invoke-CheckUsers {
             $Likelihood += $UserLikelihood["Protected"]
         }
 
-        if ($ForeignBlueprintPrincipal) {
+        # Foreign-parent penalties do not apply to Microsoft-owned blueprints such as Copilot Studio.
+        if ($ForeignBlueprintPrincipal -and -not $MSOwnedBlueprintPrincipal) {
             $Likelihood += $UserLikelihood["ForeignAgentBlueprintPrincipal"]
             [void]$Warnings.Add("Child of foreign blueprint principal")
         }
@@ -1247,7 +1251,9 @@ function Invoke-CheckUsers {
             ParentBlueprintPrincipalId = $ParentBlueprintPrincipalId
             ParentBlueprintPrincipalDisplayName = $ParentBlueprintPrincipalDisplayName
             ForeignBlueprintPrincipal = $ForeignBlueprintPrincipal
+            MSOwnedBlueprintPrincipal = $MSOwnedBlueprintPrincipal
             ForeignAgent = if ($Agent) { [bool]$ForeignBlueprintPrincipal } else { "-" }
+            MSOwnedAgent = if ($Agent) { [bool]$MSOwnedBlueprintPrincipal } else { "-" }
             CreatedDateTime = $item.CreatedDateTime
             CreatedDays = $CreatedDays
             LastInteractiveSignInDateTime = $LastInteractiveSignIn
@@ -1985,7 +1991,7 @@ function Write-EntraFalconUsersReport {
     $SortedUsersByRisk = $AllUsersDetails | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,MSOwnedAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -2797,7 +2803,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
     write-host "[+] Writing report files..."
     write-host ""
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,APTarget,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,APTarget,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -2819,7 +2825,7 @@ $headerHtml = @"
 "@
 
     #Write TXT and CSV files
-    $UserTableProperties = @('UPN','Enabled','UserType','Agent',@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},'OnPrem','Licenses','LicenseStatus','Protected','GrpMem','GrpOwn','AuUnits','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AppRoles','IntuneRoles','CatalogRBAC','APTarget','AppRegOwn','BlueprintOwn','SPOwn','DeviceOwn','DeviceReg','Inactive','LastSignInDays','CreatedDays','MfaCap','PerUserMfa','Impact','Likelihood','Risk','Warnings')
+    $UserTableProperties = @('UPN','Enabled','UserType','Agent',@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},'OnPrem','Licenses','LicenseStatus','Protected','GrpMem','GrpOwn','AuUnits','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AppRoles','IntuneRoles','CatalogRBAC','APTarget','AppRegOwn','BlueprintOwn','SPOwn','DeviceOwn','DeviceReg','Inactive','LastSignInDays','CreatedDays','MfaCap','PerUserMfa','Impact','Likelihood','Risk','Warnings')
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
         $tableOutput | select-object $UserTableProperties | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8

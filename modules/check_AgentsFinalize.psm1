@@ -1043,6 +1043,8 @@ Execution Warnings = $($WarningList -join ' / ')
         $parentPrincipalPublisherName = if ($parentPrincipal) { $parentPrincipal.PublisherName } else { $null }
         $foreignBlueprintPrincipal = if ($parentPrincipal) { [bool]$parentPrincipal.Foreign } else { $false }
         $parentPrincipalMSOwned = if ($parentPrincipal) { [bool]$parentPrincipal.MSOwned } else { $false }
+        # Foreign-parent penalties do not apply to Microsoft-owned blueprints such as Copilot Studio.
+        $foreignNonMsBlueprintPrincipal = $foreignBlueprintPrincipal -and -not $parentPrincipalMSOwned
         $parentPrincipalOwnerTenantId = if ($parentPrincipal) { "$($parentPrincipal.AppOwnerOrganizationId)".Trim() } else { '' }
         $effectivePermissionData = Resolve-AgentEffectiveApiPermissions -AgentIdentity $agentIdentity -ParentPrincipal $parentPrincipal -ParentBlueprint $parentBlueprint
         foreach ($source in @($effectivePermissionData.EffectiveApiPermissionSources)) {
@@ -1095,17 +1097,17 @@ Execution Warnings = $($WarningList -join ' / ')
         if ($null -eq $agentIdentity.Warnings) {
             $agentIdentity.Warnings = ''
         }
-        if ($agentIdentity.ForeignBlueprintPrincipal) {
+        if ($foreignNonMsBlueprintPrincipal) {
             $agentIdentity.Warnings = Add-UniqueWarningText -ExistingWarnings $agentIdentity.Warnings -NewWarning "Child of foreign blueprint principal"
         }
         foreach ($warning in @($effectivePermissionData.Warnings)) {
             $agentIdentity.Warnings = Add-UniqueWarningText -ExistingWarnings $agentIdentity.Warnings -NewWarning $warning
         }
-        $applicationWarning = Get-ApiSeverityWarningText -Counts $effectivePermissionData.Summary.ApplicationCounts -Suffix 'API permission' -IncludeMedium:$foreignBlueprintPrincipal
+        $applicationWarning = Get-ApiSeverityWarningText -Counts $effectivePermissionData.Summary.ApplicationCounts -Suffix 'API permission' -IncludeMedium:$foreignNonMsBlueprintPrincipal
         if (-not [string]::IsNullOrWhiteSpace($applicationWarning)) {
             $agentIdentity.Warnings = Add-UniqueWarningText -ExistingWarnings $agentIdentity.Warnings -NewWarning $applicationWarning
         }
-        $delegatedWarning = Get-ApiSeverityWarningText -Counts $effectivePermissionData.Summary.DelegatedCounts -Suffix 'delegated API permission' -IncludeMedium:$foreignBlueprintPrincipal
+        $delegatedWarning = Get-ApiSeverityWarningText -Counts $effectivePermissionData.Summary.DelegatedCounts -Suffix 'delegated API permission' -IncludeMedium:$foreignNonMsBlueprintPrincipal
         if (-not [string]::IsNullOrWhiteSpace($delegatedWarning)) {
             $agentIdentity.Warnings = Add-UniqueWarningText -ExistingWarnings $agentIdentity.Warnings -NewWarning $delegatedWarning
         }
