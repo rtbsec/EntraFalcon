@@ -1137,7 +1137,7 @@ Execution Warnings = $($WarningList -join ' / ')
         $principal.LinkedAgentIdentities = @($principal.LinkedAgentIdentitiesDetails).Count
 
         $parentBlueprintId = $null
-        $parentBlueprintDisplayName = $null
+        $parentBlueprintDisplayName = if ($principal.Foreign) { '(external tenant)' } else { '(not found)' }
         $parentBlueprint = $null
         if (-not [string]::IsNullOrWhiteSpace("$($principal.AppId)") -and $BlueprintLookupByAppId.ContainsKey("$($principal.AppId)")) {
             $parentBlueprint = $BlueprintLookupByAppId["$($principal.AppId)"]
@@ -1770,7 +1770,7 @@ Appendix: Used API Permission Reference
             [void]$PrincipalTxt.AppendLine("Child Agent Users")
             [void]$PrincipalTxt.AppendLine(($item.AgentUsersDetails | Format-Table ParentAgentIdentityDisplayName,UPN,Enabled,Impact,Warnings | Out-String))
         }
-        $parentBlueprintLink = if ($item.ParentBlueprintId) { "<a href=AgentIdentityBlueprints_$($StartTimestamp)_$EscapedTenantName.html#$($item.ParentBlueprintId)>$($item.ParentBlueprintDisplayName)</a>" } else { "-" }
+        $parentBlueprintLink = if ($item.ParentBlueprintId) { "<a href=AgentIdentityBlueprints_$($StartTimestamp)_$EscapedTenantName.html#$($item.ParentBlueprintId)>$($item.ParentBlueprintDisplayName)</a>" } else { $item.ParentBlueprintDisplayName }
         Add-ObjectDetails -Collection $PrincipalDetails -ObjectName $item.DisplayName -ObjectId $item.Id -Sections ([ordered]@{
             "General Information" = [pscustomobject]@{
                 "App Name" = $item.DisplayName
