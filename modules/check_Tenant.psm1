@@ -390,6 +390,29 @@ function Invoke-CheckTenant {
     $AzureCriticalExposureThreshold = 200
     $AzurePrincipalExposureCache = @{}
 
+    function Get-AzureImpactBreakdownHtml {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$ObjectLabel,
+
+            [Parameter(Mandatory = $false)]
+            [int]$Critical = 0,
+
+            [Parameter(Mandatory = $false)]
+            [int]$High = 0,
+
+            [Parameter(Mandatory = $false)]
+            [int]$Medium = 0
+        )
+
+        # Lists only non-zero impact levels, most severe first. Ranges follow the exposure thresholds.
+        $items = [System.Collections.Generic.List[string]]::new()
+        if ($Critical -gt 0) { [void]$items.Add("<li>Critical ($AzureCriticalExposureThreshold+): $Critical</li>") }
+        if ($High -gt 0) { [void]$items.Add("<li>High ($AzureHighExposureThreshold-$($AzureCriticalExposureThreshold - 1)): $High</li>") }
+        if ($Medium -gt 0) { [void]$items.Add("<li>Medium ($AzureForeignExposureThreshold-$($AzureHighExposureThreshold - 1)): $Medium</li>") }
+        return "<p>$ObjectLabel by highest Azure impact:</p><ul>$($items -join '')</ul><p>Includes Azure roles gained through group membership or group ownership.</p>"
+    }
+
     function Get-AzurePrincipalExposure {
         param(
             [Parameter(Mandatory = $false)]
@@ -6303,8 +6326,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
+        $ent007Subject = if ($entAppsForeignAzureRoles.Count -eq 1) { 'enabled foreign enterprise application has' } else { 'enabled foreign enterprise applications have' }
         Set-FindingOverride -FindingId "ENT-007" -Props @{
-            Description = "<p>$($entAppsForeignAzureRoles.Count) enabled foreign enterprise applications have impactful Azure access with a contextual assignment impact of at least $AzureForeignExposureThreshold.</p><p>Applications by Azure exposure impact:</p><ul><li>Medium (50-99): $azMedium</li><li>High (100-199): $azHigh</li><li>Critical (200 or higher): $azCritical</li></ul><p><strong>Important:</strong> The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($entAppsForeignAzureRoles.Count) $ent007Subject Azure access with medium or higher impact.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Applications' -Critical $azCritical -High $azHigh -Medium $azMedium)"
             AffectedObjects = $entAzureRoleAffected
         }
         if ($azCritical -gt 0) {
@@ -6790,8 +6814,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
+        $ent012Subject = if ($entAppsInternalAzureTier.Count -eq 1) { 'enabled internal enterprise application has' } else { 'enabled internal enterprise applications have' }
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            Description = "<p>$($entAppsInternalAzureTier.Count) enabled internal enterprise applications have high-impact Azure access.</p><p>Applications by Azure exposure impact:</p><ul><li>High (100-199): $entAzureHighApps</li><li>Critical (200 or higher): $entAzureCriticalApps</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($entAppsInternalAzureTier.Count) $ent012Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Applications' -Critical $entAzureCriticalApps -High $entAzureHighApps)"
             AffectedObjects = $entAzureAffected
         }
         Set-AzureFindingFallbackConfidence -FindingId 'ENT-012' -Candidates @($entAppsInternalAzureTier)
@@ -7816,8 +7841,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
+        $agt005Subject = if ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign agent identity has' } else { 'enabled foreign agent identities have' }
         Set-FindingOverride -FindingId "AGT-005" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled foreign agent identities have impactful Azure access.</p><p>Agent identities by Azure exposure impact:</p><ul><li>Medium (50-99): $agt005Medium</li><li>High (100-199): $agt005High</li><li>Critical (200 or higher): $agt005Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) $agt005Subject Azure access with medium or higher impact.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent identities' -Critical $agt005Critical -High $agt005High -Medium $agt005Medium)"
             AffectedObjects = $agt005Affected
         }
         if ($agt005Critical -gt 0) {
@@ -8385,8 +8411,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
+        $agt009Subject = if ($internalAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal agent identity has' } else { 'enabled internal agent identities have' }
         Set-FindingOverride -FindingId "AGT-009" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) enabled internal agent identities have high-impact Azure access.</p><p>Agent identities by Azure exposure impact:</p><ul><li>High (100-199): $agt009High</li><li>Critical (200 or higher): $agt009Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) $agt009Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent identities' -Critical $agt009Critical -High $agt009High)"
             AffectedObjects = $agt009Affected
         }
         if ($agt009Critical -gt 0) {
@@ -8575,8 +8602,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
+        $agt012Subject = if ($foreignAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign agent user has' } else { 'enabled foreign agent users have' }
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users have impactful Azure access.</p><p>Agent users by Azure exposure impact:</p><ul><li>Medium (50-99): $agt012Medium</li><li>High (100-199): $agt012High</li><li>Critical (200 or higher): $agt012Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) $agt012Subject Azure access with medium or higher impact.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent users' -Critical $agt012Critical -High $agt012High -Medium $agt012Medium)"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt012Affected))
         }
         if ($agt012Critical -gt 0) {
@@ -8714,8 +8742,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
+        $agt014Subject = if ($internalAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal agent user has' } else { 'enabled internal agent users have' }
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users have high-impact Azure access.</p><p>Agent users by Azure exposure impact:</p><ul><li>High (100-199): $agt014High</li><li>Critical (200 or higher): $agt014Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) $agt014Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent users' -Critical $agt014Critical -High $agt014High)"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt014Affected))
         }
         if ($agt014Critical -gt 0) {
@@ -9183,8 +9212,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
+        $mai003Subject = if ($managedIdentitiesWithAzurePrivRoles.Count -eq 1) { 'managed identity has' } else { 'managed identities have' }
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) managed identities have high-impact Azure access.</p><p>Managed identities by Azure exposure impact:</p><ul><li>High (100-199): $maiAzureHighCount</li><li>Critical (200 or higher): $maiAzureCriticalCount</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally; role tier remains supporting context.</p>"
+            Description = "<p>$($managedIdentitiesWithAzurePrivRoles.Count) $mai003Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Managed identities' -Critical $maiAzureCriticalCount -High $maiAzureHighCount)"
             AffectedObjects = $maiAzureAffected
         }
         Set-AzureFindingFallbackConfidence -FindingId 'MAI-003' -Candidates @($managedIdentitiesWithAzurePrivRoles)
@@ -11149,8 +11179,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "USR-008" -Props $USR008VariantProps.Vulnerable
+        $usr008Subject = if ($enabledTier0AzureOnPremUsers.Count -eq 1) { 'hybrid user has' } else { 'hybrid users have' }
         Set-FindingOverride -FindingId "USR-008" -Props @{
-            Description = "<p>There are $($enabledTier0AzureOnPremUsers.Count) hybrid users with high-impact Azure access.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr008High</li><li>Critical (200 or higher): $usr008Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally.</p>"
+            Description = "<p>$($enabledTier0AzureOnPremUsers.Count) $usr008Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr008Critical -High $usr008High)"
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
@@ -11197,7 +11228,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
 
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Vulnerable
             Set-FindingOverride -FindingId "USR-009" -Props @{
-                Description = "<p>There are $usr009Count enabled users with high-impact Azure access.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr009High</li><li>Critical (200 or higher): $usr009Critical</li></ul><p>The score uses the strongest direct, group membership, or group ownership path. Active and eligible assignments are treated equally.</p>"
+                Description = "<p>$usr009Count enabled users have high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr009Critical -High $usr009High)"
                 RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
                 AffectedSortKey = "_SortAzureImpact"
                 AffectedSortDir = "DESC"
@@ -11266,8 +11297,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "USR-011" -Props $USR011VariantProps.Vulnerable
+        $usr011Subject = if ($enabledTier0AzureUnprotectedUsers.Count -eq 1) { 'user with high-impact Azure access is' } else { 'users with high-impact Azure access are' }
         Set-FindingOverride -FindingId "USR-011" -Props @{
-            Description = "<p>There are $($enabledTier0AzureUnprotectedUsers.Count) users with high-impact Azure access who are not protected against modifications by lower-tier administrators or applications.</p><p>Users by Azure exposure impact:</p><ul><li>High (100-199): $usr011High</li><li>Critical (200 or higher): $usr011Critical</li></ul><p>They are considered unprotected because they are not direct members of a privileged role, members of a role-assignable group, or members of a Restricted Management Administrative Unit. Active and eligible Azure assignments are treated equally.</p>"
+            Description = "<p>$($enabledTier0AzureUnprotectedUsers.Count) $usr011Subject not protected against modifications by lower-tier administrators or applications.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr011Critical -High $usr011High)<p>Users are considered unprotected when they are not direct members of a privileged role, members of a role-assignable group, or members of a Restricted Management Administrative Unit.</p>"
             RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
