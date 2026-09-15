@@ -1159,7 +1159,6 @@ function Invoke-CheckGroups {
                     }
         
                     default {
-                        # Optional: log or handle unexpected owner types
                         Write-host "Unknown owner type: $($Owner.'@odata.type') for group $($group.Id)"
                     }
                 }
@@ -2458,7 +2457,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
         
             foreach ($object in $item.OwnerUserDetails) {
                 $userDetails = $AllUsersBasicHT[$object.id]
-                if (-not $userDetails.onPremisesSyncEnabled) { $userDetails.onPremisesSyncEnabled = "False" }
+                $synced = if ($null -eq $userDetails) { '-' } else { $userDetails.onPremisesSyncEnabled -eq $true }
 
                 # Calc Max Length
                 $Username = $userDetails.userPrincipalName
@@ -2470,10 +2469,10 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $userObj = [pscustomobject]@{ 
                     "AssignmentType" = $object.AssignmentType
                     "Username" = $Username
-                    "UsernameLink" = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($userDetails.id)>$($Username)</a>"
+                    "UsernameLink" = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($object.id)>$($Username)</a>"
                     "Enabled" = $userDetails.accountEnabled
                     "Type" = $userDetails.userType
-                    "Synced" = $userDetails.onPremisesSyncEnabled
+                    "Synced" = $synced
                 }
 
                 [void]$OwnerUserRaw.Add($userObj)
@@ -2623,7 +2622,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
 
             foreach ($object in $($item.NestedOwnerUserDetails)) {
                 $userDetails = $AllUsersBasicHT[$object.id]
-                if (-not $userDetails.onPremisesSyncEnabled) { $userDetails.onPremisesSyncEnabled = "False" }
+                $synced = if ($null -eq $userDetails) { '-' } else { $userDetails.onPremisesSyncEnabled -eq $true }
 
                 # Calc Max Length
                 $Username = $userDetails.userPrincipalName
@@ -2634,10 +2633,10 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $userObj = [pscustomobject]@{ 
                     "AssignmentType" = $object.AssignmentType
                     "Username" = $Username
-                    "UsernameLink" = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($userDetails.id)>$($Username)</a>"
+                    "UsernameLink" = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($object.id)>$($Username)</a>"
                     "Enabled" = $userDetails.accountEnabled
                     "Type" = $userDetails.userType
-                    "Synced" = $userDetails.onPremisesSyncEnabled
+                    "Synced" = $synced
                 }
 
                 [void]$NestedOwnerUser.Add($userObj)
@@ -2758,7 +2757,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             foreach ($object in $item.UserDetails) {
                 $userDetails = $AllUsersBasicHT[$object.id]
         
-                if (-not $userDetails.onPremisesSyncEnabled) { $userDetails.onPremisesSyncEnabled = "False" }
+                $synced = if ($null -eq $userDetails) { '-' } else { $userDetails.onPremisesSyncEnabled -eq $true }
 
                 # Calc Max Length
                 $Username = $userDetails.userPrincipalName
@@ -2766,7 +2765,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     $UsernameLength = $Username.Length
                 }
 
-                $linkedUsername = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($userDetails.id)>$($Username)</a>"
+                $linkedUsername = "<a href=Users_$($StartTimestamp)_$($EscapedTenantName).html#$($object.id)>$($Username)</a>"
         
                 # Plain for TXT
                 $txtObj = [pscustomobject]@{ 
@@ -2774,7 +2773,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     Username        = $Username
                     Enabled         = $userDetails.accountEnabled
                     Type            = $userDetails.userType
-                    Synced          = $userDetails.onPremisesSyncEnabled
+                    Synced          = $synced
                 }
         
                 # Linked for HTML
@@ -2783,7 +2782,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     Username        = $linkedUsername
                     Enabled         = $userDetails.accountEnabled
                     Type            = $userDetails.userType
-                    Synced          = $userDetails.onPremisesSyncEnabled
+                    Synced          = $synced
                 }
         
                 if ($ObjectCounter -lt $HTMLMemberLimit) {

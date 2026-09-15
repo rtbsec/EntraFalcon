@@ -898,7 +898,7 @@ $mainTableJson
     $Chartsection += @"
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // === 1. Your data source(s) ===
+    // Data sources
     const dataSources = {
         // ============ USERS ============
         users_general: {
@@ -1118,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }        
     };
 
-    // === 2. Shared chart config ===
+    // Shared chart configuration
     const chartColorPalette = ['#4CAF50', '#FF7043', '#29B6F6', '#FFCA28', '#AB47BC', '#26A69A', '#EC407A'];
     const chartInstances = [];
 
@@ -1656,7 +1656,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // === 3. Chart layout/config ===
+    // Chart layout
     const chartConfigs = [
         // ============ Users ============
         { id: 'user_chart1', title: 'Internal vs Guest Users', type: 'doughnut', dataset: 'users_general' },
@@ -1710,7 +1710,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'azureroles_chart5', title: 'Assignments by Scope Level', type: 'bar', dataset: 'azureroles_scopetypes', indexAxis: 'y', showLegend: false }
     ];
 
-    // === 4. Render all charts ===
+    // Render all charts
     function renderCharts() {
         chartInstances.forEach(chart => chart.destroy());
         chartInstances.length = 0;
@@ -1748,7 +1748,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     renderCharts(); // Initial load
 
-    // === 5. Re-render on theme change ===
+    // Re-render on theme change
     const observer = new MutationObserver(() => renderCharts());
     observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 });

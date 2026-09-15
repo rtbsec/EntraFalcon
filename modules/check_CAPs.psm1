@@ -2913,7 +2913,6 @@ function Invoke-CheckCaps {
     }
     
     if ($Warnings.count -ge 1) {
-        # Correct way to format warnings into HTML list items
         $MissingPolicies = ($Warnings | ForEach-Object { "<li>$_</li>" }) -join "`n"
 
 # Generate final HTML output
