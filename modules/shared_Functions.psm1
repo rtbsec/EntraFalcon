@@ -7856,23 +7856,24 @@ function Get-AgentObjectBasics {
     }
 
     $agentIdentityQueryParameters = @{
-        '$select' = "Id,DisplayName,PublisherName,accountEnabled,appOwnerOrganizationId,servicePrincipalType"
+        '$select' = "Id,DisplayName,PublisherName,accountEnabled,agentIdentityBlueprintId,servicePrincipalType"
         '$top' = $ApiTop
     }
     $agentIdentitiesRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals/Microsoft.Graph.AgentIdentity' -QueryParameters $agentIdentityQueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+
+    # Graph returns no owner tenant or publisher for agent identities; both are taken from the parent blueprint principal below.
+    $agentBlueprintIdsByAgentId = @{}
     foreach ($item in @($agentIdentitiesRaw)) {
-        $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
         $publisherName = if ([string]::IsNullOrWhiteSpace($item.PublisherName)) { "-" } else { $item.PublisherName }
-        $foreign = (-not [string]::IsNullOrWhiteSpace($appOwnerOrganizationId) -and $appOwnerOrganizationId -ne $CurrentTenant.id)
-        $msOwned = ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId)
+        $agentBlueprintIdsByAgentId[$item.Id] = "$($item.agentIdentityBlueprintId)".Trim()
 
         $agentObjectBasics.AgentIdentities[$item.Id] = [pscustomobject]@{
             Id                   = $item.Id
             DisplayName          = $item.DisplayName
             Enabled              = $item.accountEnabled
             PublisherName        = $publisherName
-            Foreign              = $foreign
-            MSOwned            = $msOwned
+            Foreign              = $false
+            MSOwned            = $false
             ObjectKind           = 'AgentIdentity'
             TargetReport         = 'AgentIdentities'
             ServicePrincipalType = $item.servicePrincipalType
@@ -7881,10 +7882,11 @@ function Get-AgentObjectBasics {
 
     $blueprintPrincipalQueryParameters = @{
         '$filter' = "ServicePrincipalType eq 'Application'"
-        '$select' = "Id,DisplayName,PublisherName,accountEnabled,appOwnerOrganizationId,servicePrincipalType"
+        '$select' = "Id,AppId,DisplayName,PublisherName,accountEnabled,appOwnerOrganizationId,servicePrincipalType"
         '$top' = $ApiTop
     }
     $blueprintPrincipalsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals/graph.agentIdentityBlueprintPrincipal' -QueryParameters $blueprintPrincipalQueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $blueprintPrincipalsByAppId = @{}
     foreach ($item in @($blueprintPrincipalsRaw)) {
         $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
         $publisherName = if ([string]::IsNullOrWhiteSpace($item.PublisherName)) { "-" } else { $item.PublisherName }
@@ -7901,6 +7903,26 @@ function Get-AgentObjectBasics {
             ObjectKind           = 'AgentIdentityBlueprintPrincipal'
             TargetReport         = 'AgentIdentityBlueprintsPrincipals'
             ServicePrincipalType = $item.servicePrincipalType
+        }
+
+        $principalAppId = "$($item.AppId)".Trim()
+        if (-not [string]::IsNullOrWhiteSpace($principalAppId) -and -not $blueprintPrincipalsByAppId.ContainsKey($principalAppId)) {
+            $blueprintPrincipalsByAppId[$principalAppId] = $agentObjectBasics.AgentIdentityBlueprintsPrincipals[$item.Id]
+        }
+    }
+
+    foreach ($agentId in @($agentBlueprintIdsByAgentId.Keys)) {
+        $blueprintId = $agentBlueprintIdsByAgentId[$agentId]
+        if ([string]::IsNullOrWhiteSpace($blueprintId) -or -not $blueprintPrincipalsByAppId.ContainsKey($blueprintId)) {
+            continue
+        }
+
+        $agent = $agentObjectBasics.AgentIdentities[$agentId]
+        $parentPrincipal = $blueprintPrincipalsByAppId[$blueprintId]
+        $agent.Foreign = [bool]$parentPrincipal.Foreign
+        $agent.MSOwned = [bool]$parentPrincipal.MSOwned
+        if ($agent.PublisherName -eq '-' -and $parentPrincipal.PublisherName -ne '-') {
+            $agent.PublisherName = $parentPrincipal.PublisherName
         }
     }
 

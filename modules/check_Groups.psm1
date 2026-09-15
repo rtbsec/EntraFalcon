@@ -171,6 +171,49 @@ function Invoke-CheckGroups {
         }
     }   
 
+    # Classify non-user members or owners per object; Microsoft-owned objects, including agents of Microsoft-owned blueprints, raise no warning.
+    function Get-GroupNonUserPrincipalAssessment {
+        param(
+            [Parameter(Mandatory = $false)][object[]]$Details = @(),
+            [Parameter(Mandatory = $true)][string]$Relationship
+        )
+
+        $kindLabels = [ordered]@{
+            AgentIdentity                   = 'agent identity'
+            AgentIdentityBlueprintPrincipal = 'agent blueprint principal'
+            ManagedIdentity                 = 'managed identity'
+            ServicePrincipal                = 'SP'
+        }
+        $foreignLabels = [System.Collections.Generic.List[string]]::new()
+        $internalLabels = [System.Collections.Generic.List[string]]::new()
+
+        foreach ($principal in @($Details)) {
+            if ($null -eq $principal -or $principal.DefaultMS -eq $true) { continue }
+
+            $kind = "$($principal.OwnerKind)"
+            $label = if ($kindLabels.Contains($kind)) { $kindLabels[$kind] } else { 'SP' }
+            if ($principal.Foreign -eq $true) {
+                if (-not $foreignLabels.Contains($label)) { $foreignLabels.Add($label) }
+            } elseif (-not $internalLabels.Contains($label)) {
+                $internalLabels.Add($label)
+            }
+        }
+
+        $warnings = [System.Collections.Generic.List[string]]::new()
+        foreach ($label in $kindLabels.Values) {
+            if ($foreignLabels.Contains($label)) { $warnings.Add("Foreign $label as $Relationship") }
+        }
+        foreach ($label in $kindLabels.Values) {
+            if ($internalLabels.Contains($label)) { $warnings.Add("Internal $label as $Relationship") }
+        }
+
+        return [pscustomobject]@{
+            Warnings    = @($warnings)
+            HasForeign  = $foreignLabels.Count -gt 0
+            HasInternal = $internalLabels.Count -gt 0
+        }
+    }
+
     #Function to create transitive members
     function Get-TransitiveMembers {
         param (
@@ -1613,26 +1656,30 @@ function Invoke-CheckGroups {
             $ImpactScore += Get-AppRoleAssignmentImpact
         }
 
-        #SP as member
+        #SP or agent object as member
         if ($memberSP.count -ge 1) {
-            if ($memberSpDetails.Foreign -contains $true -and $memberSpDetails.DefaultMS -contains $false) {
-                [void]$Warnings.Add("External (non-MS) SP as member")
+            $memberAssessment = Get-GroupNonUserPrincipalAssessment -Details @($memberSpDetails) -Relationship 'member'
+            foreach ($warning in $memberAssessment.Warnings) {
+                [void]$Warnings.Add($warning)
+            }
+            if ($memberAssessment.HasForeign) {
                 $LikelihoodScore += $GroupLikelihoodScore["ExternalSPMemberOwner"]
-            } elseif ($memberSpDetails.Foreign -contains $false -and $memberSpDetails.DefaultMS -contains $false) {
-                [void]$Warnings.Add("Internal SP as member")
+            } elseif ($memberAssessment.HasInternal) {
                 $LikelihoodScore += $GroupLikelihoodScore["InternalSPMemberOwner"]
             } else {
                 $LikelihoodScore += 1
             }
         }
 
-        #SP as owner
+        #SP or agent object as owner
         if (@($ownersp).count -ge 1) {
-            if ($ownerSpDetails.Foreign -contains $true -and $ownerSpDetails.DefaultMS -contains $false) {
-                [void]$Warnings.Add("External (non-MS) SP as owner")
+            $ownerAssessment = Get-GroupNonUserPrincipalAssessment -Details @($ownerSpDetails) -Relationship 'owner'
+            foreach ($warning in $ownerAssessment.Warnings) {
+                [void]$Warnings.Add($warning)
+            }
+            if ($ownerAssessment.HasForeign) {
                 $LikelihoodScore += $GroupLikelihoodScore["ExternalSPMemberOwner"]
-            } elseif ($ownerSpDetails.Foreign -contains $false -and $ownerSpDetails.DefaultMS -contains $false) {
-                [void]$Warnings.Add("Internal SP as owner")
+            } elseif ($ownerAssessment.HasInternal) {
                 $LikelihoodScore += $GroupLikelihoodScore["InternalSPMemberOwner"]
             }
         }
