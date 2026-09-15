@@ -2365,17 +2365,17 @@ Execution Warnings = $($Warnings -join ' / ')
     $txtPath = Join-Path -Path $OutputFolder -ChildPath "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
     $htmlPath = Join-Path -Path $OutputFolder -ChildPath "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
 
+    $reportColumns = @("Policy","Package","Catalog","PolicyEnabled","CatalogEnabled","Hidden","SeparationOfDuties","Resources","Groups","Applications","ApiApp","ApiDelegated","SharePoint","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AllowedTargetScope","BroadScope","SelfAdd","OnBehalfAdd","Approval","Expiration","ExpirationDetails","AccessReview","AutoAssignment","SpecificTargets","ActiveAssignments","ExpiredAssignments","Users","Guests","ServicePrincipals","Impact","Likelihood","Risk","Warnings")
     $headerTXT | Out-File -Width 512 -FilePath $txtPath -Append
-    $mainTableExport | Format-Table Policy,Package,Catalog,PolicyEnabled,CatalogEnabled,Hidden,SeparationOfDuties,Resources,Groups,Applications,ApiApp,ApiDelegated,SharePoint,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AllowedTargetScope,BroadScope,SelfAdd,OnBehalfAdd,Approval,Expiration,ExpirationDetails,AccessReview,AutoAssignment,SpecificTargets,ActiveAssignments,ExpiredAssignments,Users,Guests,ServicePrincipals,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 $txtPath -Append
+    $mainTableExport | Format-Table -Property $reportColumns | Out-File -Width 4096 $txtPath -Append
     $DetailTxtBuilder.ToString() | Out-File $txtPath -Append
 
     if ($Csv) {
         $csvPath = Join-Path -Path $OutputFolder -ChildPath "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv"
-        $csvColumns = @("Policy","Package","Catalog","PolicyEnabled","CatalogEnabled","Hidden","SeparationOfDuties","Resources","Groups","Applications","ApiApp","ApiDelegated","SharePoint","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AllowedTargetScope","BroadScope","SelfAdd","OnBehalfAdd","Approval","Expiration","ExpirationDetails","AccessReview","AutoAssignment","SpecificTargets","ActiveAssignments","ExpiredAssignments","Users","Guests","ServicePrincipals","Impact","Likelihood","Risk","Warnings")
         if ($mainTableExport.Count -eq 0) {
-            ($csvColumns -join ",") | Out-File -FilePath $csvPath
+            ($reportColumns -join ",") | Out-File -FilePath $csvPath
         } else {
-            $mainTableExport | Select-Object $csvColumns | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            $mainTableExport | Select-Object $reportColumns | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         }
     }
 

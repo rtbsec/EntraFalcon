@@ -1486,7 +1486,7 @@ function Invoke-CheckCatalogs {
     $txtPath = Join-Path $OutputFolder "$($title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
     $htmlPath = Join-Path $OutputFolder "$($title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
     $headerTxt | Out-File -Width 512 -FilePath $txtPath
-    $mainTableExport | Format-Table | Out-File -Width 512 -FilePath $txtPath -Append
+    $mainTableExport | Format-Table -Property * | Out-File -Width 4096 -FilePath $txtPath -Append
     $detailTxtBuilder.ToString() | Out-File -Width 512 -FilePath $txtPath -Append
     if ($Csv) { $mainTableExport | Export-Csv -Path (Join-Path $OutputFolder "$($title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv") -NoTypeInformation -Encoding UTF8 }
     if ($ExportDataJson) { Export-EntraFalconDataJson -OutputFolder $OutputFolder -DatasetName 'Catalogs' -Data $tableOutput | Out-Null }
