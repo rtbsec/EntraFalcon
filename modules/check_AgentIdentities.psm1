@@ -191,7 +191,7 @@ function Invoke-AgentIdentities {
     # Get Agent Identities
     write-host "[*] Get Agent Identities"
     $QueryParameters = @{
-        '$select' = "Id,AppId,DisplayName,appRoles,accountEnabled,servicePrincipalType,createdDateTime,AppRoleAssignmentRequired,agentIdentityBlueprintId,createdByAppId,tags,AppOwnerOrganizationId"
+        '$select' = "Id,AppId,DisplayName,appRoles,accountEnabled,servicePrincipalType,createdDateTime,AppRoleAssignmentRequired,agentIdentityBlueprintId,createdByAppId,tags"
         '$top' = $ApiTop
     }
     $AgentIdentities = Send-GraphRequest -AccessTokenProvider $GraphTokenProvider -Method GET -Uri '/servicePrincipals/Microsoft.Graph.AgentIdentity' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -704,9 +704,6 @@ function Invoke-AgentIdentities {
     ########################################## SECTION: RISK RATING AND WARNINGS ##########################################
 
 
-        $appOwnerOrganizationId = "$($item.AppOwnerOrganizationId)".Trim()
-        $ForeignTenant = ($appOwnerOrganizationId -ne "" -and $appOwnerOrganizationId -ne $CurrentTenant.id)
-
         if ($AzureRoleCount -ge 1) {
             #Use function to get the impact score and warning message for assigned Azure roles
             $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails
@@ -845,14 +842,6 @@ function Invoke-AgentIdentities {
         #If SP owns another SP
         if ($OwnedSPCount -ge 1) {
             $Warnings += "Agent identity owns $OwnedSPCount service principals!"
-        }
-
-
-        #Check if the agent identity is owned by a Microsoft tenant
-        if ($appOwnerOrganizationId -and $GLOBALMsTenantIds -contains $appOwnerOrganizationId) {
-            $MSOwned = $true
-        } else {
-            $MSOwned = $false
         }
 
 
@@ -1070,13 +1059,14 @@ function Invoke-AgentIdentities {
             CatalogRbacDetails = $CatalogRbacDetails
             OwnedSPDetails = $OwnedSP
             GroupMember = $GroupMember
-            AppOwnerOrganizationId = $appOwnerOrganizationId
+            # Graph returns no owner tenant for agent identities; the finalizer derives these origin fields from the parent blueprint principal.
+            AppOwnerOrganizationId = ''
             EntraRoleDetails = $AppEntraRoles
             EligibleEntraRoleDetails = $EligibleAppEntraRoles
             GroupOwner = $OwnedGroups
             AppPermission = $AppAssignments
-            Foreign = $ForeignTenant
-            MSOwned = $MSOwned
+            Foreign = $false
+            MSOwned = $false
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
             Inactive = $Inactive

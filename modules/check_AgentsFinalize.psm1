@@ -1042,6 +1042,8 @@ Execution Warnings = $($WarningList -join ' / ')
         $parentPrincipalDisplayName = if ($parentPrincipal) { $parentPrincipal.DisplayName } else { $null }
         $parentPrincipalPublisherName = if ($parentPrincipal) { $parentPrincipal.PublisherName } else { $null }
         $foreignBlueprintPrincipal = if ($parentPrincipal) { [bool]$parentPrincipal.Foreign } else { $false }
+        $parentPrincipalMSOwned = if ($parentPrincipal) { [bool]$parentPrincipal.MSOwned } else { $false }
+        $parentPrincipalOwnerTenantId = if ($parentPrincipal) { "$($parentPrincipal.AppOwnerOrganizationId)".Trim() } else { '' }
         $effectivePermissionData = Resolve-AgentEffectiveApiPermissions -AgentIdentity $agentIdentity -ParentPrincipal $parentPrincipal -ParentBlueprint $parentBlueprint
         foreach ($source in @($effectivePermissionData.EffectiveApiPermissionSources)) {
             switch ([string]$source.OriginType) {
@@ -1062,7 +1064,9 @@ Execution Warnings = $($WarningList -join ' / ')
         $agentIdentity | Add-Member -NotePropertyName ParentBlueprintPrincipalDisplayName -NotePropertyValue $parentPrincipalDisplayName -Force
         $agentIdentity | Add-Member -NotePropertyName ParentBlueprintPrincipalPublisherName -NotePropertyValue $parentPrincipalPublisherName -Force
         $agentIdentity | Add-Member -NotePropertyName ForeignBlueprintPrincipal -NotePropertyValue $foreignBlueprintPrincipal -Force
-        $agentIdentity | Add-Member -NotePropertyName Foreign -NotePropertyValue ([bool]$agentIdentity.Foreign -or $foreignBlueprintPrincipal) -Force
+        $agentIdentity | Add-Member -NotePropertyName Foreign -NotePropertyValue $foreignBlueprintPrincipal -Force
+        $agentIdentity | Add-Member -NotePropertyName MSOwned -NotePropertyValue $parentPrincipalMSOwned -Force
+        $agentIdentity | Add-Member -NotePropertyName AppOwnerOrganizationId -NotePropertyValue $parentPrincipalOwnerTenantId -Force
         $agentIdentity.ApiDangerous = $effectivePermissionData.Summary.ApplicationCounts['Dangerous']
         $agentIdentity.ApiHigh = $effectivePermissionData.Summary.ApplicationCounts['High']
         $agentIdentity.ApiMedium = $effectivePermissionData.Summary.ApplicationCounts['Medium']
@@ -1593,6 +1597,7 @@ Execution Warnings = $($WarningList -join ' / ')
             "General Information" = [pscustomobject]@{
                 "App Name" = $item.DisplayName
                 "Publisher Name" = $item.PublisherName
+                "Publisher TenantId" = $item.AppOwnerOrganizationId
                 "Client-ID" = $item.AppId
                 "Object-ID" = $item.Id
                 "Created By App ID" = $item.CreatedByAppId
