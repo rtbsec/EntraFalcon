@@ -594,7 +594,8 @@ function Invoke-CheckCaps {
     # Sanitize policy names before using them in per-policy export file paths.
     function Get-SafeFileName {
         param (
-            [Parameter(Mandatory=$true)][string]$Name
+            [Parameter(Mandatory=$true)][string]$Name,
+            [Parameter(Mandatory=$false)][int]$MaxLength = 120
         )
 
         $safeName = "$Name"
@@ -607,8 +608,8 @@ function Invoke-CheckCaps {
             return "Unnamed"
         }
 
-        if ($safeName.Length -gt 120) {
-            $safeName = $safeName.Substring(0, 120).Trim()
+        if ($safeName.Length -gt $MaxLength) {
+            $safeName = $safeName.Substring(0, $MaxLength).Trim()
         }
 
         return $safeName
@@ -1612,7 +1613,18 @@ function Invoke-CheckCaps {
     if ($ExportCapUncoveredUsers) {
         $CapUncoveredUsersOutputFolder = Join-Path $OutputFolder "ConditionalAccessPolicies_UncoveredUsers"
         if (-not (Test-Path -LiteralPath $CapUncoveredUsersOutputFolder)) {
-            $null = New-Item -Path $CapUncoveredUsersOutputFolder -ItemType Directory -Force
+            try {
+                $null = New-Item -Path $CapUncoveredUsersOutputFolder -ItemType Directory -Force -ErrorAction Stop
+                # Windows PowerShell 5.1 returns without an error when the folder path exceeds its length limit.
+                if (-not (Test-Path -LiteralPath $CapUncoveredUsersOutputFolder)) {
+                    throw "Folder was not created."
+                }
+            } catch {
+                # Continue building the CAP report without the per-policy export.
+                Write-Log -Level Debug -Message "CAP uncovered-users export folder creation failed (path length $($CapUncoveredUsersOutputFolder.Length)): $($_.Exception.Message)"
+                Write-Host "[!] Could not create the CAP uncovered-users export folder; the export is skipped. The output path is probably too long for Windows PowerShell 5.1. Use a shorter output location or PowerShell 7." -ForegroundColor Yellow
+                $ExportCapUncoveredUsers = $false
+            }
         }
     }
 
@@ -1758,6 +1770,8 @@ function Invoke-CheckCaps {
     $capUncoveredExportRows = 0
     $capUncoveredExportSkippedEmpty = 0
     $capUncoveredExportSkippedNoTargeting = 0
+    $capUncoveredExportFailed = 0
+    $capUncoveredExportFailedLongPath = 0
 
     #region Processing Loop
     #Main processing of the results
@@ -2100,14 +2114,29 @@ function Invoke-CheckCaps {
                 }) | Out-Null
             }
 
-            $safePolicyName = Get-SafeFileName -Name $policy.DisplayName
             $shortPolicyId = if ([string]::IsNullOrWhiteSpace([string]$policy.Id)) { "unknown" } else { ([string]$policy.Id).Substring(0, [Math]::Min(8, ([string]$policy.Id).Length)) }
-            $csvFilePath = Join-Path $CapUncoveredUsersOutputFolder "$safePolicyName`_$shortPolicyId.csv"
+
+            # Keep the full path below MAX_PATH; Windows PowerShell 5.1 cannot write longer paths.
+            $csvFileSuffix = "_$shortPolicyId.csv"
+            $policyNameBudget = [Math]::Min(120, 259 - ($CapUncoveredUsersOutputFolder.TrimEnd('\').Length + 1 + $csvFileSuffix.Length))
+            if ($policyNameBudget -ge 10) {
+                $safePolicyName = Get-SafeFileName -Name $policy.DisplayName -MaxLength $policyNameBudget
+                $csvFilePath = Join-Path $CapUncoveredUsersOutputFolder "$safePolicyName$csvFileSuffix"
+            } else {
+                Write-Log -Level Debug -Message "CAP uncovered-users export path for '$($policy.DisplayName)' [$($policy.Id)] too long to include the policy name; using the policy ID only."
+                $csvFilePath = Join-Path $CapUncoveredUsersOutputFolder "$shortPolicyId.csv"
+            }
             Write-Log -Level Debug -Message "CAP uncovered-users export summary for '$($policy.DisplayName)' [$($policy.Id)]: includedTargeted=$($includedTargetUserIds.Count) excludedTargeted=$($excludedTargetUserIds.Count) netTargeted=$($netTargetUserIds.Count) potentialViaPim=$($includedPotentialPimUserIds.Count) uncovered=$($capUncoveredUsersRows.Count) reasons=(Excluded=$excludedReasonCount, PotentialViaPIM=$potentialViaPimReasonCount, NotTargeted=$notTargetedReasonCount)"
             if ($capUncoveredUsersRows.Count -gt 0) {
-                $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -LiteralPath $csvFilePath -NoTypeInformation -Encoding UTF8
-                $capUncoveredExportFilesWritten++
-                $capUncoveredExportRows += $capUncoveredUsersRows.Count
+                try {
+                    $capUncoveredUsersRows | Sort-Object Reason,EntraMaxTier,UPN | Export-Csv -LiteralPath $csvFilePath -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+                    $capUncoveredExportFilesWritten++
+                    $capUncoveredExportRows += $capUncoveredUsersRows.Count
+                } catch {
+                    $capUncoveredExportFailed++
+                    if ($csvFilePath.Length -ge 260) { $capUncoveredExportFailedLongPath++ }
+                    Write-Log -Level Debug -Message "CAP uncovered-users export failed for '$($policy.DisplayName)' [$($policy.Id)] (path length $($csvFilePath.Length)): $($_.Exception.Message)"
+                }
             } else {
                 $capUncoveredExportSkippedEmpty++
                 Write-Log -Level Debug -Message "CAP uncovered-users export skipped file write for '$($policy.DisplayName)' [$($policy.Id)]: no uncovered enabled users remained after effective targeting."
@@ -2879,7 +2908,14 @@ function Invoke-CheckCaps {
     Write-Log -Level Debug -Message "CAP assurance summary: AuthStrengthPolicies=$capAuthStrengthPolicies, MfaEquivalentPolicies=$capMfaEquivalentPolicies, PhishingResistantPolicies=$capPhishingResistantPolicies, AssuranceWarningPolicies=$capAssuranceWarningPolicies"
 
     if ($ExportCapUncoveredUsers) {
-        Write-Log -Level Debug -Message "CAP uncovered-users export total: FilesWritten=$capUncoveredExportFilesWritten, Rows=$capUncoveredExportRows, SkippedEmpty=$capUncoveredExportSkippedEmpty, SkippedNoTargeting=$capUncoveredExportSkippedNoTargeting, OutputFolder=$CapUncoveredUsersOutputFolder"
+        Write-Log -Level Debug -Message "CAP uncovered-users export total: FilesWritten=$capUncoveredExportFilesWritten, Rows=$capUncoveredExportRows, SkippedEmpty=$capUncoveredExportSkippedEmpty, SkippedNoTargeting=$capUncoveredExportSkippedNoTargeting, Failed=$capUncoveredExportFailed, OutputFolder=$CapUncoveredUsersOutputFolder"
+        if ($capUncoveredExportFailed -gt 0) {
+            if ($capUncoveredExportFailedLongPath -gt 0) {
+                Write-Host "[!] $capUncoveredExportFailed CAP uncovered-users export file(s) could not be written. The output path is probably too long for Windows PowerShell 5.1. Use a shorter output location or PowerShell 7." -ForegroundColor Yellow
+            } else {
+                Write-Host "[!] $capUncoveredExportFailed CAP uncovered-users export file(s) could not be written. Use -LogLevel Debug for details." -ForegroundColor Yellow
+            }
+        }
     }
 
     # Initialize an empty array to store warning messages
