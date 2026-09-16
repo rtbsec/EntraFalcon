@@ -305,6 +305,8 @@ function Invoke-CheckManagedIdentities {
         $EntraMaxTierThroughGroupOwnership = "-"
         $AzureMaxTierThroughGroupMembership = "-"
         $AzureMaxTierThroughGroupOwnership = "-"
+        $AzureMaxImpactThroughGroupMembership = 0
+        $AzureMaxImpactThroughGroupOwnership = 0
 
         $AzureMaxTier = $DirectAzureMaxTier
         $EntraMaxTier = $DirectEntraMaxTier
@@ -413,6 +415,7 @@ function Invoke-CheckManagedIdentities {
             if ($GLOBALAzurePsChecks) {
                 $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure
                 $AzureMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupMembership -CandidateTier $azureMetrics.MaxTier
+                $AzureMaxImpactThroughGroupMembership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupMembership -CandidateImpact $group.AzureExposureImpact
             }
         }
 
@@ -424,6 +427,7 @@ function Invoke-CheckManagedIdentities {
             if ($GLOBALAzurePsChecks) {
                 $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -IncludeEligible
                 $AzureMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupOwnership -CandidateTier $azureMetrics.MaxTier
+                $AzureMaxImpactThroughGroupOwnership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupOwnership -CandidateImpact $group.AzureExposureImpact
             }
         }
 
@@ -432,8 +436,13 @@ function Invoke-CheckManagedIdentities {
         if ($GLOBALAzurePsChecks) {
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $DirectAzureMaxTier -CandidateTier $AzureMaxTierThroughGroupMembership
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierThroughGroupOwnership
+
+            $DirectAzureMaxImpact = Get-AzureRoleExposureImpact -RoleDetails $AzureRoleDetails -TenantId ([string]$CurrentTenant.Id)
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $DirectAzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupMembership
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $AzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupOwnership
         } else {
             $AzureMaxTier = "?"
+            $AzureMaxImpact = "?"
         }
 
         if ($AzureRoleCount -is [int] -and $AzureRoleCount -gt 0 -and $AzureMaxTier -eq "-") {
@@ -735,6 +744,7 @@ function Invoke-CheckManagedIdentities {
             AzureRolesEffective = $AzureRolesEffective
             AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
+            AzureMaxImpact = $AzureMaxImpact
             AzureRoleDetails = $AzureRoleDetails
             AppCredentials = $AppCredentialsCount
             AppCredentialsDetails = $AppCredentials
@@ -763,7 +773,7 @@ function Invoke-CheckManagedIdentities {
     $SortedManagedIdentitiesByRisk = $AllServicePrincipal | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedManagedIdentitiesByRisk | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedManagedIdentitiesByRisk | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     
     #Define the managed identities to be displayed in detail
     $details = $SortedManagedIdentitiesByRisk
@@ -1080,7 +1090,7 @@ function Invoke-CheckManagedIdentities {
     write-host "[*] Writing report files..."
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -1177,9 +1187,9 @@ $headerHtml = @"
 
         #Write TXT and CSV files
         $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
-        $tableOutput | format-table DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $tableOutput | format-table DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         if ($Csv) {
-            $tableOutput | select-object DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
+            $tableOutput | select-object DisplayName,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
         }
         $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         $AppendixHeaderTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append

@@ -334,6 +334,7 @@ function Invoke-CheckPIMGroups {
         $roleLabel = (Get-Culture).TextInfo.ToTitleCase($roleDefinitionId)
         $entraMaxTier = if ($groupDetails) { [string]$groupDetails.EntraMaxTier } else { '' }
         $azureMaxTier = if ($groupDetails) { [string]$groupDetails.AzureMaxTier } else { '' }
+        $azureMaxImpact = if ($groupDetails) { $groupDetails.AzureExposureImpact } else { '' }
         $effectiveWarningTier = Get-EffectiveWarningTier -EntraTier $entraMaxTier -AzureTier $azureMaxTier
         $warningTier = Get-WarningTierLabel -Tier $effectiveWarningTier
         $countKey = "$groupId|$roleDefinitionId"
@@ -588,6 +589,7 @@ function Invoke-CheckPIMGroups {
             Role                      = $roleLabel
             EntraMaxTier              = $entraMaxTier
             AzureMaxTier              = $azureMaxTier
+            AzureMaxImpact            = $azureMaxImpact
             RoleDefinitionId          = $roleDefinitionId
             PolicyId                  = $policyId
             PolicyLastModifiedDateTime = $policyLastModifiedDateTime
@@ -632,8 +634,8 @@ function Invoke-CheckPIMGroups {
         @{ Expression = { Get-RoleSortRank -Role $_.Role } ; Ascending = $true }, `
         Role
 
-    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
-    $mainTable = $tableOutput | Select-Object -Property @{Name = 'Group'; Expression = { $_.GroupLink } }, Role, EntraMaxTier, AzureMaxTier, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
+    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
+    $mainTable = $tableOutput | Select-Object -Property @{Name = 'Group'; Expression = { $_.GroupLink } }, Role, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
     $mainTableJson = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -645,6 +647,7 @@ function Invoke-CheckPIMGroups {
             "Group" = $item.Group
             "Entra Max Tier" = $item.EntraMaxTier
             "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Impact" = $item.AzureMaxImpact
             "Role" = $item.Role
             "Eligible Assignments" = $item.Eligible
             "Active Assignments" = $item.Active
@@ -758,6 +761,7 @@ function Invoke-CheckPIMGroups {
             Group = $item.GroupReportLink
             "Entra Max Tier" = $item.EntraMaxTier
             "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Impact" = $item.AzureMaxImpact
             Role = $item.Role
             "Last Modified" = if ([string]::IsNullOrWhiteSpace([string]$item.PolicyLastModifiedDateTime)) { '-' } else { $item.PolicyLastModifiedDateTime }
             "Last Modified By" = if ([string]::IsNullOrWhiteSpace([string]$item.PolicyLastModifiedBy)) { '-' } else { $item.PolicyLastModifiedBy }
@@ -834,9 +838,9 @@ Execution Warnings = This report includes only PIM settings for PIM-enabled grou
     }
 
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
-    $tableOutput | Format-Table Group, EntraMaxTier, AzureMaxTier, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+    $tableOutput | Format-Table Group, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | Select-Object Group, EntraMaxTier, AzureMaxTier, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
+        $tableOutput | Select-Object Group, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
 

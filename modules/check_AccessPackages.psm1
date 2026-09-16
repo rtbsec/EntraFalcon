@@ -1532,6 +1532,7 @@ function Invoke-CheckAccessPackages {
         $azureRoles = 0
         $apiPermissionCategory = "-"
         $azureImpactContext = $null
+        $azureImpact = 0
         $resourceType = Get-AccessPackageResourceType -OriginSystem $originSystem -Role $role -Scope $scope -AppRoleReferenceCache $AppRoleReferenceCache
 
         if ($originSystem -eq "AadGroup" -and -not [string]::IsNullOrWhiteSpace($originId) -and $AllGroupsDetails.ContainsKey($originId)) {
@@ -1548,6 +1549,12 @@ function Invoke-CheckAccessPackages {
                 $azureTier = if ([string]::IsNullOrWhiteSpace([string]$group.AzureMaxTier)) { "-" } else { [string]$group.AzureMaxTier }
             } elseif ([string]$group.AzureRoles -eq "?" -or [string]$group.AzureMaxTier -eq "?") {
                 $azureTier = "?"
+            }
+            # Exposure impact propagates through nesting and PIM eligibility even where the role count does not
+            if ([string]$group.AzureExposureImpact -eq "?") {
+                $azureImpact = "?"
+            } else {
+                $azureImpact = Get-AccessPackageIntValue -Value $group.AzureExposureImpact
             }
         } elseif ($originSystem -eq "AadApplication" -and -not [string]::IsNullOrWhiteSpace($originId)) {
             $app = $null
@@ -1587,6 +1594,7 @@ function Invoke-CheckAccessPackages {
             $azureTier = ConvertTo-AccessPackageTierLabel -Tier $roleTierValue
             $azureImpactContext = Get-AzureRoleAssignmentImpact -RoleTier $roleTierValue -RoleName $roleName -RawScope $originId -TenantId $CurrentTenant.Id
             $impact = $azureImpactContext.AssignmentImpact
+            $azureImpact = $azureImpactContext.AssignmentImpact
             $azureRoles = 1
         } elseif ($originSystem -eq "SharePointOnline") {
             $impact = Get-AccessPackageSharePointImpact -RoleName $roleName
@@ -1636,6 +1644,7 @@ function Invoke-CheckAccessPackages {
             EntraMaxTier = $entraTier
             AzureRoles   = $azureRoles
             AzureMaxTier = $azureTier
+            AzureMaxImpact = $azureImpact
             ScopeType    = if ($azureImpactContext) { $azureImpactContext.ScopeType } else { "-" }
             Environment  = if ($azureImpactContext) { $azureImpactContext.Environment } else { "-" }
             ObservedResources = if ($azureImpactContext) { $azureImpactContext.ObservedResources } else { $null }
@@ -1779,14 +1788,21 @@ function Invoke-CheckAccessPackages {
         $resourceImpactSum = 0
         $entraTier = "-"
         $azureTier = "-"
+        $azureImpactMax = 0
         $entraRoleResources = 0
         $azureRoleResources = 0
         foreach ($resource in $resources) {
             $resourceImpactSum += [double]$resource.Impact
             $entraTier = Merge-HigherTierLabel -CurrentTier $entraTier -CandidateTier $resource.EntraMaxTier
             $azureTier = Merge-HigherTierLabel -CurrentTier $azureTier -CandidateTier $resource.AzureMaxTier
+            $azureImpactMax = Merge-HigherImpact -CurrentImpact $azureImpactMax -CandidateImpact $resource.AzureMaxImpact
             $entraRoleResources += Get-AccessPackageIntValue -Value $resource.EntraRoles
             $azureRoleResources += Get-AccessPackageIntValue -Value $resource.AzureRoles
+        }
+
+        # Keep the impact sentinel aligned with the tier when Azure data was unavailable
+        if ($azureImpactMax -eq 0 -and $azureTier -eq "?") {
+            $azureImpactMax = "?"
         }
         $groupResources = @($resources | Where-Object { $_.Type -eq "Group" }).Count
         $applicationResources = @($resources | Where-Object { $_.Type -eq "Application" }).Count
@@ -1927,6 +1943,7 @@ function Invoke-CheckAccessPackages {
                 $resourceRowProperties["ScopeType"] = if ($resourceAzureRoles -gt 0) { $resource.ScopeType } else { "-" }
                 $resourceRowProperties["Environment"] = if ($resourceAzureRoles -gt 0) { $resource.Environment } else { "-" }
                 $resourceRowProperties["Resources"] = if ($resourceAzureRoles -gt 0 -and $null -ne $resource.ObservedResources) { $resource.ObservedResources } else { "-" }
+                $resourceRowProperties["AzureMaxImpact"] = if ((Get-AccessPackageIntValue -Value $resource.AzureMaxImpact) -gt 0) { $resource.AzureMaxImpact } else { "-" }
             }
             $resourceRowProperties["Impact"] = $resource.Impact
             [pscustomobject]$resourceRowProperties
@@ -2096,7 +2113,7 @@ function Invoke-CheckAccessPackages {
                     $value = $property.Value
                     if ($property.Name -in @("Resource", "Role", "Scope")) {
                         $value = ConvertTo-AccessPackagePlainText $value
-                    } elseif ($property.Name -eq "Impact") {
+                    } elseif ($property.Name -in @("Impact", "AzureMaxImpact")) {
                         $value = ConvertTo-AccessPackageWholeNumber $value
                     }
                     $resourceTxtProperties[$property.Name] = $value
@@ -2157,7 +2174,8 @@ function Invoke-CheckAccessPackages {
                 [void]$DetailTxtBuilder.AppendLine($detailSectionDelimiter)
                 [void]$DetailTxtBuilder.AppendLine("Granted Resources and Roles (Access Package)")
                 [void]$DetailTxtBuilder.AppendLine($detailSectionDelimiter)
-                [void]$DetailTxtBuilder.AppendLine(($resourceRowsTxt | Format-Table | Out-String -Width 512))
+                # Format-Table drops columns that exceed the host buffer width unless the property list is explicit
+                [void]$DetailTxtBuilder.AppendLine(($resourceRowsTxt | Format-Table -Property * | Out-String -Width 512))
             }
             if (@($policyContext.SpecificTargets).Count -gt 0) {
                 [void]$DetailTxtBuilder.AppendLine($detailSectionDelimiter)
@@ -2237,6 +2255,7 @@ function Invoke-CheckAccessPackages {
                 ServicePrincipals       = @($policySpAssignments).Count
                 EntraMaxTier            = $entraTier
                 AzureMaxTier            = $azureTier
+                AzureMaxImpact          = $azureImpactMax
                 Impact                  = $resourceImpactSum
                 Likelihood              = $policyLikelihood
                 Risk                    = $policyRisk
@@ -2300,8 +2319,8 @@ function Invoke-CheckAccessPackages {
     ########################################## SECTION: Write Output ##########################################
 
     Write-Host "[*] Writing Access Package reports"
-    $mainTableHtml = @($TableOutput | Select-Object @{Name = "Policy"; Expression = { $_.PolicyLink }},Package,Catalog,PolicyEnabled,CatalogEnabled,Hidden,SeparationOfDuties,Resources,Groups,Applications,@{Name = "ApiApp"; Expression = { $_.ApiAppPerms }},@{Name = "ApiDelegated"; Expression = { $_.ApiDelegatedPerms }},SharePoint,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AllowedTargetScope,BroadScope,@{Name = "SelfAdd"; Expression = { $_.SelfAddAccess }},@{Name = "OnBehalfAdd"; Expression = { $_.OnBehalfAddAccess }},@{Name = "Approval"; Expression = { $_.ApprovalRequired }},Expiration,ExpirationDetails,AccessReview,AutoAssignment,SpecificTargets,ActiveAssignments,ExpiredAssignments,Users,Guests,ServicePrincipals,Impact,Likelihood,Risk,Warnings)
-    $mainTableExport = @($TableOutput | Select-Object Policy,Package,Catalog,PolicyEnabled,CatalogEnabled,Hidden,SeparationOfDuties,Resources,Groups,Applications,@{Name = "ApiApp"; Expression = { $_.ApiAppPerms }},@{Name = "ApiDelegated"; Expression = { $_.ApiDelegatedPerms }},SharePoint,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AllowedTargetScope,BroadScope,@{Name = "SelfAdd"; Expression = { $_.SelfAddAccess }},@{Name = "OnBehalfAdd"; Expression = { $_.OnBehalfAddAccess }},@{Name = "Approval"; Expression = { $_.ApprovalRequired }},Expiration,ExpirationDetails,AccessReview,AutoAssignment,SpecificTargets,ActiveAssignments,ExpiredAssignments,Users,Guests,ServicePrincipals,@{Name = "Impact"; Expression = { ConvertTo-AccessPackageWholeNumber $_.Impact }},Likelihood,@{Name = "Risk"; Expression = { ConvertTo-AccessPackageWholeNumber $_.Risk }},Warnings)
+    $mainTableHtml = @($TableOutput | Select-Object @{Name = "Policy"; Expression = { $_.PolicyLink }},Package,Catalog,PolicyEnabled,CatalogEnabled,Hidden,SeparationOfDuties,Resources,Groups,Applications,@{Name = "ApiApp"; Expression = { $_.ApiAppPerms }},@{Name = "ApiDelegated"; Expression = { $_.ApiDelegatedPerms }},SharePoint,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,AllowedTargetScope,BroadScope,@{Name = "SelfAdd"; Expression = { $_.SelfAddAccess }},@{Name = "OnBehalfAdd"; Expression = { $_.OnBehalfAddAccess }},@{Name = "Approval"; Expression = { $_.ApprovalRequired }},Expiration,ExpirationDetails,AccessReview,AutoAssignment,SpecificTargets,ActiveAssignments,ExpiredAssignments,Users,Guests,ServicePrincipals,Impact,Likelihood,Risk,Warnings)
+    $mainTableExport = @($TableOutput | Select-Object Policy,Package,Catalog,PolicyEnabled,CatalogEnabled,Hidden,SeparationOfDuties,Resources,Groups,Applications,@{Name = "ApiApp"; Expression = { $_.ApiAppPerms }},@{Name = "ApiDelegated"; Expression = { $_.ApiDelegatedPerms }},SharePoint,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,@{Name = "AzureMaxImpact"; Expression = { ConvertTo-AccessPackageWholeNumber $_.AzureMaxImpact }},AllowedTargetScope,BroadScope,@{Name = "SelfAdd"; Expression = { $_.SelfAddAccess }},@{Name = "OnBehalfAdd"; Expression = { $_.OnBehalfAddAccess }},@{Name = "Approval"; Expression = { $_.ApprovalRequired }},Expiration,ExpirationDetails,AccessReview,AutoAssignment,SpecificTargets,ActiveAssignments,ExpiredAssignments,Users,Guests,ServicePrincipals,@{Name = "Impact"; Expression = { ConvertTo-AccessPackageWholeNumber $_.Impact }},Likelihood,@{Name = "Risk"; Expression = { ConvertTo-AccessPackageWholeNumber $_.Risk }},Warnings)
     $mainTableJson = if ($mainTableHtml.Count -eq 0) { "[]" } else { $mainTableHtml | ConvertTo-Json -Depth 6 -Compress }
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -2365,7 +2384,7 @@ Execution Warnings = $($Warnings -join ' / ')
     $txtPath = Join-Path -Path $OutputFolder -ChildPath "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt"
     $htmlPath = Join-Path -Path $OutputFolder -ChildPath "$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
 
-    $reportColumns = @("Policy","Package","Catalog","PolicyEnabled","CatalogEnabled","Hidden","SeparationOfDuties","Resources","Groups","Applications","ApiApp","ApiDelegated","SharePoint","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AllowedTargetScope","BroadScope","SelfAdd","OnBehalfAdd","Approval","Expiration","ExpirationDetails","AccessReview","AutoAssignment","SpecificTargets","ActiveAssignments","ExpiredAssignments","Users","Guests","ServicePrincipals","Impact","Likelihood","Risk","Warnings")
+    $reportColumns = @("Policy","Package","Catalog","PolicyEnabled","CatalogEnabled","Hidden","SeparationOfDuties","Resources","Groups","Applications","ApiApp","ApiDelegated","SharePoint","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AzureMaxImpact","AllowedTargetScope","BroadScope","SelfAdd","OnBehalfAdd","Approval","Expiration","ExpirationDetails","AccessReview","AutoAssignment","SpecificTargets","ActiveAssignments","ExpiredAssignments","Users","Guests","ServicePrincipals","Impact","Likelihood","Risk","Warnings")
     $headerTXT | Out-File -Width 512 -FilePath $txtPath -Append
     $mainTableExport | Format-Table -Property $reportColumns | Out-File -Width 4096 $txtPath -Append
     $DetailTxtBuilder.ToString() | Out-File $txtPath -Append

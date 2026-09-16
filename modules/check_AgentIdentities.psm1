@@ -527,6 +527,8 @@ function Invoke-AgentIdentities {
         $EntraMaxTierThroughGroupOwnership = "-"
         $AzureMaxTierThroughGroupMembership = "-"
         $AzureMaxTierThroughGroupOwnership = "-"
+        $AzureMaxImpactThroughGroupMembership = 0
+        $AzureMaxImpactThroughGroupOwnership = 0
 
         $AzureMaxTier = $DirectAzureMaxTier
         $EntraMaxTier = $DirectEntraMaxTier
@@ -652,6 +654,7 @@ function Invoke-AgentIdentities {
             if ($GLOBALAzurePsChecks) {
                 $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure
                 $AzureMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupMembership -CandidateTier $azureMetrics.MaxTier
+                $AzureMaxImpactThroughGroupMembership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupMembership -CandidateImpact $group.AzureExposureImpact
             }
         }
 
@@ -663,6 +666,7 @@ function Invoke-AgentIdentities {
             if ($GLOBALAzurePsChecks) {
                 $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure
                 $AzureMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupOwnership -CandidateTier $azureMetrics.MaxTier
+                $AzureMaxImpactThroughGroupOwnership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupOwnership -CandidateImpact $group.AzureExposureImpact
             }
         }
 
@@ -671,8 +675,13 @@ function Invoke-AgentIdentities {
         if ($GLOBALAzurePsChecks) {
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $DirectAzureMaxTier -CandidateTier $AzureMaxTierThroughGroupMembership
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierThroughGroupOwnership
+
+            $DirectAzureMaxImpact = Get-AzureRoleExposureImpact -RoleDetails $AzureRoleDetails -TenantId ([string]$CurrentTenant.Id)
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $DirectAzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupMembership
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $AzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupOwnership
         } else {
             $AzureMaxTier = "?"
+            $AzureMaxImpact = "?"
         }
 
         if ($AzureRoleCount -is [int] -and $AzureRoleCount -gt 0 -and $AzureMaxTier -eq "-") {
@@ -1069,6 +1078,7 @@ function Invoke-AgentIdentities {
             MSOwned = $false
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
+            AzureMaxImpact = $AzureMaxImpact
             Inactive = $Inactive
             LastSignInDays = $LastSignInDays
             CreationDate = $item.createdDateTime

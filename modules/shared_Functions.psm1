@@ -1602,7 +1602,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "MSOwnedAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "MSOwnedAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles", "AzureMaxImpact"];
 
         // Hide low-information columns by default when every row contains the same value. The column remains available in the Columns menu.
         const conditionalDefaultHiddenRules = [
@@ -1968,6 +1968,7 @@ $global:GLOBALJavaScript_Table = @'
             "AppRegOwn": "Owner of App Registrations",
             "EntraMaxTier": "Highest assigned Entra role tier (directly or through groups)",
             "AzureMaxTier": "Highest assigned Azure role tier (directly or through groups)",
+            "AzureMaxImpact": "Highest contextual Azure role impact reachable (directly or through groups)",
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
@@ -6539,6 +6540,25 @@ function Merge-HigherTierLabel {
     return $currentResolved
 }
 
+# Numeric counterpart to Merge-HigherTierLabel. Non-numeric input (such as the "?" sentinel) counts as no information.
+function Merge-HigherImpact {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object]$CurrentImpact,
+        [Parameter(Mandatory = $false)]
+        [object]$CandidateImpact
+    )
+
+    $current = 0
+    $candidate = 0
+    [void][int]::TryParse([string]$CurrentImpact, [ref]$current)
+    [void][int]::TryParse([string]$CandidateImpact, [ref]$candidate)
+
+    if ($candidate -gt $current) { return $candidate }
+
+    return $current
+}
+
 # Returns normalized group metadata from the cached AllGroupsDetails hashtable for membership and ownership inheritance paths.
 function Get-GroupDetails {
     param (
@@ -6567,6 +6587,7 @@ function Get-GroupDetails {
             EntraRoleDetails       = $MatchingGroup.EntraRoleDetails
             AzureRoles             = $MatchingGroup.AzureRoles
             AzureMaxTier           = $MatchingGroup.AzureMaxTier
+            AzureExposureImpact    = $MatchingGroup.AzureExposureImpact
             AzureRoleDetails       = $MatchingGroup.AzureRoleDetails
             CAPs                   = $MatchingGroup.CAPs
             APAutoAssign           = if ($MatchingGroup.PSObject.Properties['APAutoAssign']) { [bool]$MatchingGroup.APAutoAssign } else { $false }
@@ -13628,4 +13649,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleBaseImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Merge-HigherImpact,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

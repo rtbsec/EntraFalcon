@@ -482,6 +482,8 @@ function Invoke-CheckUsers {
         $EntraMaxTierTroughGroupMembership = "-"
         $AzureMaxTierTroughGroupOwnership = "-"
         $AzureMaxTierTroughGroupMembership = "-"
+        $AzureMaxImpactThroughGroupOwnership = 0
+        $AzureMaxImpactThroughGroupMembership = 0
         $Inactive = $false
         $UserEntraRoles = @()
         $Agent = $item.'@odata.type' -eq '#microsoft.graph.agentUser'
@@ -749,6 +751,7 @@ function Invoke-CheckUsers {
                     CAPs = $MatchingGroup.CAPs
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
+                    AzureExposureImpact = $MatchingGroup.AzureExposureImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                     IntuneRoleDetails = if ($MatchingGroup.PSObject.Properties["IntuneRoleDetails"]) { $MatchingGroup.IntuneRoleDetails } else { @() }
                     AppRoles = $MatchingGroup.AppRoles
@@ -775,13 +778,14 @@ function Invoke-CheckUsers {
                     CAPs = $MatchingGroup.CAPs
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
+                    AzureExposureImpact = $MatchingGroup.AzureExposureImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                     IntuneRoleDetails = if ($MatchingGroup.PSObject.Properties["IntuneRoleDetails"]) { $MatchingGroup.IntuneRoleDetails } else { @() }
                     AppRoles = $MatchingGroup.AppRoles
                     Impact = $MatchingGroup.Impact
                 })
             }
-        } 
+        }
         #Sort by impact
         $GroupMemberDetails = $GroupMemberDetails | Sort-Object -Property Impact -Descending
 
@@ -894,6 +898,7 @@ function Invoke-CheckUsers {
                 if ($object.IntuneRoles -is [int]) {$IntuneRolesCount += $object.IntuneRoles} else {$IntuneRolesCount += 0}
                 $EntraMaxTierTroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierTroughGroupOwnership -CandidateTier $object.EntraMaxTier
                 $AzureMaxTierTroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierTroughGroupOwnership -CandidateTier $object.AzureMaxTier
+                $AzureMaxImpactThroughGroupOwnership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupOwnership -CandidateImpact $object.AzureExposureImpact
                 
                 $AppRolesCount += $object.AppRoles
             }
@@ -956,6 +961,7 @@ function Invoke-CheckUsers {
                 if ($object.IntuneRoles -is [int]) {$IntuneRolesCount += $object.IntuneRoles} else {$IntuneRolesCount += 0}
                 $EntraMaxTierTroughGroupMembership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierTroughGroupMembership -CandidateTier $object.EntraMaxTier
                 $AzureMaxTierTroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierTroughGroupMembership -CandidateTier $object.AzureMaxTier
+                $AzureMaxImpactThroughGroupMembership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupMembership -CandidateImpact $object.AzureExposureImpact
                 $AppRolesCount += $object.AppRoles
             }
 
@@ -1129,8 +1135,13 @@ function Invoke-CheckUsers {
             $DirectAzureMaxTier = Get-HighestTierLabel -Assignments $AzureRoleDetails
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $DirectAzureMaxTier -CandidateTier $AzureMaxTierTroughGroupOwnership
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierTroughGroupMembership
+
+            $DirectAzureMaxImpact = Get-AzureRoleExposureImpact -RoleDetails $AzureRoleDetails -TenantId ([string]$CurrentTenant.Id)
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $DirectAzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupOwnership
+            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $AzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupMembership
         } else {
             $AzureMaxTier = "?"
+            $AzureMaxImpact = "?"
         }
 
         $AccessPackageSpecificTargets = [System.Collections.Generic.List[object]]::new()
@@ -1266,6 +1277,7 @@ function Invoke-CheckUsers {
             Inactive = $Inactive
             AzureRoles = $TotalAzureRoles
             AzureMaxTier = $AzureMaxTier
+            AzureMaxImpact = $AzureMaxImpact
             AzureRoleDetails = $AzureRoleDetails
             IntuneRoles = $TotalIntuneRoles
             GrpMem = @($GroupMemberDetails).count
@@ -1992,7 +2004,7 @@ function Write-EntraFalconUsersReport {
     $SortedUsersByRisk = $AllUsersDetails | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,MSOwnedAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,MSOwnedAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -2095,6 +2107,7 @@ function Write-EntraFalconUsersReport {
             "Protected" = $item.Protected
             "Entra Max Tier" = $item.EntraMaxTier
             "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Impact" = $item.AzureMaxImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk
             "UserType" = $item.UserType
@@ -2804,7 +2817,7 @@ Execution Warnings = $($WarningReport  -join ' / ')
     write-host "[+] Writing report files..."
     write-host ""
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AppRoles,IntuneRoles,CatalogRBAC,APTarget,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "UPN"; Expression = { $_.UPNlink}},Enabled,UserType,Agent,@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},OnPrem,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,AppRoles,IntuneRoles,CatalogRBAC,APTarget,AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -2826,7 +2839,7 @@ $headerHtml = @"
 "@
 
     #Write TXT and CSV files
-    $UserTableProperties = @('UPN','Enabled','UserType','Agent',@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},'OnPrem','Licenses','LicenseStatus','Protected','GrpMem','GrpOwn','AuUnits','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AppRoles','IntuneRoles','CatalogRBAC','APTarget','AppRegOwn','BlueprintOwn','SPOwn','DeviceOwn','DeviceReg','Inactive','LastSignInDays','CreatedDays','MfaCap','PerUserMfa','Impact','Likelihood','Risk','Warnings')
+    $UserTableProperties = @('UPN','Enabled','UserType','Agent',@{Name = "ForeignAgent"; Expression = { if ($null -eq $_.ForeignAgent -or [string]::IsNullOrWhiteSpace([string]$_.ForeignAgent)) { "-" } else { $_.ForeignAgent } }},@{Name = "MSOwnedAgent"; Expression = { if ($null -eq $_.MSOwnedAgent -or [string]::IsNullOrWhiteSpace([string]$_.MSOwnedAgent)) { "-" } else { $_.MSOwnedAgent } }},'OnPrem','Licenses','LicenseStatus','Protected','GrpMem','GrpOwn','AuUnits','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AzureMaxImpact','AppRoles','IntuneRoles','CatalogRBAC','APTarget','AppRegOwn','BlueprintOwn','SPOwn','DeviceOwn','DeviceReg','Inactive','LastSignInDays','CreatedDays','MfaCap','PerUserMfa','Impact','Likelihood','Risk','Warnings')
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
         $tableOutput | select-object $UserTableProperties | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8

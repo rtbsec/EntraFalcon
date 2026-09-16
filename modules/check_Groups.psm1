@@ -1797,6 +1797,7 @@ function Invoke-CheckGroups {
             CatalogRbacDetails = $CatalogRbacDetails
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
+            AzureExposureImpact = 0
             AzureRoleDetails = $azureRoleDetails
             IntuneRoles = $IntuneRoleCount
             IntuneRoleDetails = $IntuneRoleDetails
@@ -1855,6 +1856,15 @@ function Invoke-CheckGroups {
         -SeedImpactByGroupId $AzureGroupExposureSeedImpact `
         -DirectGroupMemberIdsByParent $DirectGroupMemberIdsByParent `
         -PimEligibleMembersByGroupId $PimForGroupsEligibleMembersHT
+
+    # Surface the propagated Azure exposure impact on each group record so the rollup reports can consume it
+    foreach ($group in $AllGroupsDetails) {
+        if (-not $GLOBALAzurePsChecks) {
+            $group.AzureExposureImpact = "?"
+        } elseif ($AzureGroupExposureImpactIndex.ContainsKey($group.Id)) {
+            $group.AzureExposureImpact = [int]$AzureGroupExposureImpactIndex[$group.Id]
+        }
+    }
 
     $AutoAssignmentCorrelationTimer.Stop()
     Write-Log -Level Debug -Message ("[Groups] Automatic Access Package assignment correlation: CandidateGroups={0}, MatchedGroups={1}, AmbiguousGroups={2}, RuleKeys={3}, Elapsed={4:N3}s." -f $AutoAssignmentCandidateGroups, $AutoAssignmentMatchedGroups, $AutoAssignmentAmbiguousGroups, $AccessPackageAutoAssignmentPolicyIndex.Count, $AutoAssignmentCorrelationTimer.Elapsed.TotalSeconds)
@@ -2049,10 +2059,12 @@ function Invoke-CheckGroups {
     $GroupOverviewProperties = @("DisplayName","DisplayNameLink","Type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC")
     $GroupOverviewProperties += @{Name = "APTarget"; Expression = { $_.AccessPackages }}
     $GroupOverviewProperties += "APAutoAssign"
-    $GroupOverviewProperties += @("EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","Impact","Likelihood","Risk","Warnings")
+    $GroupOverviewProperties += @("EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier")
+    $GroupOverviewProperties += @{Name = "AzureMaxImpact"; Expression = { $_.AzureExposureImpact }}
+    $GroupOverviewProperties += @("Impact","Likelihood","Risk","Warnings")
 
-    $GroupOutputProperties = @("DisplayName","Type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","Impact","Likelihood","Risk","Warnings")
-    $GroupMainTableProperties = @(@{Name = "DisplayName"; Expression = { $_.DisplayNameLink }},"type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","Impact","Likelihood","Risk","Warnings")
+    $GroupOutputProperties = @("DisplayName","Type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AzureMaxImpact","Impact","Likelihood","Risk","Warnings")
+    $GroupMainTableProperties = @(@{Name = "DisplayName"; Expression = { $_.DisplayNameLink }},"type","SecurityEnabled","RoleAssignable","OnPrem","Dynamic","Visibility","Protected","PIM","AuUnits","DirectOwners","NestedOwners","OwnersSynced","Users","Guests","SPCount","Devices","NestedGroups","NestedInGroups","AppRoles","IntuneRoles","CAPs","CatalogRBAC","APTarget","APAutoAssign","EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier","AzureMaxImpact","Impact","Likelihood","Risk","Warnings")
 
     # Sort once and reuse the same risk ordering for the overview and details.
     $SortedGroupsByRisk = $AllGroupsDetails | Sort-Object Risk -Descending
@@ -2170,6 +2182,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             "Synced from on-prem" = $item.OnPrem
             "Entra Max Tier" = $item.EntraMaxTier
             "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Impact" = $item.AzureExposureImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk
         }
@@ -3322,6 +3335,7 @@ $headerHtml = @"
             CAPs = $group.CAPs
             AzureRoles = $group.AzureRoles
             AzureMaxTier = $group.AzureMaxTier
+            AzureExposureImpact = $group.AzureExposureImpact
             AzureRoleDetails = $group.AzureRoleDetails
             IntuneRoles = $group.IntuneRoles
             IntuneRoleDetails = $group.IntuneRoleDetails

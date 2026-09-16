@@ -11623,7 +11623,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Entra Roles" = $group.EntraRoles
                 "Entra Tier" = $group.EntraMaxTier
                 "Azure Roles" = $group.AzureRoles
-                "Azure Tier" = $group.AzureMaxTier
                 "Max Azure Impact" = $entry.AzureExposureImpact
                 "Intune Roles" = $group.IntuneRoles
                 "CAPs" = $group.CAPs
