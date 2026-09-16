@@ -385,6 +385,15 @@ function Invoke-CheckTenant {
         return $n
     }
 
+    # Names how many affected agents belong to a Microsoft-owned blueprint, for the internal agent findings.
+    function Get-MsOwnedAgentNote {
+        param([object[]]$Values)
+
+        $count = @($Values | Where-Object { $_ -eq $true -or "$_".Trim().ToLowerInvariant() -eq 'true' }).Count
+        if ($count -le 0) { return '' }
+        return " ($count from Microsoft-owned blueprints, such as Copilot Studio)"
+    }
+
     $AzureForeignExposureThreshold = 50
     $AzureHighExposureThreshold = 100
     $AzureCriticalExposureThreshold = 200
@@ -3084,7 +3093,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities with extensive application API privileges were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent identities with extensive application API privileges were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3101,7 +3110,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities with extensive delegated API privileges were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent identities with extensive delegated API privileges were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3120,7 +3129,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities were identified that have Entra ID roles assigned.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent identities were identified that have Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3139,7 +3148,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent identities with Azure exposure impact of at least 50 were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent identities with Azure exposure impact of at least 50 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3158,7 +3167,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent identities with extensive application API privileges were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent identities with extensive application API privileges were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3177,7 +3186,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent identities with extensive delegated API privileges were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent identities with extensive delegated API privileges were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3196,7 +3205,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent identities were identified that have privileged Entra ID roles assigned.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent identities were identified that have privileged Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3215,7 +3224,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent identities with Azure exposure impact of at least 100 were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent identities with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3259,7 +3268,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent users were identified that have Entra ID roles assigned.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent users were identified that have Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3278,7 +3287,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign agent users with Azure exposure impact of at least 50 were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent users with Azure exposure impact of at least 50 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3297,7 +3306,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent users were identified that have privileged Entra ID roles assigned.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent users were identified that have privileged Entra ID roles assigned.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3316,7 +3325,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal agent users with Azure exposure impact of at least 100 were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent users with Azure exposure impact of at least 100 were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -4004,23 +4013,27 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     $inactiveEnabledAgentIdentities.Add($agentIdentity)
                 }
 
+                # Agents of Microsoft-owned blueprints are assessed with the internal thresholds, not as foreign agents.
+                $isForeignNonMs = $agentIdentity.Foreign -eq $true -and $agentIdentity.MSOwned -ne $true
+                $isInternalOrMs = $agentIdentity.Foreign -eq $false -or $agentIdentity.MSOwned -eq $true
+
                 $apiDangerous = Get-IntSafe $agentIdentity.ApiDangerous
                 $apiHigh = Get-IntSafe $agentIdentity.ApiHigh
                 $apiMedium = Get-IntSafe $agentIdentity.ApiMedium
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and (($apiDangerous + $apiHigh + $apiMedium) -gt 0)) {
+                if ($agentIdentity.Enabled -eq $true -and $isForeignNonMs -and (($apiDangerous + $apiHigh + $apiMedium) -gt 0)) {
                     $foreignAgentIdentitiesWithExtensiveApi.Add($agentIdentity)
                 }
 
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($apiDangerous -gt 0 -or $apiHigh -gt 0)) {
+                if ($agentIdentity.Enabled -eq $true -and $isInternalOrMs -and ($apiDangerous -gt 0 -or $apiHigh -gt 0)) {
                     $internalAgentIdentitiesWithExtensiveApi.Add($agentIdentity)
                 }
 
                 $apiDelegatedDangerous = Get-IntSafe $agentIdentity.ApiDelegatedDangerous
                 $apiDelegatedHigh = Get-IntSafe $agentIdentity.ApiDelegatedHigh
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
+                if ($agentIdentity.Enabled -eq $true -and $isForeignNonMs -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
                     $foreignAgentIdentitiesWithDelegatedExtensiveApi.Add($agentIdentity)
                 }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
+                if ($agentIdentity.Enabled -eq $true -and $isInternalOrMs -and ($apiDelegatedDangerous -gt 0 -or $apiDelegatedHigh -gt 0)) {
                     $internalAgentIdentitiesWithDelegatedExtensiveApi.Add($agentIdentity)
                 }
 
@@ -4029,18 +4042,18 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 if ($agentIdentity.Enabled -eq $true) {
                     $effectiveEntraRoleEntries = @(Get-AgentIdentityEffectiveRoleEntries -AgentIdentity $agentIdentity -RoleSystem Entra)
                 }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $effectiveEntraRoleEntries.Count -gt 0) {
+                if ($agentIdentity.Enabled -eq $true -and $isForeignNonMs -and $effectiveEntraRoleEntries.Count -gt 0) {
                     $foreignAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+                if ($agentIdentity.Enabled -eq $true -and $isInternalOrMs -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
                     $internalAgentIdentitiesWithPrivilegedEntraRoles.Add($agentIdentity)
                 }
 
                 $azureExposure = Get-AzurePrincipalExposure -PrincipalId ([string]$entry.Key) -Principal $agentIdentity
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $true -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
+                if ($agentIdentity.Enabled -eq $true -and $isForeignNonMs -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
                     $foreignAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
-                if ($agentIdentity.Enabled -eq $true -and $agentIdentity.Foreign -eq $false -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
+                if ($agentIdentity.Enabled -eq $true -and $isInternalOrMs -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                     $internalAgentIdentitiesWithPrivilegedAzureRoles.Add($agentIdentity)
                 }
             }
@@ -4082,6 +4095,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $isProtected = -not ($user.Protected -eq $false -or "$($user.Protected)".Trim().ToLowerInvariant() -eq "false")
             $isAgent = $user.Agent -eq $true
             $isForeignAgent = $user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true"
+            # Agent users of Microsoft-owned blueprints are assessed with the internal thresholds, not as foreign agent users.
+            $isMsOwnedAgent = $user.MSOwnedAgent -eq $true -or "$($user.MSOwnedAgent)".Trim().ToLowerInvariant() -eq "true"
+            $isForeignNonMsAgent = $isForeignAgent -and -not $isMsOwnedAgent
             $mfaCapabilityState = Get-EntraFalconMfaCapabilityState -Value $user.MfaCap
             $hasMfaCap = $mfaCapabilityState -eq "Capable"
             $isUnknownMfaCap = $mfaCapabilityState -eq "Unknown"
@@ -4142,25 +4158,25 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     })
                 }
             }
-            if ($isEnabled -and $isAgent -and $isForeignAgent -and (Get-IntSafe $user.EntraRoles) -gt 0) {
+            if ($isEnabled -and $isAgent -and $isForeignNonMsAgent -and (Get-IntSafe $user.EntraRoles) -gt 0) {
                 $foreignAgentUsersWithPrivilegedEntraRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
+            if ($isEnabled -and $isAgent -and -not $isForeignNonMsAgent -and ($entraMaxTier -eq "Tier-0" -or $entraMaxTier -eq "Tier-1")) {
                 $internalAgentUsersWithPrivilegedEntraRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and $isForeignAgent -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
+            if ($isEnabled -and $isAgent -and $isForeignNonMsAgent -and $azureExposure.Impact -ge $AzureForeignExposureThreshold) {
                 $foreignAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
                 })
             }
-            if ($isEnabled -and $isAgent -and -not $isForeignAgent -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
+            if ($isEnabled -and $isAgent -and -not $isForeignNonMsAgent -and $azureExposure.Impact -ge $AzureHighExposureThreshold) {
                 $internalAgentUsersWithPrivilegedAzureRoles.Add([pscustomobject]@{
                     Id = $entry.Key
                     User = $user
@@ -7356,7 +7372,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-002] Found $($foreignAgentIdentitiesWithExtensiveApi.Count) enabled foreign agent identities with extensive application API privileges."
         Set-FindingOverride -FindingId "AGT-002" -Props $AGT002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-002" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&or_ApiMedium=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7461,7 +7477,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $agt002AssumedInheritanceNote = "<p><strong>Note:</strong> $agt002AssumedInheritedPermissionCount displayed permissions across $agt002AssumedInheritedIdentityCount agent identities are marked as assumed inherited. This happens when the parent blueprint principal is foreign and the parent blueprint inheritance configuration cannot be read from this tenant.</p>"
         }
         Set-FindingOverride -FindingId "AGT-002" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithExtensiveApi.Count) enabled foreign agent identities have extensive API privileges assigned as application permissions.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt002DangerousCount</li><li>High: $agt002HighCount</li><li>Medium: $agt002MediumCount</li></ul>$agt002AssumedInheritanceNote"
+            Description = "<p>$($foreignAgentIdentitiesWithExtensiveApi.Count) enabled foreign, non-Microsoft agent identities have extensive API privileges assigned as application permissions.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt002DangerousCount</li><li>High: $agt002HighCount</li><li>Medium: $agt002MediumCount</li></ul>$agt002AssumedInheritanceNote"
             AffectedObjects = $agt002Affected
         }
         if ($agt002DangerousCount -gt 0) {
@@ -7484,7 +7500,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-003] Found $($foreignAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled foreign agent identities with extensive delegated API privileges."
         Set-FindingOverride -FindingId "AGT-003" -Props $AGT003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-003" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7600,7 +7616,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $agt003AssumedInheritanceNote = "<p><strong>Note:</strong> $agt003AssumedInheritedPermissionCount displayed permissions across $agt003AssumedInheritedIdentityCount agent identities are marked as assumed inherited. This happens when the parent blueprint principal is foreign and the parent blueprint inheritance configuration cannot be read from this tenant.</p>"
         }
         Set-FindingOverride -FindingId "AGT-003" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled foreign agent identities have extensive delegated API privileges.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt003DangerousCount</li><li>High: $agt003HighCount</li></ul>$agt003AssumedInheritanceNote"
+            Description = "<p>$($foreignAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled foreign, non-Microsoft agent identities have extensive delegated API privileges.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt003DangerousCount</li><li>High: $agt003HighCount</li></ul>$agt003AssumedInheritanceNote"
             AffectedObjects = $agt003Affected
         }
         if ($agt003DangerousCount -gt 0) {
@@ -7623,7 +7639,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7710,7 +7726,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities have Entra ID roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt004Tier0</li><li>Tier 1: $agt004Tier1</li><li>Tier 2: $agt004Tier2</li><li>Uncategorized tier: $agt004TierUncat</li></ul>"
+            Description = "<p>$($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign, non-Microsoft agent identities have Entra ID roles assigned.</p><p>Agent identities by role tier:</p><ul><li>Tier 0: $agt004Tier0</li><li>Tier 1: $agt004Tier1</li><li>Tier 2: $agt004Tier2</li><li>Uncategorized tier: $agt004TierUncat</li></ul>"
             AffectedObjects = $agt004Affected
         }
         if ($agt004Tier0 -gt 0) {
@@ -7733,7 +7749,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-005" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -7841,7 +7857,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
-        $agt005Subject = if ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign agent identity has' } else { 'enabled foreign agent identities have' }
+        $agt005Subject = if ($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign, non-Microsoft agent identity has' } else { 'enabled foreign, non-Microsoft agent identities have' }
         Set-FindingOverride -FindingId "AGT-005" -Props @{
             Description = "<p>$($foreignAgentIdentitiesWithPrivilegedAzureRoles.Count) $agt005Subject Azure access with medium or higher impact.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent identities' -Critical $agt005Critical -High $agt005High -Medium $agt005Medium)"
             AffectedObjects = $agt005Affected
@@ -7865,7 +7881,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-006] Found $($internalAgentIdentitiesWithExtensiveApi.Count) enabled internal agent identities with extensive application API privileges."
         Set-FindingOverride -FindingId "AGT-006" -Props $AGT006VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-006" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&or_ApiDangerous=%3E0&or_ApiHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDangerous%2CApiHigh%2CApiMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7965,7 +7981,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $agt006AssumedInheritanceNote = "<p><strong>Note:</strong> $agt006AssumedInheritedPermissionCount displayed permissions across $agt006AssumedInheritedIdentityCount agent identities are marked as assumed inherited. This happens when the parent blueprint inheritance configuration cannot be fully read from this tenant.</p>"
         }
         Set-FindingOverride -FindingId "AGT-006" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithExtensiveApi.Count) enabled internal agent identities have extensive API privileges assigned as application permissions.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt006DangerousCount</li><li>High: $agt006HighCount</li></ul>$agt006AssumedInheritanceNote"
+            Description = "<p>$($internalAgentIdentitiesWithExtensiveApi.Count) enabled internal or Microsoft-owned agent identities$(Get-MsOwnedAgentNote -Values @($internalAgentIdentitiesWithExtensiveApi.MSOwned)) have extensive API privileges assigned as application permissions.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt006DangerousCount</li><li>High: $agt006HighCount</li></ul>$agt006AssumedInheritanceNote"
             AffectedObjects = $agt006Affected
         }
         if ($agt006DangerousCount -gt 0) {
@@ -7987,7 +8003,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-007] Found $($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal agent identities with extensive delegated API privileges."
         Set-FindingOverride -FindingId "AGT-007" -Props $AGT007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-007" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&or_ApiDelegatedDangerous=%3E0&or_ApiDelegatedHigh=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CInactive%2CLastSignInDays%2CCreationInDays%2CAgentUsers%2COwners%2CSponsors%2CApiDelegatedDangerous%2CApiDelegatedHigh%2CApiDelegatedMedium%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8100,7 +8116,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $agt007AssumedInheritanceNote = "<p><strong>Note:</strong> $agt007AssumedInheritedPermissionCount displayed permissions across $agt007AssumedInheritedIdentityCount agent identities are marked as assumed inherited. This happens when the parent blueprint inheritance configuration cannot be fully read from this tenant.</p>"
         }
         Set-FindingOverride -FindingId "AGT-007" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal agent identities have extensive delegated API privileges.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt007DangerousCount</li><li>High: $agt007HighCount</li></ul>$agt007AssumedInheritanceNote"
+            Description = "<p>$($internalAgentIdentitiesWithDelegatedExtensiveApi.Count) enabled internal or Microsoft-owned agent identities$(Get-MsOwnedAgentNote -Values @($internalAgentIdentitiesWithDelegatedExtensiveApi.MSOwned)) have extensive delegated API privileges.</p><p>Agent identities with the following privilege levels:</p><ul><li>Dangerous: $agt007DangerousCount</li><li>High: $agt007HighCount</li></ul>$agt007AssumedInheritanceNote"
             AffectedObjects = $agt007Affected
         }
         if ($agt007DangerousCount -gt 0) {
@@ -8122,7 +8138,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-008] Found $($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-008" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8240,7 +8256,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "AGT-008" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities have privileged Entra ID roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt008Tier0</li><li>Tier 1: $agt008Tier1</li></ul>"
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal or Microsoft-owned agent identities$(Get-MsOwnedAgentNote -Values @($internalAgentIdentitiesWithPrivilegedEntraRoles.MSOwned)) have privileged Entra ID roles (tier-0 or tier-1) assigned.</p><p>Identities by role tier:</p><ul><li>Tier 0: $agt008Tier0</li><li>Tier 1: $agt008Tier1</li></ul>"
             AffectedObjects = $agt008Affected
         }
         if ($agt008Tier0 -gt 0) {
@@ -8263,7 +8279,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-009" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8411,9 +8427,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
 
-        $agt009Subject = if ($internalAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal agent identity has' } else { 'enabled internal agent identities have' }
+        $agt009Subject = if ($internalAgentIdentitiesWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal or Microsoft-owned agent identity has' } else { 'enabled internal or Microsoft-owned agent identities have' }
         Set-FindingOverride -FindingId "AGT-009" -Props @{
-            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) $agt009Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent identities' -Critical $agt009Critical -High $agt009High)"
+            Description = "<p>$($internalAgentIdentitiesWithPrivilegedAzureRoles.Count) $agt009Subject high-impact Azure access$(Get-MsOwnedAgentNote -Values @($internalAgentIdentitiesWithPrivilegedAzureRoles.MSOwned)).</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent identities' -Critical $agt009Critical -High $agt009High)"
             AffectedObjects = $agt009Affected
         }
         if ($agt009Critical -gt 0) {
@@ -8476,7 +8492,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-011] Found $($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-011" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8523,7 +8539,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-011" -Props @{
-            Description = "<p>$($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users have Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt011Tier0</li><li>Tier 1: $agt011Tier1</li><li>Tier 2: $agt011Tier2</li><li>Uncategorized tier: $agt011TierUncat</li></ul>"
+            Description = "<p>$($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign, non-Microsoft agent users have Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt011Tier0</li><li>Tier 1: $agt011Tier1</li><li>Tier 2: $agt011Tier2</li><li>Uncategorized tier: $agt011TierUncat</li></ul>"
             AffectedObjects = $agt011Affected
         }
         if ($agt011Tier0 -gt 0) {
@@ -8545,7 +8561,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with impactful Azure access."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8602,7 +8618,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
-        $agt012Subject = if ($foreignAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign agent user has' } else { 'enabled foreign agent users have' }
+        $agt012Subject = if ($foreignAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled foreign, non-Microsoft agent user has' } else { 'enabled foreign, non-Microsoft agent users have' }
         Set-FindingOverride -FindingId "AGT-012" -Props @{
             Description = "<p>$($foreignAgentUsersWithPrivilegedAzureRoles.Count) $agt012Subject Azure access with medium or higher impact.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent users' -Critical $agt012Critical -High $agt012High -Medium $agt012Medium)"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt012Affected))
@@ -8627,7 +8643,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-013] Found $($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-013" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8670,7 +8686,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             })
         }
         Set-FindingOverride -FindingId "AGT-013" -Props @{
-            Description = "<p>$($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users have privileged Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt013Tier0</li><li>Tier 1: $agt013Tier1</li></ul>"
+            Description = "<p>$($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal or Microsoft-owned agent users$(Get-MsOwnedAgentNote -Values @($internalAgentUsersWithPrivilegedEntraRoles.User.MSOwnedAgent)) have privileged Entra ID roles assigned.</p><p>Agent users by highest role tier:</p><ul><li>Tier 0: $agt013Tier0</li><li>Tier 1: $agt013Tier1</li></ul>"
             AffectedObjects = $agt013Affected
         }
         if ($agt013Tier0 -gt 0) {
@@ -8692,7 +8708,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with high-impact Azure access."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8742,9 +8758,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
-        $agt014Subject = if ($internalAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal agent user has' } else { 'enabled internal agent users have' }
+        $agt014Subject = if ($internalAgentUsersWithPrivilegedAzureRoles.Count -eq 1) { 'enabled internal or Microsoft-owned agent user has' } else { 'enabled internal or Microsoft-owned agent users have' }
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) $agt014Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent users' -Critical $agt014Critical -High $agt014High)"
+            Description = "<p>$($internalAgentUsersWithPrivilegedAzureRoles.Count) $agt014Subject high-impact Azure access$(Get-MsOwnedAgentNote -Values @($internalAgentUsersWithPrivilegedAzureRoles.User.MSOwnedAgent)).</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Agent users' -Critical $agt014Critical -High $agt014High)"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($agt014Affected))
         }
         if ($agt014Critical -gt 0) {
@@ -8767,7 +8783,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-015] Found $($agentUsersOwningCapRelatedGroups.Count) enabled agent users owning CAP-related groups."
         Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-015" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8781,7 +8797,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $ownedCapGroups = @($entry.OwnedCapRelatedGroups)
             $agt015OwnedGroups += $ownedCapGroups.Count
             $agt015CapReferences += (Get-IntSafe $entry.OwnedCapReferences)
-            if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") {
+            if (($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") -and -not ($user.MSOwnedAgent -eq $true -or "$($user.MSOwnedAgent)".Trim().ToLowerInvariant() -eq "true")) {
                 $agt015Foreign += 1
             } else {
                 $agt015Internal += 1
@@ -8819,14 +8835,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
-                "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
+                "Foreign Agent" = if (($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") -and -not ($user.MSOwnedAgent -eq $true -or "$($user.MSOwnedAgent)".Trim().ToLowerInvariant() -eq "true")) { "true" } else { "false" }
                 "CAP Groups Owned" = $ownedCapGroups.Count
                 "Owned CAP-Related Groups" = ($ownedGroupDisplay -join "<br>")
                 "_SortRisk" = $user.Risk
             })
         }
         Set-FindingOverride -FindingId "AGT-015" -Props @{
-            Description = "<p>$($agentUsersOwningCapRelatedGroups.Count) enabled agent users own $agt015OwnedGroups groups that are referenced by Conditional Access policies.</p><p>Affected agent users by parent type:</p><ul><li>Foreign agent users: $agt015Foreign</li><li>Internal agent users: $agt015Internal</li></ul><p>Total Conditional Access references across owned groups: $agt015CapReferences</p>"
+            Description = "<p>$($agentUsersOwningCapRelatedGroups.Count) enabled agent users own $agt015OwnedGroups groups that are referenced by Conditional Access policies.</p><p>Affected agent users by parent type:</p><ul><li>Foreign, non-Microsoft agent users: $agt015Foreign</li><li>Internal or Microsoft-owned agent users: $agt015Internal</li></ul><p>Total Conditional Access references across owned groups: $agt015CapReferences</p>"
             AffectedObjects = $agt015Affected
         }
     } else {
@@ -8845,7 +8861,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-016] Found $($inactiveEnabledAgentUsers.Count) enabled inactive agent users."
         Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-016" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
             AffectedSortKey = "_SortLastSignInDays"
             AffectedSortDir = "DESC"
         }
@@ -8854,7 +8870,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $agt016Affected = [System.Collections.Generic.List[object]]::new()
         foreach ($entry in $inactiveEnabledAgentUsers) {
             $user = $entry.User
-            if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") {
+            if (($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") -and -not ($user.MSOwnedAgent -eq $true -or "$($user.MSOwnedAgent)".Trim().ToLowerInvariant() -eq "true")) {
                 $agt016Foreign += 1
             } else {
                 $agt016Internal += 1
@@ -8887,14 +8903,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
-                "Foreign Agent" = if ($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") { "true" } else { "false" }
+                "Foreign Agent" = if (($user.ForeignAgent -eq $true -or "$($user.ForeignAgent)".Trim().ToLowerInvariant() -eq "true") -and -not ($user.MSOwnedAgent -eq $true -or "$($user.MSOwnedAgent)".Trim().ToLowerInvariant() -eq "true")) { "true" } else { "false" }
                 "Inactive" = $user.Inactive
                 "Last sign-in (days)" = $user.LastSignInDays
                 "_SortLastSignInDays" = $sortLastSignInDays
             })
         }
         Set-FindingOverride -FindingId "AGT-016" -Props @{
-            Description = "<p>There are $($inactiveEnabledAgentUsers.Count) inactive enabled agent users.</p><ul><li>Foreign agent users: $agt016Foreign</li><li>Internal agent users: $agt016Internal</li></ul><p><strong>Note:</strong> Users are considered inactive if they have no successful sign-in for 180 days or if they never signed in and were created more than 180 days ago.</p>"
+            Description = "<p>There are $($inactiveEnabledAgentUsers.Count) inactive enabled agent users.</p><ul><li>Foreign, non-Microsoft agent users: $agt016Foreign</li><li>Internal or Microsoft-owned agent users: $agt016Internal</li></ul><p><strong>Note:</strong> Users are considered inactive if they have no successful sign-in for 180 days or if they never signed in and were created more than 180 days ago.</p>"
             AffectedObjects = $agt016Affected
         }
     } else {
