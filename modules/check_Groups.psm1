@@ -2584,6 +2584,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
+                $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $intuneRoles = if ($null -ne $groupDetails -and $groupDetails.PSObject.Properties["IntuneRoles"] -and $null -ne $groupDetails.IntuneRoles) { $groupDetails.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                 $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
 
@@ -2595,6 +2596,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     "IsAssignableToRole" = $roleAssignable
                     "EntraMaxTier" = $entraMaxTier
                     "AzureMaxTier" = $azureMaxTier
+                    "AzureMaxImpact" = $azureMaxImpact
                     "IntuneRoles" = $intuneRoles
                 }
                 [void]$OwnerGroupsRaw.Add($groupObj)
@@ -2603,8 +2605,8 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             # Build TXT
             $formattedText = Format-ReportSection -Title "Eligible Owners (Groups)" `
             -Objects $OwnerGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraMaxTier", "AzureMaxTier", "IntuneRoles") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraMaxTier = 11; AzureMaxTier = 11; IntuneRoles = 12 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "IntuneRoles") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraMaxTier = 11; AzureMaxTier = 11; AzureMaxImpact = 14; IntuneRoles = 12 }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
 
             #Rebuild for HTML report
@@ -2616,6 +2618,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     IsAssignableToRole  = $obj.IsAssignableToRole
                     EntraMaxTier        = $obj.EntraMaxTier
                     AzureMaxTier        = $obj.AzureMaxTier
+                    AzureMaxImpact      = $obj.AzureMaxImpact
                     IntuneRoles         = $obj.IntuneRoles
                 })
             }
@@ -3013,6 +3016,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
+                $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                 $apTarget = if ($null -ne $groupDetails -and $groupDetails.PSObject.Properties["AccessPackages"] -and $null -ne $groupDetails.AccessPackages) { $groupDetails.AccessPackages } else { 0 }
         
@@ -3026,6 +3030,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     EntraMaxTier       = $entraMaxTier
                     AzureRoles         = $object.AzureRoles
                     AzureMaxTier       = $azureMaxTier
+                    AzureMaxImpact     = $azureMaxImpact
                     IntuneRoles        = $intuneRoles
                     CAPs               = $object.CAPs
                     APTarget           = $apTarget
@@ -3037,8 +3042,8 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             # Build TXT
             $formattedText = Format-ReportSection -Title "Member Of: Nested in Groups (Transitive)" `
             -Objects $NestedInGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "IntuneRoles", "CAPs", "APTarget") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; IntuneRoles = 12; CAPs = 4; APTarget = 8 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "IntuneRoles", "CAPs", "APTarget") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; AzureMaxImpact = 14; IntuneRoles = 12; CAPs = 4; APTarget = 8 }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
         
             # Sort only for HTML
@@ -3064,6 +3069,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     EntraMaxTier       = $obj.EntraMaxTier
                     AzureRoles         = $obj.AzureRoles
                     AzureMaxTier       = $obj.AzureMaxTier
+                    AzureMaxImpact     = $obj.AzureMaxImpact
                     IntuneRoles        = $obj.IntuneRoles
                     CAPs               = $obj.CAPs
                     APTarget           = $obj.APTarget
@@ -3080,6 +3086,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     EntraMaxTier       = "-"
                     AzureRoles         = "-"
                     AzureMaxTier       = $(if ($GLOBALAzurePsChecks) { "-" } else { "?" })
+                    AzureMaxImpact     = $(if ($GLOBALAzurePsChecks) { "-" } else { "?" })
                     IntuneRoles        = $(if ($GLOBALIntuneRbacAvailable) { "-" } else { "?" })
                     CAPs               = "-"
                     APTarget           = "-"
@@ -3098,6 +3105,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $groupDetails = $GroupLookup[$object.id]
                 $entraMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
+                $azureMaxImpact = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
 
                 $GroupName = $object.displayName
@@ -3115,6 +3123,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     EntraMaxTier        = $entraMaxTier
                     AzureRoles          = $object.AzureRoles
                     AzureMaxTier        = $azureMaxTier
+                    AzureMaxImpact      = $azureMaxImpact
                     IntuneRoles         = $intuneRoles
                     CAPs                = $object.CAPs
                 })
@@ -3122,8 +3131,8 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
         
             $formattedText = Format-ReportSection -Title "Owned Groups (PIM for Groups)" `
             -Objects $OwnedGroupsRaw `
-            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "IntuneRoles", "CAPs") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; IntuneRoles = 12; CAPs = 4 }
+            -Properties @("AssignmentType", "Displayname", "SecurityEnabled", "IsAssignableToRole", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "IntuneRoles", "CAPs") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($GroupNameLength, 60); SecurityEnabled = 16; IsAssignableToRole = 19; EntraRoles = 11; EntraMaxTier = 11; AzureRoles = 11; AzureMaxTier = 11; AzureMaxImpact = 14; IntuneRoles = 12; CAPs = 4 }
         
             [void]$DetailTxtBuilder.AppendLine($formattedText)
             
@@ -3139,6 +3148,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     EntraMaxTier        = $obj.EntraMaxTier
                     AzureRoles          = $obj.AzureRoles
                     AzureMaxTier        = $obj.AzureMaxTier
+                    AzureMaxImpact      = $obj.AzureMaxImpact
                     IntuneRoles         = $obj.IntuneRoles
                     CAPs                = $obj.CAPs
                 })

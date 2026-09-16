@@ -118,13 +118,13 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVU-001",
                     group: "Privileges",
-                    description: "Users with Tier-0 roles in Entra ID or Azure",
+                    description: "Users with Tier-0 Entra roles or critical Azure impact",
                     label: "Tier-0 Users",
                     filters: {
                         EntraMaxTier: "or_Tier-0",
-                        AzureMaxTier: "or_Tier-0",
+                        AzureMaxImpact: "or_>=200",
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVU-002",
@@ -146,7 +146,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles||AzureRoles"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVU-004",
@@ -173,17 +173,28 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVU-014",
                     group: "Privileges",
-                    description: "Licensed Tier-0 users without admin-naming convention",
+                    description: "Licensed users with Tier-0 Entra roles or critical Azure impact, without admin-naming convention",
                     label: "Users Tier-0 None-Admin",
                     filters: {
                         EntraMaxTier: "or_Tier-0",
-                        AzureMaxTier: "or_Tier-0",
+                        AzureMaxImpact: "or_>=200",
                         Enabled: "=true",
                         Agent: "=false",
                         LicenseStatus: "=Licensed",
                         UPN: "!adm_ && !_adm && !adm- && !-adm && !svc_ && !svc. && !admin && !srv- && !SYNC && !emergency && !breakglass"
                     },
-                    columns: ["UPN", "Enabled", "LicenseStatus", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "LicenseStatus", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVU-016",
+                    group: "Privileges",
+                    description: "Users with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: {
+                        AzureMaxImpact: ">=80"
+                    },
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 },
                 {
                     id: "PVU-006",
@@ -198,7 +209,7 @@ $global:GLOBALJavaScript_Table = @'
                         SPOwn: "or_>0",
                         Agent: "=false"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVU-007",
@@ -293,10 +304,10 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVG-001",
                     group: "Privileges",
-                    description: "Groups with Tier-0 roles in Entra or Azure",
+                    description: "Groups with Tier-0 Entra roles or critical Azure impact",
                     label: "Tier-0 Groups",
-                    filters: { EntraMaxTier: "or_Tier-0", AzureMaxTier: "or_Tier-0", },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                    filters: { EntraMaxTier: "or_Tier-0", AzureMaxImpact: "or_>=200", },
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVG-002",
@@ -305,6 +316,15 @@ $global:GLOBALJavaScript_Table = @'
                     label: "Tier-0 Groups (Entra Only)",
                     filters: { EntraMaxTier: "Tier-0"},
                     columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVG-012",
+                    group: "Privileges",
+                    description: "Groups with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: { AzureMaxImpact: ">=80" },
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "Users", "NestedGroups", "NestedInGroups", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 },
                 {
                     id: "PVG-003",
@@ -329,7 +349,7 @@ $global:GLOBALJavaScript_Table = @'
                         CAPs: "or_>0",
                         Warnings: "or_Eligible"
                     },
-                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "Type", "Dynamic", "Protected", "SecurityEnabled", "Visibility", "Users", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Impact", direction: "desc" }
                 },
                 {
@@ -352,7 +372,7 @@ $global:GLOBALJavaScript_Table = @'
                         Protected: "=true",
                         Warnings: "contains unprotected groups"
                     },
-                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Type", "Protected", "SecurityEnabled", "PIM", "AuUnits", "Users", "NestedGroups", "NestedInGroups", "AppRoles", "CAPs", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVG-007",
@@ -419,7 +439,7 @@ $global:GLOBALJavaScript_Table = @'
                         AzureRoles: "or_>0",
                         Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVE-002",
@@ -457,7 +477,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     id: "PVE-005",
@@ -474,10 +494,21 @@ $global:GLOBALJavaScript_Table = @'
                         BlueprintOwn: "or_>0",
                         SpOwn: "or_>0",
                         EntraMaxTier: "or_Tier-0||Tier-1",
-                        AzureMaxTier: "or_Tier-0||Tier-1",
+                        AzureMaxImpact: "or_>=80",
                         Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
+                },
+                {
+                    id: "PVE-010",
+                    group: "Privileges",
+                    description: "Apps with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: {
+                        AzureMaxImpact: ">=80"
+                    },
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "Owners", "Credentials", "GrpMem", "GrpOwn", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 },
                 {
                     id: "PVE-006",
@@ -537,10 +568,10 @@ $global:GLOBALJavaScript_Table = @'
                         BlueprintOwn: "or_>0",
                         SpOwn: "or_>0",
                         EntraMaxTier: "or_Tier-0||Tier-1",
-                        AzureMaxTier: "or_Tier-0||Tier-1",
+                        AzureMaxImpact: "or_>=80",
                         Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership", "AppOwnership", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership", "AppOwnership", "BlueprintOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -565,22 +596,33 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
-                    columns: ["DisplayName", "IsExplicit", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "IsExplicit", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVM-004",
+                    group: "Privileges",
+                    description: "Managed identities with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: {
+                        AzureMaxImpact: ">=80"
+                    },
+                    columns: ["DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 }
             ],
             "Access Packages": [
                 {
                     id: "PVAP-001",
                     group: "Privileges",
-                    description: "Access package policies granting Tier-0 or Tier-1 resources",
+                    description: "Access package policies granting Tier-0/1 Entra resources or high Azure impact",
                     label: "Tier-0/1 Policies",
                     filters: {
                         Policy: "!=No policy configured",
                         EntraMaxTier: "or_Tier-0||Tier-1",
-                        AzureMaxTier: "or_Tier-0||Tier-1"
+                        AzureMaxImpact: "or_>=80"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AllowedTargetScope", "SelfAdd", "OnBehalfAdd", "Approval", "Expiration", "AccessReview", "Impact", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "AllowedTargetScope", "SelfAdd", "OnBehalfAdd", "Approval", "Expiration", "AccessReview", "Impact", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -597,7 +639,7 @@ $global:GLOBALJavaScript_Table = @'
                         Approval: "=false",
                         Impact: ">99"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AllowedTargetScope", "BroadScope", "SelfAdd", "Approval", "Expiration", "AccessReview", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "AllowedTargetScope", "BroadScope", "SelfAdd", "Approval", "Expiration", "AccessReview", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -611,7 +653,7 @@ $global:GLOBALJavaScript_Table = @'
                         Warnings: "Dangerous auto-assignment rule",
                         Impact: ">99"
                     },
-                    columns: ["Policy", "Package", "AutoAssignment", "Resources", "EntraMaxTier", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "AutoAssignment", "Resources", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -623,7 +665,7 @@ $global:GLOBALJavaScript_Table = @'
                         Policy: "!=No policy configured",
                         AutoAssignment: "=true"
                     },
-                    columns: ["Policy", "Package", "Catalog", "PolicyEnabled", "CatalogEnabled", "AutoAssignment", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ActiveAssignments", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "PolicyEnabled", "CatalogEnabled", "AutoAssignment", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ActiveAssignments", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -640,7 +682,7 @@ $global:GLOBALJavaScript_Table = @'
                         AllowedTargetScope: "All Service Principals||All Agent Identities",
                         Impact: ">99"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AllowedTargetScope", "OnBehalfAdd", "Approval", "Expiration", "AccessReview", "ActiveAssignments", "ServicePrincipals", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "AllowedTargetScope", "OnBehalfAdd", "Approval", "Expiration", "AccessReview", "ActiveAssignments", "ServicePrincipals", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -652,7 +694,7 @@ $global:GLOBALJavaScript_Table = @'
                         Policy: "!=No policy configured",
                         ServicePrincipals: ">0"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ActiveAssignments", "ExpiredAssignments", "ServicePrincipals", "Impact", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ActiveAssignments", "ExpiredAssignments", "ServicePrincipals", "Impact", "Risk", "Warnings"],
                     sort: { column: "ServicePrincipals", direction: "desc" }
                 },
                 {
@@ -692,7 +734,7 @@ $global:GLOBALJavaScript_Table = @'
                         AccessReview: "=false",
                         Impact: ">99"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ActiveAssignments", "Expiration", "ExpirationDetails", "AccessReview", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ActiveAssignments", "Expiration", "ExpirationDetails", "AccessReview", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -704,7 +746,7 @@ $global:GLOBALJavaScript_Table = @'
                         Policy: "!=No policy configured",
                         Hidden: "=true"
                     },
-                    columns: ["Policy", "Package", "Catalog", "Hidden", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ActiveAssignments", "Impact", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "Catalog", "Hidden", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ActiveAssignments", "Impact", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -718,7 +760,7 @@ $global:GLOBALJavaScript_Table = @'
                         CatalogEnabled: "=true",
                         Warnings: "Unprotected group can self-request without approval"
                     },
-                    columns: ["Policy", "Package", "AllowedTargetScope", "SelfAdd", "Approval", "SpecificTargets", "Groups", "EntraMaxTier", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "AllowedTargetScope", "SelfAdd", "Approval", "SpecificTargets", "Groups", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -730,7 +772,7 @@ $global:GLOBALJavaScript_Table = @'
                         Policy: "!=No policy configured",
                         SpecificTargets: ">0"
                     },
-                    columns: ["Policy", "Package", "AllowedTargetScope", "SpecificTargets", "SelfAdd", "Approval", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraMaxTier", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["Policy", "Package", "AllowedTargetScope", "SpecificTargets", "SelfAdd", "Approval", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -765,7 +807,7 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         Policy: "=No policy configured"
                     },
-                    columns: ["Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Risk", "Warnings"],
+                    columns: ["Package", "Catalog", "Resources", "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 }
             ],
@@ -1250,29 +1292,40 @@ $global:GLOBALJavaScript_Table = @'
                     filters: {
                         EntraMaxTier: "=Tier-0"
                     },
-                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
+                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
                 },
                 {
                     id: "PVPG-002",
                     group: "Tier",
-                    description: "PIM-enabled groups with Tier-0 impact through Entra ID or Azure",
+                    description: "PIM-enabled groups with Tier-0 Entra impact or critical Azure impact",
                     label: "Tier-0 Groups",
                     filters: {
                         EntraMaxTier: "or_Tier-0",
-                        AzureMaxTier: "or_Tier-0"
+                        AzureMaxImpact: "or_>=200"
                     },
-                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
+                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
                 },
                 {
                     id: "PVPG-003",
                     group: "Tier",
-                    description: "PIM-enabled groups with Tier-0 or Tier-1 impact through Entra ID or Azure",
+                    description: "PIM-enabled groups with Tier-0/1 Entra impact or high Azure impact",
                     label: "Tier-0/1 Groups",
                     filters: {
                         EntraMaxTier: "or_Tier-0 || Tier-1",
-                        AzureMaxTier: "or_Tier-0 || Tier-1"
+                        AzureMaxImpact: "or_>=80"
                     },
-                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
+                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"]
+                },
+                {
+                    id: "PVPG-009",
+                    group: "Tier",
+                    description: "PIM-enabled groups with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: {
+                        AzureMaxImpact: ">=80"
+                    },
+                    columns: ["Group", "Role", "AzureMaxTier", "AzureMaxImpact", "Eligible", "Active", "ActivationAuthContext", "ActivationMFA", "ActivationApproval", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 },
                 {
                     id: "PVPG-004",
@@ -1309,15 +1362,15 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVPG-007",
                     group: "Security",
-                    description: "Tier-0/1 group roles missing AuthContext or approval",
+                    description: "Group roles with Tier-0/1 Entra impact or high Azure impact missing AuthContext or approval",
                     label: "High Tier Missing Controls",
                     filters: {
                         EntraMaxTier: "or_Tier-0 || Tier-1",
-                        AzureMaxTier: "or_Tier-0 || Tier-1",
+                        AzureMaxImpact: "or_>=80",
                         ActivationAuthContext: "false",
                         ActivationApproval: "false"
                     },
-                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "Eligible", "Active", "ActivationAuthContext", "ActivationApproval", "Warnings"]
+                    columns: ["Group", "Role", "EntraMaxTier", "AzureMaxTier", "AzureMaxImpact", "Eligible", "Active", "ActivationAuthContext", "ActivationApproval", "Warnings"]
                 },
                 {
                     id: "PVPG-008",
@@ -1348,7 +1401,7 @@ $global:GLOBALJavaScript_Table = @'
                         SpOwn: "or_>0",
                         GrpOwn: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
                 },
                 {
@@ -1384,8 +1437,19 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "Risk", direction: "desc" }
+                },
+                {
+                    id: "PVAI-009",
+                    group: "Privileges",
+                    description: "Agent identities with High (80+) or Critical (200+) Azure impact",
+                    label: "High Azure Impact",
+                    filters: {
+                        AzureMaxImpact: ">=80"
+                    },
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "Owners", "Sponsors", "GrpMem", "GrpOwn", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "Impact", "Likelihood", "Risk", "Warnings"],
+                    sort: { column: "AzureMaxImpact", direction: "desc" }
                 },
                 {
                     id: "PVAI-005",
@@ -1602,13 +1666,14 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "MSOwnedAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles", "AzureMaxImpact"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "MSOwned", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays", "ParentBlueprintDisplayName", "ForeignAgent", "MSOwnedAgent", "EnabledInTenant", "ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc", "IncUsersViaGroups", "ExcUsersViaGroups", "PerUserMfa", "ExcUsersViaRoles", "IncUsersViaRoles"];
 
         // Hide low-information columns by default when every row contains the same value. The column remains available in the Columns menu.
         const conditionalDefaultHiddenRules = [
             { reports: ["Users", "Groups"], column: "IntuneRoles", uniformValues: [0, "?"] },
             { reports: ["Users", "Groups", "EA", "MI", "AgentIdentities"], column: "AzureRoles", uniformValues: ["?"] },
             { reports: ["Users", "Groups", "EA", "MI", "AgentIdentities"], column: "AzureMaxTier", uniformValues: ["?"] },
+            { reports: ["Users", "Groups", "EA", "MI", "AgentIdentities"], column: "AzureMaxImpact", uniformValues: ["?"] },
             { reports: ["Users", "Groups"], column: "AuUnits", uniformValues: [0] },
             { reports: ["Users"], column: "Agent", uniformValues: [false] },
             { reports: ["Groups"], column: "PIM", uniformValues: [false] },
@@ -1622,6 +1687,7 @@ $global:GLOBALJavaScript_Table = @'
             { reports: ["AccessPackages"], column: "AutoAssignment", uniformValues: [false] },
             { reports: ["AccessPackages"], column: "AzureRoles", uniformValues: [0] },
             { reports: ["AccessPackages"], column: "AzureMaxTier", uniformValues: ["-", "?"] },
+            { reports: ["AccessPackages"], column: "AzureMaxImpact", uniformValues: [0, "?"] },
             { reports: ["AccessPackages"], column: "Hidden", uniformValues: [false] },
             { reports: ["AccessPackages"], column: "SeparationOfDuties", uniformValues: [false] },
             { reports: ["Catalogs"], column: "AzureResources", uniformValues: [0] },
@@ -1661,7 +1727,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1600,
                     columns: [
                         "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive",
-                        "Owners", "Credentials", "AppOwn", "BlueprintOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxTier",
+                        "Owners", "Credentials", "AppOwn", "BlueprintOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiMedium", "ApiDelegated",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1669,7 +1735,7 @@ $global:GLOBALJavaScript_Table = @'
                 compact: {
                     maxWidth: 1200,
                     columns: [
-                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "Owners", "Credentials", "AppOwn", "BlueprintOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "Owners", "Credentials", "AppOwn", "BlueprintOwn", "SpOwn", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiDelegated",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1680,7 +1746,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1600,
                     columns: [
                         "UPN", "Enabled", "UserType", "Agent", "OnPrem", "Protected",
-                        "GrpMem", "GrpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxTier",
+                        "GrpMem", "GrpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxImpact",
                         "AppRoles", "AppRegOwn", "BlueprintOwn", "SPOwn",
                         "Inactive", "MfaCap",
                         "Impact", "Likelihood", "Risk", "Warnings"
@@ -1690,7 +1756,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1200,
                     columns: [
                         "UPN", "Enabled", "UserType", "OnPrem",
-                        "GrpMem", "GrpOwn", "EntraMaxTier",  "AzureMaxTier", "AppRegOwn", "BlueprintOwn", "SPOwn",
+                        "GrpMem", "GrpOwn", "EntraMaxTier",  "AzureMaxImpact", "AppRegOwn", "BlueprintOwn", "SPOwn",
                         "Inactive", "MfaCap",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1703,7 +1769,7 @@ $global:GLOBALJavaScript_Table = @'
                         "DisplayName", "Type", "OnPrem", "Dynamic",
                         "Visibility", "Protected", "PIM", "AuUnits", "DirectOwners",
                         "Users", "SPCount","NestedGroups", "CatalogRBAC", "APAutoAssign",
-                        "AppRoles", "CAPs",  "EntraMaxTier", "AzureMaxTier",
+                        "AppRoles", "CAPs",  "EntraMaxTier", "AzureMaxImpact",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
                 },
@@ -1712,7 +1778,7 @@ $global:GLOBALJavaScript_Table = @'
                     columns: [
                         "DisplayName", "Type", "OnPrem", "Dynamic",
                         "Visibility", "Protected", "PIM", "DirectOwners",
-                        "Users", "SPCount", "CAPs", "EntraMaxTier", "AzureMaxTier",
+                        "Users", "SPCount", "CAPs", "EntraMaxTier", "AzureMaxImpact",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
                 }
@@ -1742,7 +1808,7 @@ $global:GLOBALJavaScript_Table = @'
                     columns: [
                         "DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive",
                         "AgentUsers", "Owners",
-                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxTier",
+                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiMedium", "ApiMisc", "ApiDelegated",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1752,7 +1818,7 @@ $global:GLOBALJavaScript_Table = @'
                     columns: [
                         "DisplayName", "Foreign", "Enabled", "Inactive",
                         "AgentUsers",
-                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiDelegated",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1763,7 +1829,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1600,
                     columns: [
                         "DisplayName", "IsExplicit", "GroupMembership", "GroupOwnership",
-                        "AppOwnership", "BlueprintOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxTier",
+                        "AppOwnership", "BlueprintOwn", "SpOwn", "CatalogRBAC", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiMedium", "ApiMisc",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1772,7 +1838,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1200,
                     columns: [
                         "DisplayName", "GroupMembership", "GroupOwnership",
-                        "AppOwnership", "BlueprintOwn", "SpOwn", "EntraMaxTier", "AzureMaxTier",
+                        "AppOwnership", "BlueprintOwn", "SpOwn", "EntraMaxTier", "AzureMaxImpact",
                         "ApiDangerous", "ApiHigh", "ApiMedium",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1806,7 +1872,7 @@ $global:GLOBALJavaScript_Table = @'
                     columns: [
                         "Policy", "Package", "SeparationOfDuties", "Resources",
                         "Groups", "Applications", "ApiApp", "ApiDelegated", "SharePoint",
-                        "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier",
+                        "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxImpact",
                         "AllowedTargetScope", "SelfAdd", "OnBehalfAdd", "Approval",
                         "Impact", "Likelihood", "Risk", "Warnings"
                     ]
@@ -1815,7 +1881,7 @@ $global:GLOBALJavaScript_Table = @'
                     maxWidth: 1200,
                     columns: [
                         "Policy", "Package", "Resources",
-                        "EntraMaxTier", "AzureMaxTier",
+                        "EntraMaxTier", "AzureMaxImpact",
                         "AllowedTargetScope", "SelfAdd", "OnBehalfAdd", "Approval",
                         "Impact", "Risk", "Warnings"
                     ]
@@ -1891,7 +1957,7 @@ $global:GLOBALJavaScript_Table = @'
                 compact: {
                     maxWidth: 1200,
                     columns: [
-                        "Group", "Role", "EntraMaxTier", "AzureMaxTier", "Eligible", "Active",
+                        "Group", "Role", "EntraMaxTier", "AzureMaxImpact", "Eligible", "Active",
                         "ActivationAuthContext", "ActivationMFA",
                         "ActivationDuration", "ActivationApproval",
                         "ActiveExpiration", "ActiveAssignMFA", "Warnings"
@@ -1968,7 +2034,7 @@ $global:GLOBALJavaScript_Table = @'
             "AppRegOwn": "Owner of App Registrations",
             "EntraMaxTier": "Highest assigned Entra role tier (directly or through groups)",
             "AzureMaxTier": "Highest assigned Azure role tier (directly or through groups)",
-            "AzureMaxImpact": "Highest contextual Azure role impact reachable (directly or through groups)",
+            "AzureMaxImpact": "Highest contextual Azure role impact (role tier x scope x environment x size), directly or through groups. High: 80+, Critical: 200+",
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",

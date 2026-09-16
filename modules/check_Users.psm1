@@ -2244,6 +2244,7 @@ function Write-EntraFalconUsersReport {
                     "EntraMaxTier" = $object.EntraMaxTier
                     "AzureRoles" = $object.AzureRoles
                     "AzureMaxTier" = $object.AzureMaxTier
+                    "AzureMaxImpact" = if ($null -ne $object.AzureExposureImpact) { $object.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                     "AppRoles" = $object.AppRoles
                     "IntuneRoles" = $object.IntuneRoles
                     "CAPs" = $object.CAPs
@@ -2255,8 +2256,8 @@ function Write-EntraFalconUsersReport {
 
             $formattedText = Format-ReportSection -Title "Owner of Groups" `
             -Objects $ReportingGroupOwner `
-            -Properties @("AssignmentType", "Displayname", "Type", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AppRoles", "IntuneRoles", "CAPs", "Users", "Impact", "Warnings") `
-            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($maxDisplayNameLength, 60); Type = 15; OnPrem = 7; EntraRoles = 10; EntraMaxTier = 11; AzureRoles = 10; AzureMaxTier = 11; AppRoles = 8; IntuneRoles = 12; CAPs = 4; Users = 5; Impact = 6; Warnings = [Math]::Min($maxWarningsLength, 60) }
+            -Properties @("AssignmentType", "Displayname", "Type", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "AppRoles", "IntuneRoles", "CAPs", "Users", "Impact", "Warnings") `
+            -ColumnWidths @{ AssignmentType = 15; Displayname = [Math]::Min($maxDisplayNameLength, 60); Type = 15; OnPrem = 7; EntraRoles = 10; EntraMaxTier = 11; AzureRoles = 10; AzureMaxTier = 11; AzureMaxImpact = 14; AppRoles = 8; IntuneRoles = 12; CAPs = 4; Users = 5; Impact = 6; Warnings = [Math]::Min($maxWarningsLength, 60) }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
                     
             
@@ -2270,6 +2271,7 @@ function Write-EntraFalconUsersReport {
                     EntraMaxTier            = $obj.EntraMaxTier
                     AzureRoles              = $obj.AzureRoles
                     AzureMaxTier            = $obj.AzureMaxTier
+                    AzureMaxImpact          = $obj.AzureMaxImpact
                     AppRoles                = $obj.AppRoles
                     IntuneRoles             = $obj.IntuneRoles
                     CAPs                    = $obj.CAPs
@@ -2643,6 +2645,7 @@ function Write-EntraFalconUsersReport {
                     "EntraMaxTier" = $object.EntraMaxTier
                     "AzureRoles" = $object.AzureRoles
                     "AzureMaxTier" = $object.AzureMaxTier
+                    "AzureMaxImpact" = if ($null -ne $object.AzureExposureImpact) { $object.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                     "AppRoles" = $object.AppRoles
                     "IntuneRoles" = $object.IntuneRoles
                     "CAPs" = $object.CAPs
@@ -2658,10 +2661,10 @@ function Write-EntraFalconUsersReport {
                 [void]$MatchingGroupRaw.Add($obj)
             }
 
-            $memberGroupTextProperties = @("AssignmentType", "Displayname", "Type", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AppRoles", "IntuneRoles")
+            $memberGroupTextProperties = @("AssignmentType", "Displayname", "Type", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "AzureMaxImpact", "AppRoles", "IntuneRoles")
             if ($ShowMemberGroupCatalogRbac) { $memberGroupTextProperties += "CatalogRBAC" }
             $memberGroupTextProperties += @("CAPs", "APTarget", "Users", "Impact", "Warnings")
-            $memberGroupColumnWidths = @{ AssignmentType = 15; Displayname = [Math]::Min($maxDisplayNameLength, 60); Type = 15; OnPrem = 7; EntraRoles = 10; EntraMaxTier = 11; AzureRoles = 10; AzureMaxTier = 11; AppRoles = 8; IntuneRoles = 12; CatalogRBAC = 11; CAPs = 4; APTarget = 8; Users = 5; Impact = 6; Warnings = [Math]::Min($maxWarningsLength, 60) }
+            $memberGroupColumnWidths = @{ AssignmentType = 15; Displayname = [Math]::Min($maxDisplayNameLength, 60); Type = 15; OnPrem = 7; EntraRoles = 10; EntraMaxTier = 11; AzureRoles = 10; AzureMaxTier = 11; AzureMaxImpact = 14; AppRoles = 8; IntuneRoles = 12; CatalogRBAC = 11; CAPs = 4; APTarget = 8; Users = 5; Impact = 6; Warnings = [Math]::Min($maxWarningsLength, 60) }
             $formattedText = Format-ReportSection -Title "Member of Groups" `
             -Objects $MatchingGroupRaw `
             -Properties $memberGroupTextProperties `
@@ -2680,6 +2683,7 @@ function Write-EntraFalconUsersReport {
                     EntraMaxTier            = $obj.EntraMaxTier
                     AzureRoles              = $obj.AzureRoles
                     AzureMaxTier            = $obj.AzureMaxTier
+                    AzureMaxImpact          = $obj.AzureMaxImpact
                     AppRoles                = $obj.AppRoles
                     IntuneRoles             = $obj.IntuneRoles
                 }
@@ -2705,6 +2709,7 @@ function Write-EntraFalconUsersReport {
                     EntraMaxTier   = "-"
                     AzureRoles     = "-"
                     AzureMaxTier   = "-"
+                    AzureMaxImpact = "-"
                     AppRoles       = "-"
                     IntuneRoles    = "-"
                 }
