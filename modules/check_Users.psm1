@@ -170,20 +170,21 @@ function Invoke-CheckUsers {
         }
     }
 
-    # List of roles which members are not protected against the password reset of other low-tier admin roles.
+    # Role definitions which members are not protected against the password reset of other low-tier admin roles.
+    # Matched by role definition ID because the Graph display names differ from the abbreviated portal labels.
     # Reference: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/privileged-roles-permissions?tabs=admin-center#who-can-reset-passwords
     $UnprotectedRoles = @(
-        'Auth Admin',
-        'Directory Readers',
-        'Groups Admin',
-        'Guest Inviter',
-        'Helpdesk Admin',
-        'Message Center Reader',
-        'Password Admin',
-        'Reports Reader',
-        'User Admin',
-        'User Experience Success Manager',
-        'Usage Summary Reports Reader'
+        'c4e39bd9-1100-46d3-8c65-fb160da0071f', # Authentication Administrator
+        '88d8e3e3-8f55-4a1e-953a-9b9898b8876b', # Directory Readers
+        'fdd7a751-b60b-444a-984c-02652fe8fa1c', # Groups Administrator
+        '95e79109-95c0-4d8e-aee3-d01accf2d47b', # Guest Inviter
+        '729827e3-9c14-49f7-bb1b-9608f156bbb8', # Helpdesk Administrator
+        '790c1fb9-7f7d-4f88-86a1-ef1f95c05c1b', # Message Center Reader
+        '966707d0-3269-4727-9be2-8c3a10f19b9d', # Password Administrator
+        '4a5d8f65-41da-4de4-8968-e035b65339cf', # Reports Reader
+        'fe930be7-5e62-47db-91af-98c3a49a38b1', # User Administrator
+        '27460883-1df1-4691-b032-3b79643e5e63', # User Experience Success Manager
+        '75934031-6c7e-415a-99d7-48dbd49e875e'  # Usage Summary Reports Reader
     )
 
     if ($TenantPimForGroupsAssignments) {
@@ -1024,7 +1025,7 @@ function Invoke-CheckUsers {
             $UserEntraRoles += $Roleinfo
 
             #Set user to protected if not marked as protected already and if is not and unprotected role
-            if (-not $protected -and ($UnprotectedRoles -notcontains $role.DisplayName)) {
+            if (-not $protected -and ($UnprotectedRoles -notcontains $role.RoleDefinitionId)) {
                 $Protected = $true
             }
         }
