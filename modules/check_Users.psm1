@@ -2734,6 +2734,10 @@ function Write-EntraFalconUsersReport {
                     "Scoped to" = $object.Scope
                 }
             }
+            $ReportingAzureRoles = @($ReportingAzureRoles | Sort-Object -Property @{
+                Expression = { [int]$_.Impact }
+                Descending = $true
+            }, 'Role name', 'Scoped to', 'Assignment')
             [void]$DetailTxtBuilder.AppendLine("================================================================================================")
             [void]$DetailTxtBuilder.AppendLine("Azure IAM assignments")
             [void]$DetailTxtBuilder.AppendLine("================================================================================================")

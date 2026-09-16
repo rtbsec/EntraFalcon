@@ -1533,7 +1533,10 @@ function Invoke-CheckEnterpriseApps {
 
         ############### Azure Roles
         if ($($item.AzureRoleDetails | Measure-Object).count -ge 1) {
-            $ReportingAzureRoles = foreach ($object in $($item.AzureRoleDetails)) {
+            $ReportingAzureRoles = foreach ($object in ($item.AzureRoleDetails | Sort-Object -Property @{
+                Expression = { [int]$_.AssignmentImpact }
+                Descending = $true
+            }, 'RoleName')) {
                 [pscustomobject]@{ 
                     "Role name" = $($object.RoleName)
                     "RoleType" = $($object.RoleType)

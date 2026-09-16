@@ -2246,7 +2246,10 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
 
         ############### Azure Roles
         if (@($item.AzureRoleDetails).Count -ge 1) {
-            foreach ($role in $item.AzureRoleDetails) {
+            foreach ($role in ($item.AzureRoleDetails | Sort-Object -Property @{
+                Expression = { [int]$_.AssignmentImpact }
+                Descending = $true
+            }, 'RoleName')) {
                 [void]$ReportingAzureRoles.Add([pscustomobject]@{ 
                     "Role name"   = $role.RoleName
                     "Assignment"  = $role.AssignmentType

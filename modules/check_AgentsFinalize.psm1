@@ -1392,7 +1392,10 @@ Execution Warnings = $($WarningList -join ' / ')
             }
         )
         $ReportingAzureRoles = @(
-            foreach ($object in @($item.AzureRoleDetails)) {
+            foreach ($object in @($item.AzureRoleDetails | Sort-Object -Property @{
+                Expression = { [int]$_.AssignmentImpact }
+                Descending = $true
+            }, 'RoleName')) {
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
@@ -1407,7 +1410,10 @@ Execution Warnings = $($WarningList -join ' / ')
             }
         )
         $ReportingEligibleAzureRoles = @(
-            foreach ($object in @($item.EligibleAzureRoleDetails)) {
+            foreach ($object in @($item.EligibleAzureRoleDetails | Sort-Object -Property @{
+                Expression = { [int]$_.AssignmentImpact }
+                Descending = $true
+            }, 'RoleName')) {
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
@@ -1709,7 +1715,10 @@ Appendix: Used API Permission Reference
             }
         )
         $ReportingAzureRoles = @(
-            foreach ($object in @($item.AzureRoleDetails)) {
+            foreach ($object in @($item.AzureRoleDetails | Sort-Object -Property @{
+                Expression = { [int]$_.AssignmentImpact }
+                Descending = $true
+            }, 'RoleName')) {
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
