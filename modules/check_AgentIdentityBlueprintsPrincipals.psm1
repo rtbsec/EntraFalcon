@@ -651,10 +651,10 @@ function Invoke-AgentIdentityBlueprintsPrincipals {
 
         $Inactive = Test-EntraFalconServicePrincipalInactive -SignInData $AppsignInData -CreationInDays $CreationInDays -ActivityAvailable ($global:GLOBALSpSignInActivityAvailable -ne $false)
 
-        #Mark foreign non-default apps as risky
+        #Mark foreign non-Microsoft principals as higher likelihood
         if ($MSOwned -eq $false -and $ForeignTenant -eq $true) {
             $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
-        } elseif ($MSOwned -eq $false -and $ForeignTenant -eq $false) {
+        } else {
             $LikelihoodScore += $SPLikelihoodScore["InternApp"]
         }
 

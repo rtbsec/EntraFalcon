@@ -394,9 +394,9 @@ function Invoke-CheckTenant {
         return " ($count from Microsoft-owned blueprints, such as Copilot Studio)"
     }
 
-    $AzureForeignExposureThreshold = 50
-    $AzureHighExposureThreshold = 80
-    $AzureCriticalExposureThreshold = 200
+    $AzureForeignExposureThreshold = [int]$GLOBALAzureExposureLevels.Medium
+    $AzureHighExposureThreshold = [int]$GLOBALAzureExposureLevels.High
+    $AzureCriticalExposureThreshold = [int]$GLOBALAzureExposureLevels.Critical
     $AzurePrincipalExposureCache = @{}
 
     function Get-AzureImpactBreakdownHtml {

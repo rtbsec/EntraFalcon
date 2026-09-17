@@ -1087,12 +1087,10 @@ Execution Warnings = $($WarningList -join ' / ')
         }
         $agentIdentity.AgentUsersDetails = @($enrichedAgentUsers | Sort-Object -Property @(@{ Expression = 'Impact'; Descending = $true }, 'UPN'))
         $agentIdentity.AgentUsers = @($agentIdentity.AgentUsersDetails).Count
-        if (-not $agentIdentity.MSOwned) {
-            if ($foreignBlueprintPrincipal) {
-                $agentIdentity.Likelihood += $AgentIdentityLikelihoodAdjustments["ForeignApp"]
-            } else {
-                $agentIdentity.Likelihood += $AgentIdentityLikelihoodAdjustments["InternApp"]
-            }
+        if ($foreignNonMsBlueprintPrincipal) {
+            $agentIdentity.Likelihood += $AgentIdentityLikelihoodAdjustments["ForeignApp"]
+        } else {
+            $agentIdentity.Likelihood += $AgentIdentityLikelihoodAdjustments["InternApp"]
         }
         if ($null -eq $agentIdentity.Warnings) {
             $agentIdentity.Warnings = ''
@@ -1399,7 +1397,7 @@ Execution Warnings = $($WarningList -join ' / ')
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Tier Level" = $object.RoleTier
+                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment
@@ -1417,7 +1415,7 @@ Execution Warnings = $($WarningList -join ' / ')
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Tier Level" = $object.RoleTier
+                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment
@@ -1689,7 +1687,7 @@ Appendix: Used API Permission Reference
     $GlobalAuditSummary.AgentIdentities.ApiCategorization.Misc = @($AgentIdentityItems | Where-Object { $_.ApiMisc -gt 0 }).Count
 
     if ($AgentIdentityItems.Count -gt 0) {
-        New-ReportFileSet -Title "AgentIdentities" -ReportKey "AgentIdentities" -ReportName "Agent Identities Enumeration" -HtmlTitle "EF - Agent Identities" -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TableOutput $AgentIdentityItems -MainTable ($AgentIdentityItems | Select-Object @{Name = "DisplayName"; Expression = { $_.DisplayNameLink }},AppRoleRequired,PublisherName,MSOwned,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,AgentUsers,Owners,Sponsors,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,CatalogRBAC,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxImpact,ApiDangerous,ApiHigh,ApiMedium,ApiLow,ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings) -AllObjectDetailsHTML $AgentIdentityDetails -Data $AgentIdentityItems -DetailOutputTxt $AgentIdentityTxt.ToString() -TxtColumns @('DisplayName','AppRoleRequired','PublisherName','MSOwned','Foreign','Enabled','Inactive','LastSignInDays','CreationInDays','AgentUsers','Owners','Sponsors','AppRoles','GrpMem','GrpOwn','AppOwn','SpOwn','CatalogRBAC','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AzureMaxImpact','ApiDangerous','ApiHigh','ApiMedium','ApiLow','ApiMisc','ApiDelegated','ApiDelegatedDangerous','ApiDelegatedHigh','ApiDelegatedMedium','ApiDelegatedLow','ApiDelegatedMisc','Impact','Likelihood','Risk','Warnings') -WarningList $AgentIdentityWarnings -AppendixTxt $AgentIdentityAppendixTxt -AppendixHtml $AgentIdentityAppendixHtml -Csv:$Csv -ExportDataJson:$ExportDataJson
+        New-ReportFileSet -Title "AgentIdentities" -ReportKey "AgentIdentities" -ReportName "Agent Identities Enumeration" -HtmlTitle "EF - Agent Identities" -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder -TableOutput $AgentIdentityItems -MainTable ($AgentIdentityItems | Select-Object @{Name = "DisplayName"; Expression = { $_.DisplayNameLink }},AppRoleRequired,PublisherName,MSOwned,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,AgentUsers,Owners,Sponsors,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,CatalogRBAC,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,ApiDangerous,ApiHigh,ApiMedium,ApiLow,ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings) -AllObjectDetailsHTML $AgentIdentityDetails -Data $AgentIdentityItems -DetailOutputTxt $AgentIdentityTxt.ToString() -TxtColumns @('DisplayName','AppRoleRequired','PublisherName','MSOwned','Foreign','Enabled','Inactive','LastSignInDays','CreationInDays','AgentUsers','Owners','Sponsors','AppRoles','GrpMem','GrpOwn','AppOwn','SpOwn','CatalogRBAC','EntraRoles','EntraMaxTier','AzureRoles','AzureMaxTier','AzureMaxLevel','AzureMaxImpact','ApiDangerous','ApiHigh','ApiMedium','ApiLow','ApiMisc','ApiDelegated','ApiDelegatedDangerous','ApiDelegatedHigh','ApiDelegatedMedium','ApiDelegatedLow','ApiDelegatedMisc','Impact','Likelihood','Risk','Warnings') -WarningList $AgentIdentityWarnings -AppendixTxt $AgentIdentityAppendixTxt -AppendixHtml $AgentIdentityAppendixHtml -Csv:$Csv -ExportDataJson:$ExportDataJson
     } else {
         Write-Host "[*] No agent identities found. Skipping Agent Identities report output."
     }
@@ -1722,7 +1720,7 @@ Appendix: Used API Permission Reference
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Tier Level" = $object.RoleTier
+                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment

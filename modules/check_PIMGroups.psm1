@@ -220,40 +220,6 @@ function Invoke-CheckPIMGroups {
         }
     }
 
-    function Get-WarningTierLabel {
-        param(
-            [string]$Tier
-        )
-
-        $normalizedTier = [string]$Tier
-        if ([string]::IsNullOrWhiteSpace($normalizedTier)) {
-            return ""
-        }
-
-        switch ($normalizedTier.Trim()) {
-            'Tier-0' { return 'Tier-0' }
-            'Tier-1' { return 'Tier-1' }
-            'Tier-2' { return 'Tier-2' }
-            'Tier-3' { return 'Tier-3' }
-            '?'      { return '?' }
-            default  { return '' }
-        }
-    }
-
-    function Get-EffectiveWarningTier {
-        param(
-            [string]$EntraTier,
-            [string]$AzureTier
-        )
-
-        $candidateTiers = @($EntraTier, $AzureTier) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
-        if (@($candidateTiers).Count -eq 0) {
-            return ''
-        }
-
-        return ($candidateTiers | Sort-Object { Get-TierSortRank -Tier $_ } | Select-Object -First 1)
-    }
-
     if (-not $GLOBALPimForGroupsChecked) {
         return @{}
     }
@@ -335,8 +301,20 @@ function Invoke-CheckPIMGroups {
         $entraMaxTier = if ($groupDetails) { [string]$groupDetails.EntraMaxTier } else { '' }
         $azureMaxTier = if ($groupDetails) { [string]$groupDetails.AzureMaxTier } else { '' }
         $azureMaxImpact = if ($groupDetails) { $groupDetails.AzureExposureImpact } else { '' }
-        $effectiveWarningTier = Get-EffectiveWarningTier -EntraTier $entraMaxTier -AzureTier $azureMaxTier
-        $warningTier = Get-WarningTierLabel -Tier $effectiveWarningTier
+        $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
+        $requiresFourHourActivation = $entraMaxTier -eq 'Tier-0' -or $azureMaxLevel -eq 'Critical'
+        $requiresPrivilegedPolicy = $entraMaxTier -in @('Tier-0', 'Tier-1') -or $azureMaxLevel -in @('High', 'Critical')
+        $warningCause = if ($entraMaxTier -eq 'Tier-0') {
+            'Tier-0'
+        } elseif ($azureMaxLevel -eq 'Critical') {
+            'Critical Azure impact'
+        } elseif ($entraMaxTier -eq 'Tier-1') {
+            'Tier-1'
+        } elseif ($azureMaxLevel -eq 'High') {
+            'High Azure impact'
+        } else {
+            ''
+        }
         $countKey = "$groupId|$roleDefinitionId"
         $countEntry = if (Test-DictionaryContainsKey -Dictionary $AssignmentCounts -Key $countKey) { $AssignmentCounts[$countKey] } else { $null }
 
@@ -544,7 +522,7 @@ function Invoke-CheckPIMGroups {
         }
 
         if ($parsedActivationDuration.Unit -eq 'Hours') {
-            if ($warningTier -eq 'Tier-0') {
+            if ($requiresFourHourActivation) {
                 if ($parsedActivationDuration.Value -gt 4) {
                     $warningMessages.Add('long activation time (>4h)')
                 }
@@ -554,25 +532,23 @@ function Invoke-CheckPIMGroups {
                 }
             }
         }
-        $isHighImpactWarningTier = $warningTier -in @('Tier-0', 'Tier-1')
-
-        if ($isHighImpactWarningTier -and $adminAssignmentEnabled -eq $false) {
+        if ($requiresPrivilegedPolicy -and $adminAssignmentEnabled -eq $false) {
             $warningMessages.Add('allows perm. active assignments')
         }
-        if ($isHighImpactWarningTier -and -not $authCtxUsable -and $approvalRequired -ne $true -and $policyAssignment) {
+        if ($requiresPrivilegedPolicy -and -not $authCtxUsable -and $approvalRequired -ne $true -and $policyAssignment) {
             $warningMessages.Add('missing AuthContext or Approval')
         } elseif ($authCtxUsable -and $authContextIssues.Count -gt 0) {
             $warningMessages.AddRange($authContextIssues)
         }
 
-        $warningTierReporting = if ($warningTier -eq 'Tier-0' -or $warningTier -eq 'Tier-1') {
-            "$warningTier but "
+        $warningPrefix = if ($warningCause) {
+            "$warningCause but "
         } else {
             ""
         }
 
         $warningsText = if ($warningMessages.Count -gt 0) {
-            $warningTierReporting + (($warningMessages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ', ')
+            $warningPrefix + (($warningMessages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ', ')
         } else {
             ""
         }
@@ -634,8 +610,8 @@ function Invoke-CheckPIMGroups {
         @{ Expression = { Get-RoleSortRank -Role $_.Role } ; Ascending = $true }, `
         Role
 
-    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
-    $mainTable = $tableOutput | Select-Object -Property @{Name = 'Group'; Expression = { $_.GroupLink } }, Role, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
+    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, @{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureMaxImpact }}, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
+    $mainTable = $tableOutput | Select-Object -Property @{Name = 'Group'; Expression = { $_.GroupLink } }, Role, EntraMaxTier, AzureMaxTier, AzureMaxLevel, AzureMaxImpact, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
     $mainTableJson = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -838,9 +814,9 @@ Execution Warnings = This report includes only PIM settings for PIM-enabled grou
     }
 
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
-    $tableOutput | Format-Table Group, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+    $tableOutput | Format-Table Group, EntraMaxTier, AzureMaxTier, AzureMaxLevel, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | Select-Object Group, EntraMaxTier, AzureMaxTier, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
+        $tableOutput | Select-Object Group, EntraMaxTier, AzureMaxTier, AzureMaxLevel, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
     }
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
 

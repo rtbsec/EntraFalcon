@@ -578,9 +578,12 @@ function Invoke-CheckRoles {
     $SortedAzureRoles = $SortedAzureRolesList
 
 
-    # Define custom sorting logic for Scope
+    # Highest contextual impact first; scope hierarchy and role priority break ties
     $SortedAzureRoles = $SortedAzureRoles | Sort-Object -Property @{
-        # Primary sorting: Scope depth and specific path rules
+        Expression = { [int]$_.AssignmentImpact }
+        Descending = $true
+    }, @{
+        # Scope depth and specific path rules
         Expression = {
             if ($_.Scope -eq '/') {
                 0  # Root path should come first
@@ -591,10 +594,10 @@ function Invoke-CheckRoles {
             }
         }
     }, @{
-        # Secondary sorting: Scope alphabetically (to maintain proper order within same depth)
+        # Scope alphabetically (to maintain proper order within same depth)
         Expression = {$_.Scope}
     }, @{
-        # Tertiary sorting: RoleDefinitionName priority (within same Scope)
+        # RoleDefinitionName priority (within same Scope)
         Expression = {
             switch ($_.Role) {
                 "Owner" { 0 }                      # Owner comes first
@@ -621,9 +624,9 @@ function Invoke-CheckRoles {
 
 
     if ($DebugObjectDump) {
-        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},ImpactExplanation,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Level"; Expression = { Get-AzureImpactLevel -Impact $_.AssignmentImpact }},@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},ImpactExplanation,RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
     } else {
-        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+        $mainAzureTable = $SortedAzureRoles | Select-Object -Property Scope,Role,RoleTier,@{Name = "Level"; Expression = { Get-AzureImpactLevel -Impact $_.AssignmentImpact }},@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
     }
     $mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
 
@@ -746,9 +749,9 @@ $headerHtml = @"
         $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Head ("<title>EF - Role Assignments (Azure)</title>`n" + $global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
-        $SortedAzureRoles | Format-Table Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
+        $SortedAzureRoles | Format-Table Scope,Role,RoleTier,@{Name = "Level"; Expression = { Get-AzureImpactLevel -Impact $_.AssignmentImpact }},@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).txt" -Append
         if ($Csv) {
-            $SortedAzureRoles | Select-Object Scope,Role,RoleTier,@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
+            $SortedAzureRoles | Select-Object Scope,Role,RoleTier,@{Name = "Level"; Expression = { Get-AzureImpactLevel -Impact $_.AssignmentImpact }},@{Name = "Impact"; Expression = { $_.AssignmentImpact}},ScopeType,Environment,@{Name = "Resources"; Expression = { $_.ObservedResources}},RoleType,Conditions,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName).csv" -NoTypeInformation -Encoding UTF8
         }
         write-host "[+] Details of $(@($SortedAzureRoles).count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.FileSafeDisplayName)"
         

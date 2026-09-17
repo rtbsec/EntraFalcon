@@ -378,6 +378,29 @@ function Test-CatalogActiveAccessPackageAssignment {
     return $false
 }
 
+# Decides whether a catalog entry counts toward HighImpactEntries. Azure access counts by its contextual exposure level, not by role tier.
+function Test-CatalogHighImpactEntry {
+    param (
+        [Parameter(Mandatory = $false)]
+        [double]$Impact = 0,
+        [Parameter(Mandatory = $false)]
+        [object]$AzureImpact = 0,
+        [Parameter(Mandatory = $false)]
+        [string]$Type = '',
+        [Parameter(Mandatory = $false)]
+        [string]$TierOrCategory = ''
+    )
+
+    if ($Impact -ge 100) { return $true }
+
+    $azureImpactValue = 0
+    if ([int]::TryParse([string]$AzureImpact, [ref]$azureImpactValue) -and $azureImpactValue -ge [int]$GLOBALAzureExposureLevels.High) { return $true }
+
+    if ($Type -ne 'Azure Role' -and $TierOrCategory -in @('Tier-0','Tier-1')) { return $true }
+
+    return $false
+}
+
 function ConvertTo-CatalogTierLabel {
     param([object]$Tier)
     switch ([string]$Tier) {
@@ -799,6 +822,7 @@ function Invoke-CheckCatalogs {
         $countedExistingGrantKeys = [System.Collections.Generic.HashSet[string]]::new()
         $existingEntraTier = '-'
         $azureTier = '-'
+        $azureImpactMax = 0
         $entraRoleExposureCount = @($resources | Where-Object { [string]$_.originSystem -eq 'DirectoryRole' }).Count
         $highImpactEntries = 0
         $newAPConfigurable = 0
@@ -839,6 +863,7 @@ function Invoke-CheckCatalogs {
             $packageImpact = 0
             $packageEntraTier = '-'
             $packageAzureTier = '-'
+            $packageAzureImpact = 0
             foreach ($roleScope in $roleScopes) {
                 $existingRole = Get-CatalogExistingRoleInfo -ResourceRoleScope $roleScope -AllGroupsDetails $AllGroupsDetails -EnterpriseApps $EnterpriseApps -AppRoleReferenceCache $AppRoleReferenceCache
                 $resourceKey = "$($existingRole.OriginSystem)|$($existingRole.ResourceOriginId)"
@@ -876,9 +901,16 @@ function Invoke-CheckCatalogs {
                 if ([string]$existingRole.Type -eq 'Azure Role') {
                     $azureTier = Merge-HigherTierLabel -CurrentTier $azureTier -CandidateTier $existingRole.TierOrCategory
                     $packageAzureTier = Merge-HigherTierLabel -CurrentTier $packageAzureTier -CandidateTier $existingRole.TierOrCategory
+                    # Score the configured grant on its scope, as the Access Packages report does, instead of the flat tier base
+                    $existingRoleAzureImpact = (Get-AzureRoleAssignmentImpact -RoleTier $existingRole.TierOrCategory -RoleName ([string]$existingRole.Role) -RawScope ([string]$existingRole.ResourceOriginId) -TenantId ([string]$CurrentTenant.Id)).AssignmentImpact
+                    $existingRole.Impact = [double]$existingRoleAzureImpact
+                    $azureImpactMax = Merge-HigherImpact -CurrentImpact $azureImpactMax -CandidateImpact $existingRoleAzureImpact
+                    $packageAzureImpact = Merge-HigherImpact -CurrentImpact $packageAzureImpact -CandidateImpact $existingRoleAzureImpact
                 }
                 if ([string]$existingRole.Type -eq 'Group' -and $AllGroupsDetails.ContainsKey([string]$existingRole.ResourceOriginId)) {
                     $configuredGroup = $AllGroupsDetails[[string]$existingRole.ResourceOriginId]
+                    # Exposure impact propagates through nesting and PIM eligibility even where the role count does not
+                    $packageAzureImpact = Merge-HigherImpact -CurrentImpact $packageAzureImpact -CandidateImpact $configuredGroup.AzureExposureImpact
                     $configuredGroupEntraRoles = 0
                     $configuredGroupAzureRoles = 0
                     if ([int]::TryParse([string]$configuredGroup.EntraRoles, [ref]$configuredGroupEntraRoles) -and $configuredGroupEntraRoles -gt 0) {
@@ -919,7 +951,8 @@ function Invoke-CheckCatalogs {
                 $impactCounted = $countedExistingGrantKeys.Add($grantKey)
                 if ($impactCounted) {
                     $existingAPImpact += [double]$existingRole.Impact
-                    if ([double]$existingRole.Impact -ge 100 -or [string]$existingRole.TierOrCategory -in @('Tier-0','Tier-1')) { $highImpactEntries++ }
+                    $grantAzureImpact = if ([string]$existingRole.Type -eq 'Azure Role') { $existingRole.Impact } else { 0 }
+                    if (Test-CatalogHighImpactEntry -Impact ([double]$existingRole.Impact) -AzureImpact $grantAzureImpact -Type ([string]$existingRole.Type) -TierOrCategory ([string]$existingRole.TierOrCategory)) { $highImpactEntries++ }
                 }
                 [void]$existingRoleRows.Add([pscustomobject]@{
                     AccessPackage = $packageLink
@@ -943,6 +976,7 @@ function Invoke-CheckCatalogs {
                 Impact              = [math]::Round([double]$packageImpact, 0)
                 EntraMaxTier        = $packageEntraTier
                 AzureMaxTier        = $packageAzureTier
+                AzureMaxImpact      = $packageAzureImpact
             }
         }
 
@@ -1021,7 +1055,9 @@ function Invoke-CheckCatalogs {
 
             $resourceEntraTier = '-'
             $resourceAzureTier = '-'
+            $resourceAzureImpact = 0
             if ($resolvedGroup) {
+                $resourceAzureImpact = Merge-HigherImpact -CurrentImpact 0 -CandidateImpact $resolvedGroup.AzureExposureImpact
                 $groupEntraRoleCount = 0
                 if ([int]::TryParse([string]$resolvedGroup.EntraRoles, [ref]$groupEntraRoleCount) -and $groupEntraRoleCount -gt 0) {
                     $entraRoleExposureCount += $groupEntraRoleCount
@@ -1048,16 +1084,18 @@ function Invoke-CheckCatalogs {
                 }
             }
             if ($type -eq 'AzureResource') {
-                # An onboarded Azure resource can be configured with a Tier-0 RBAC role such as Owner.
+                # An onboarded Azure resource can be configured with a Tier-0 RBAC role such as Owner, so score that worst case on its scope
                 $resourceAzureTier = 'Tier-0'
                 $azureTier = 'Tier-0'
-                $resourceImpact = [double]$GLOBALImpactScore['AzureRoleTier0']
+                $resourceAzureImpact = (Get-AzureRoleAssignmentImpact -RoleTier 'Tier-0' -RoleName 'Owner' -RawScope $originId -TenantId ([string]$CurrentTenant.Id)).AssignmentImpact
+                $resourceImpact = [double]$resourceAzureImpact
             }
+            $azureImpactMax = Merge-HigherImpact -CurrentImpact $azureImpactMax -CandidateImpact $resourceAzureImpact
             if ($type -eq 'SharePoint') { $resourceImpact = 3 }
             if ($type -in @('Group','Application','SharePoint','AzureResource','EntraRole')) {
                 $newAPConfigurable++
                 $directImpact += $resourceImpact
-                if ($resourceImpact -ge 100 -or $resourceAzureTier -in @('Tier-0','Tier-1')) { $highImpactEntries++ }
+                if (Test-CatalogHighImpactEntry -Impact $resourceImpact -AzureImpact $resourceAzureImpact) { $highImpactEntries++ }
 
                 $resourceKey = "$originSystem|$originId".ToLowerInvariant()
                 if (-not $newAPContributionsByResourceKey.ContainsKey($resourceKey)) {
@@ -1102,7 +1140,8 @@ function Invoke-CheckCatalogs {
                 ConfiguredInAP = if ($isAccessPackageResource) { $configuredInAccessPackage } else { '-' }
                 DirectImpact = if ($type -in @('Group','Application','SharePoint','AzureResource','EntraRole')) { [math]::Round([double]$resourceImpact, 0) } else { '-' }
                 EntraMaxTier = $resourceEntraTier
-                AzureMaxTier = $resourceAzureTier
+                AzureMaxLevel = if ($resourceAzureImpact -gt 0) { Get-AzureImpactLevel -Impact $resourceAzureImpact } else { '-' }
+                AzureMaxImpact = if ($resourceAzureImpact -gt 0) { $resourceAzureImpact } else { '-' }
             })
         }
 
@@ -1217,7 +1256,7 @@ function Invoke-CheckCatalogs {
         }
 
         $showPackageEntraMaxTier = @($packageMetricsById.Values | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.EntraMaxTier) -and [string]$_.EntraMaxTier -ne '-' }).Count -gt 0
-        $showPackageAzureMaxTier = @($packageMetricsById.Values | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.AzureMaxTier) -and [string]$_.AzureMaxTier -ne '-' }).Count -gt 0
+        $showPackageAzureImpact = @($packageMetricsById.Values | Where-Object { [int]$_.AzureMaxImpact -gt 0 -or (-not [string]::IsNullOrWhiteSpace([string]$_.AzureMaxTier) -and [string]$_.AzureMaxTier -ne '-') }).Count -gt 0
         $packageRows = foreach ($package in $packages) {
             $packageId = [string]$package.id
             $packagePolicies = @($package.assignmentPolicies)
@@ -1233,7 +1272,11 @@ function Invoke-CheckCatalogs {
                 ActiveAssignments = if ($metrics) { $metrics.ActiveAssignments } elseif ($assignmentsAvailable) { 0 } else { '-' }
             }
             if ($showPackageEntraMaxTier) { $packageRow | Add-Member -NotePropertyName EntraMaxTier -NotePropertyValue $(if ($metrics) { $metrics.EntraMaxTier } else { '-' }) }
-            if ($showPackageAzureMaxTier) { $packageRow | Add-Member -NotePropertyName AzureMaxTier -NotePropertyValue $(if ($metrics) { $metrics.AzureMaxTier } else { '-' }) }
+            if ($showPackageAzureImpact) {
+                $packageAzureImpactValue = if ($metrics) { [int]$metrics.AzureMaxImpact } else { 0 }
+                $packageRow | Add-Member -NotePropertyName AzureMaxLevel -NotePropertyValue $(if ($packageAzureImpactValue -gt 0) { Get-AzureImpactLevel -Impact $packageAzureImpactValue } else { '-' })
+                $packageRow | Add-Member -NotePropertyName AzureMaxImpact -NotePropertyValue $(if ($packageAzureImpactValue -gt 0) { $packageAzureImpactValue } else { '-' })
+            }
             $packageRow | Add-Member -NotePropertyName Impact -NotePropertyValue $(if ($metrics) { $metrics.Impact } else { 0 })
             $packageRow
         }
@@ -1259,6 +1302,9 @@ function Invoke-CheckCatalogs {
             @{ Expression = { [string]$_._SortRoleId }; Ascending = $true } |
             Select-Object AccessPackage,Resource,Type,RoleOrPermission,TierOrCategory,Impact,ImpactCounted,EnabledPolicies,Policies)
 
+        # Keep the unknown sentinel aligned with the tier when Azure data was unavailable
+        $catalogAzureImpact = if ($azureImpactMax -gt 0) { $azureImpactMax } elseif ([string]$azureTier -eq '?') { '?' } else { 0 }
+
         $catalogInformation = [pscustomobject]@{
             Catalog = ConvertTo-EntraFalconHtmlText $catalogName -DefaultValue '-'
             CatalogId = $catalogId
@@ -1275,6 +1321,7 @@ function Invoke-CheckCatalogs {
             CatalogRBAC = if ($RawCatalogs.RbacAvailable) { $assignments.Count } else { '-' }
             EntraMaxTier = $existingEntraTier
             AzureMaxTier = $azureTier
+            AzureMaxImpact = $catalogAzureImpact
             Impact = [math]::Round([double]$catalogImpact, 0)
             Likelihood = $catalogLikelihood
             Risk = if ($catalogRisk -is [string]) { $catalogRisk } else { [math]::Round([double]$catalogRisk, 0) }
@@ -1309,7 +1356,7 @@ function Invoke-CheckCatalogs {
             [void]$detailTxtBuilder.AppendLine($detailSectionDelimiter)
             [void]$detailTxtBuilder.AppendLine("Catalog Resources")
             [void]$detailTxtBuilder.AppendLine($detailSectionDelimiter)
-            [void]$detailTxtBuilder.AppendLine((@($sortedResourceRows) | ForEach-Object { [pscustomobject]@{ Resource=ConvertTo-CatalogPlainText $_.Resource; Type=$_.Type; OriginId=$_.OriginId; ConfiguredInAP=$_.ConfiguredInAP; DirectImpact=$_.DirectImpact; EntraMaxTier=$_.EntraMaxTier; AzureMaxTier=$_.AzureMaxTier } } | Format-Table | Out-String -Width 512))
+            [void]$detailTxtBuilder.AppendLine((@($sortedResourceRows) | ForEach-Object { [pscustomobject]@{ Resource=ConvertTo-CatalogPlainText $_.Resource; Type=$_.Type; OriginId=$_.OriginId; ConfiguredInAP=$_.ConfiguredInAP; DirectImpact=$_.DirectImpact; EntraMaxTier=$_.EntraMaxTier; AzureMaxLevel=$_.AzureMaxLevel; AzureMaxImpact=$_.AzureMaxImpact } } | Format-Table | Out-String -Width 512))
         }
         if ($catalogResourcesNote) {
             [void]$detailTxtBuilder.AppendLine($detailSectionDelimiter)
@@ -1334,7 +1381,7 @@ function Invoke-CheckCatalogs {
                 "ActiveAssignments"
             )
             if ($showPackageEntraMaxTier) { $packageTxtProperties += "EntraMaxTier" }
-            if ($showPackageAzureMaxTier) { $packageTxtProperties += "AzureMaxTier" }
+            if ($showPackageAzureImpact) { $packageTxtProperties += @("AzureMaxLevel", "AzureMaxImpact") }
             $packageTxtProperties += "Impact"
 
             [void]$detailTxtBuilder.AppendLine($detailSectionDelimiter)
@@ -1369,6 +1416,8 @@ function Invoke-CheckCatalogs {
             EntraMaxTier = $existingEntraTier
             AzureResources = @($resources | Where-Object { $_.originSystem -match 'Azure|Arm|Management' }).Count
             AzureMaxTier = $azureTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $catalogAzureImpact
+            AzureMaxImpact = $catalogAzureImpact
             HighImpactEntries = $highImpactEntries
             CatalogRBAC = if ($RawCatalogs.RbacAvailable) { $assignments.Count } else { '-' }
             Owners = $counts['Catalog Owner']
@@ -1461,8 +1510,8 @@ function Invoke-CheckCatalogs {
     $GlobalAuditSummary.Catalogs.DormantPrivileged = (@($tableOutput) | Measure-Object DormantPrivileged -Sum).Sum
     $GlobalAuditSummary.Catalogs.RbacAssignments = @($RawCatalogs.RoleAssignments).Count
 
-    $mainTableHtml = @($tableOutput | Sort-Object Risk -Descending | Select-Object @{Name='Catalog';Expression={$_.CatalogLink}},Enabled,ExternallyVisible,AccessPackages,CatalogResources,NewAPConfigurable,ConfiguredResources,UnconfiguredResources,ConfiguredRoleScopes,Groups,Applications,API,SharePoint,EntraRoles,EntraMaxTier,AzureResources,AzureMaxTier,HighImpactEntries,CatalogRBAC,Owners,PackageManagers,AssignmentManagers,Readers,Impact,Likelihood,Risk,Warnings)
-    $mainTableExport = @($tableOutput | Select-Object Catalog,Enabled,ExternallyVisible,AccessPackages,CatalogResources,NewAPConfigurable,ConfiguredResources,UnconfiguredResources,ConfiguredRoleScopes,Groups,Applications,API,SharePoint,EntraRoles,EntraMaxTier,AzureResources,AzureMaxTier,HighImpactEntries,CatalogRBAC,Owners,PackageManagers,AssignmentManagers,Readers,Impact,Likelihood,Risk,Warnings)
+    $mainTableHtml = @($tableOutput | Sort-Object Risk -Descending | Select-Object @{Name='Catalog';Expression={$_.CatalogLink}},Enabled,ExternallyVisible,AccessPackages,CatalogResources,NewAPConfigurable,ConfiguredResources,UnconfiguredResources,ConfiguredRoleScopes,Groups,Applications,API,SharePoint,EntraRoles,EntraMaxTier,AzureResources,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,HighImpactEntries,CatalogRBAC,Owners,PackageManagers,AssignmentManagers,Readers,Impact,Likelihood,Risk,Warnings)
+    $mainTableExport = @($tableOutput | Select-Object Catalog,Enabled,ExternallyVisible,AccessPackages,CatalogResources,NewAPConfigurable,ConfiguredResources,UnconfiguredResources,ConfiguredRoleScopes,Groups,Applications,API,SharePoint,EntraRoles,EntraMaxTier,AzureResources,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,HighImpactEntries,CatalogRBAC,Owners,PackageManagers,AssignmentManagers,Readers,Impact,Likelihood,Risk,Warnings)
     $mainTableJson = if ($mainTableHtml.Count -eq 0) { '[]' } else { $mainTableHtml | ConvertTo-Json -Depth 6 -Compress }
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
     $detailsJson = if ($allObjectDetails.Count -eq 0) { '[]' } else { $allObjectDetails | ConvertTo-Json -Depth 9 -Compress }

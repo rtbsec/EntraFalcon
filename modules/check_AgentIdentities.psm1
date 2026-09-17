@@ -1078,6 +1078,7 @@ function Invoke-AgentIdentities {
             MSOwned = $false
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $AzureMaxImpact
             AzureMaxImpact = $AzureMaxImpact
             Inactive = $Inactive
             LastSignInDays = $LastSignInDays
