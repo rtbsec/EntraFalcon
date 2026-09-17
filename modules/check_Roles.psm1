@@ -516,6 +516,8 @@ function Invoke-CheckRoles {
                     RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
+                    TierSource                = if ($Assignment.PSObject.Properties["TierSource"]) { $Assignment.TierSource } else { $null }
+                    TierReason                = if ($Assignment.PSObject.Properties["TierReason"]) { $Assignment.TierReason } else { $null }
                     ScopeType                 = if ($ImpactContext.PSObject.Properties["ScopeType"]) { $ImpactContext.ScopeType } else { "Unknown" }
                     Environment               = if ($ImpactContext.PSObject.Properties["Environment"]) { $ImpactContext.Environment } else { "Unknown" }
                     ObservedResources = if ($ImpactContext.PSObject.Properties["ObservedResources"]) { $ImpactContext.ObservedResources } else { $null }
@@ -559,6 +561,8 @@ function Invoke-CheckRoles {
                     RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
                     Scope                     = $Assignment.Scope
                     RoleTier                  = $RoleTier
+                    TierSource                = if ($Assignment.PSObject.Properties["TierSource"]) { $Assignment.TierSource } else { $null }
+                    TierReason                = if ($Assignment.PSObject.Properties["TierReason"]) { $Assignment.TierReason } else { $null }
                     ScopeType                 = if ($ImpactContext.PSObject.Properties["ScopeType"]) { $ImpactContext.ScopeType } else { "Unknown" }
                     Environment               = if ($ImpactContext.PSObject.Properties["Environment"]) { $ImpactContext.Environment } else { "Unknown" }
                     ObservedResources = if ($ImpactContext.PSObject.Properties["ObservedResources"]) { $ImpactContext.ObservedResources } else { $null }

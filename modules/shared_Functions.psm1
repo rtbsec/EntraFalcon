@@ -9538,6 +9538,213 @@ function Get-AzureRoleBaseImpact {
     }
 }
 
+# Tests an ARM operation against RBAC permission patterns the way Azure does: case-insensitive, with '*' spanning path segments.
+function Test-AzureRbacPatternMatch {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Operation,
+        [Parameter(Mandatory = $false)]
+        [string[]]$Patterns = @()
+    )
+
+    foreach ($pattern in @($Patterns)) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
+        $expression = '^' + ([regex]::Escape($pattern.Trim()) -replace '\\\*', '.*') + '$'
+        if ([regex]::IsMatch($Operation, $expression, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+# An operation is effectively granted when an allow pattern matches it and no exclusion pattern does.
+function Test-AzureRbacOperationGranted {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Operation,
+        [Parameter(Mandatory = $false)]
+        [string[]]$Allow = @(),
+        [Parameter(Mandatory = $false)]
+        [string[]]$Deny = @()
+    )
+
+    if (-not (Test-AzureRbacPatternMatch -Operation $Operation -Patterns $Allow)) { return $false }
+    return (-not (Test-AzureRbacPatternMatch -Operation $Operation -Patterns $Deny))
+}
+
+# Turns a permission pattern into concrete sample operations so wildcard grants can be tested against exclusions.
+function Get-AzureRbacPatternProbes {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Pattern,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Verbs
+    )
+
+    $probes = [System.Collections.Generic.List[string]]::new()
+    $trimmed = $Pattern.Trim()
+    if ($trimmed.EndsWith('*')) {
+        $prefix = $trimmed.Substring(0, $trimmed.Length - 1).TrimEnd('/') -replace '\*', 'efprobe'
+        foreach ($verb in $Verbs) {
+            $probe = if ([string]::IsNullOrEmpty($prefix)) { "Microsoft.EfProbe/efprobe/$verb" } else { "$prefix/efprobe/$verb" }
+            [void]$probes.Add($probe)
+        }
+    } else {
+        [void]$probes.Add(($trimmed -replace '\*', 'efprobe'))
+    }
+
+    return $probes
+}
+
+# Resolves the tier of an Azure role: the curated rating first, then a tier derived from the role's permissions.
+function Resolve-AzureRoleTier {
+    param (
+        [Parameter(Mandatory = $false)]
+        [string]$RoleDefinitionId
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RoleDefinitionId)) {
+        if ($GLOBALAzureRoleRating -and $GLOBALAzureRoleRating.ContainsKey($RoleDefinitionId)) {
+            return [pscustomobject]@{ Tier = $GLOBALAzureRoleRating[$RoleDefinitionId]; Source = 'Rated'; Reason = 'curated role rating' }
+        }
+
+        if ($GLOBALAzureDerivedRoleTiers -and $GLOBALAzureDerivedRoleTiers.ContainsKey($RoleDefinitionId)) {
+            $derived = $GLOBALAzureDerivedRoleTiers[$RoleDefinitionId]
+            if ($null -ne $derived -and [string]$derived.Tier -ne '?') {
+                return [pscustomobject]@{ Tier = $derived.Tier; Source = 'Derived'; Reason = $derived.Reason }
+            }
+        }
+    }
+
+    return [pscustomobject]@{ Tier = '?'; Source = 'Unknown'; Reason = 'no rating and no permission data' }
+}
+
+# Derives a curated-scale tier (0-3) from an Azure role's permissions for roles missing from GLOBALAzureRoleRating.
+function Get-AzureRoleTierFromPermissions {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object[]]$Permissions
+    )
+
+    $actions = [System.Collections.Generic.List[string]]::new()
+    $notActions = [System.Collections.Generic.List[string]]::new()
+    $dataActions = [System.Collections.Generic.List[string]]::new()
+    $notDataActions = [System.Collections.Generic.List[string]]::new()
+    foreach ($block in @($Permissions)) {
+        if ($null -eq $block) { continue }
+        foreach ($entry in @($block.actions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$actions.Add([string]$entry) } }
+        foreach ($entry in @($block.notActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$notActions.Add([string]$entry) } }
+        foreach ($entry in @($block.dataActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$dataActions.Add([string]$entry) } }
+        foreach ($entry in @($block.notDataActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$notDataActions.Add([string]$entry) } }
+    }
+
+    if ($actions.Count -eq 0 -and $dataActions.Count -eq 0) {
+        return [pscustomobject]@{ Tier = '?'; Reason = 'no permission data' }
+    }
+
+    $allow = $actions.ToArray()
+    $deny = $notActions.ToArray()
+
+    foreach ($operation in @(
+        'Microsoft.Authorization/roleAssignments/write',
+        'Microsoft.Authorization/roleDefinitions/write',
+        'Microsoft.Authorization/elevateAccess/action'
+    )) {
+        if (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny) {
+            return [pscustomobject]@{ Tier = 0; Reason = $operation }
+        }
+    }
+
+    $unrestrictedWrite = $true
+    foreach ($operation in @('Microsoft.Compute/virtualMachines/write', 'Microsoft.Storage/storageAccounts/write', 'Microsoft.Resources/deployments/write')) {
+        if (-not (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny)) { $unrestrictedWrite = $false; break }
+    }
+    if ($unrestrictedWrite) {
+        return [pscustomobject]@{ Tier = 0; Reason = 'unrestricted write across resource providers' }
+    }
+
+    foreach ($operation in @(
+        'Microsoft.Compute/virtualMachines/runCommand/action',
+        'Microsoft.Compute/virtualMachines/extensions/write',
+        'Microsoft.Compute/virtualMachines/write',
+        'Microsoft.HybridCompute/machines/extensions/write',
+        'Microsoft.ManagedIdentity/userAssignedIdentities/assign/action',
+        'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write',
+        'Microsoft.KeyVault/vaults/write',
+        'Microsoft.KeyVault/vaults/accessPolicies/write',
+        'Microsoft.Storage/storageAccounts/listKeys/action',
+        'Microsoft.Storage/storageAccounts/write',
+        'Microsoft.Web/sites/host/listkeys/action',
+        'Microsoft.Web/sites/config/list/action',
+        'Microsoft.Web/sites/publishxml/action',
+        'Microsoft.Web/sites/write',
+        'Microsoft.ContainerService/managedClusters/listClusterAdminCredential/action',
+        'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action',
+        'Microsoft.ContainerRegistry/registries/push/write',
+        'Microsoft.Automation/automationAccounts/runbooks/write',
+        'Microsoft.Logic/workflows/write',
+        'Microsoft.Sql/servers/administrators/write',
+        'Microsoft.RecoveryServices/vaults/write',
+        'Microsoft.Network/networkSecurityGroups/write',
+        'Microsoft.Security/policies/write'
+    )) {
+        if (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny) {
+            return [pscustomobject]@{ Tier = 1; Reason = $operation }
+        }
+    }
+
+    # Data-plane access is access to the underlying data; only metadata reads are excluded. Secret values need getSecret, not read.
+    $metadataOnlyDataOperations = @(
+        '*/readMetadata/action',
+        'Microsoft.KeyVault/vaults/*/read',
+        'Microsoft.ContainerRegistry/registries/catalog/read',
+        'Microsoft.ContainerRegistry/registries/repositories/metadata/read'
+    )
+    $dataAllow = $dataActions.ToArray()
+    $dataDeny = $notDataActions.ToArray()
+    $metadataDataGranted = $false
+    foreach ($pattern in $dataAllow) {
+        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read', 'action', 'write'))) {
+            if (-not (Test-AzureRbacOperationGranted -Operation $probe -Allow $dataAllow -Deny $dataDeny)) { continue }
+            if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $metadataOnlyDataOperations) {
+                $metadataDataGranted = $true
+                continue
+            }
+            return [pscustomobject]@{ Tier = 1; Reason = "data access: $pattern" }
+        }
+    }
+
+    # Operations that Microsoft ships inside reader roles and that grant no access to resources or their data
+    $nonPrivilegedOperations = @('Microsoft.Support/*', 'Microsoft.Insights/alertRules/*')
+    foreach ($pattern in $allow) {
+        if ($pattern.Trim() -imatch '/read$') { continue }
+        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('write', 'delete', 'action'))) {
+            if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $nonPrivilegedOperations) { continue }
+            if (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny) {
+                return [pscustomobject]@{ Tier = 1; Reason = "unrecognized write or action: $pattern" }
+            }
+        }
+    }
+
+    if (Test-AzureRbacOperationGranted -Operation 'Microsoft.EfProbe/efprobe/read' -Allow $allow -Deny $deny) {
+        return [pscustomobject]@{ Tier = 2; Reason = 'broad read access' }
+    }
+
+    $narrowReadGranted = $metadataDataGranted
+    foreach ($pattern in $allow) {
+        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read'))) {
+            if ($probe -imatch '/read$' -and (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny)) { $narrowReadGranted = $true; break }
+        }
+        if ($narrowReadGranted) { break }
+    }
+    if ($narrowReadGranted) {
+        return [pscustomobject]@{ Tier = 3; Reason = 'narrow read access' }
+    }
+
+    return [pscustomobject]@{ Tier = 3; Reason = 'no effective permissions' }
+}
+
 function Get-AzureRoleEnvironmentClassification {
     param(
         [Parameter(Mandatory = $false)]
@@ -10431,9 +10638,10 @@ function Get-AllAzureIAMAssignmentsNative {
     
         # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
         $roleHashTable[$objectId] = @{
-            RoleName = $roleName
-            RoleType = $roleType
-            RoleId   = $objectId
+            RoleName    = $roleName
+            RoleType    = $roleType
+            RoleId      = $objectId
+            Permissions = $_.properties.permissions
         }
     }
 
@@ -10449,12 +10657,22 @@ function Get-AllAzureIAMAssignmentsNative {
     
         # Store the values in the hashtable (ObjectId as the key, RoleName as the value)
         $roleHashTable[$objectId] = @{
-            RoleName = $roleName
-            RoleType = $roleType
-            RoleId   = $objectId
+            RoleName    = $roleName
+            RoleType    = $roleType
+            RoleId      = $objectId
+            Permissions = $_.properties.permissions
         }
     }
     Write-Log -Level Debug -Message "Got $($roleHashTable.count) role definitions"
+
+    # Derive a tier from the permissions of every role the curated rating table does not cover
+    $global:GLOBALAzureDerivedRoleTiers = @{}
+    foreach ($roleEntry in $roleHashTable.Values) {
+        $roleDefinitionId = [string]$roleEntry.RoleId
+        if ([string]::IsNullOrWhiteSpace($roleDefinitionId) -or $GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) { continue }
+        $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId] = Get-AzureRoleTierFromPermissions -Permissions @($roleEntry.Permissions)
+    }
+    Write-Log -Level Debug -Message "Derived a tier from permissions for $($global:GLOBALAzureDerivedRoleTiers.Count) unrated role definitions"
 
 
     foreach ($subscription in $subscriptions) {       
@@ -10524,13 +10742,8 @@ function Get-AllAzureIAMAssignmentsNative {
             $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
 
 
-            if ($GLOBALAzureRoleRating.ContainsKey($RoleDetails.RoleId)) {
-                # If the RoleDefinition ID is found, return it's Tier-Level
-                $RoleTier = $GLOBALAzureRoleRating[$RoleDetails.RoleId]
-            } else {
-                # Set to ? if not assigned to a tier level
-                $RoleTier = "?"
-            }
+            $TierResolution = Resolve-AzureRoleTier -RoleDefinitionId ([string]$RoleDetails.RoleId)
+            $RoleTier = $TierResolution.Tier
 
             # Prefer an explicit origin-roleAssignment match. Only fall back to
             # the composite key when ARM did not expose an origin assignment id.
@@ -10552,6 +10765,8 @@ function Get-AllAzureIAMAssignmentsNative {
                 RoleDefinitionName = $RoleDetails.RoleName
                 RoleType           = $RoleDetails.RoleType
                 RoleTier           = $RoleTier
+                TierSource         = $TierResolution.Source
+                TierReason         = $TierResolution.Reason
                 RawScope           = $rawScope
                 Scope              = $resolvedScope
                 Conditions         = $hasCondition 
@@ -10588,19 +10803,16 @@ function Get-AllAzureIAMAssignmentsNative {
                 $RoleDetails = $roleHashTable[$roleId]
                 $resolvedScope = Resolve-AzureIamScopePath -Scope $_.properties.scope
                 $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
-                if ($GLOBALAzureRoleRating.ContainsKey($RoleDetails.RoleId)) {
-                    # If the RoleDefinition ID is found, return it's Tier-Level
-                    $RoleTier = $GLOBALAzureRoleRating[$RoleDetails.RoleId]
-                } else {
-                    # Set to ? if not assigned to a tier level
-                    $RoleTier = "?"
-                }
+                $TierResolution = Resolve-AzureRoleTier -RoleDefinitionId ([string]$RoleDetails.RoleId)
+                $RoleTier = $TierResolution.Tier
                 [PSCustomObject]@{
                     ObjectId          = $_.properties.principalId
                     RoleDefinitionId   = $RoleDetails.RoleId
                     RoleDefinitionName = $RoleDetails.RoleName
                     RoleType           = $RoleDetails.RoleType
                     RoleTier           = $RoleTier
+                    TierSource         = $TierResolution.Source
+                    TierReason         = $TierResolution.Reason
                     RawScope           = [string]$_.properties.scope
                     Scope              = $resolvedScope
                     Conditions         = $hasCondition 
@@ -10642,6 +10854,8 @@ function Get-AllAzureIAMAssignmentsNative {
                     Scope = $assignment.Scope
                     RoleType = $assignment.RoleType
                     RoleTier = $assignment.RoleTier
+                    TierSource = $assignment.TierSource
+                    TierReason = $assignment.TierReason
                     ScopeType = $impactContext.ScopeType
                     Environment = $impactContext.Environment
                     ObservedResources = $impactContext.ObservedResources
@@ -13437,6 +13651,7 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALAuthParameters -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALEntraRoleRating -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleRating -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureDerivedRoleTiers -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleImpactPolicy -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALImpactScore -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMsGraphAccessToken -ErrorAction SilentlyContinue
@@ -13763,4 +13978,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleBaseImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Merge-HigherImpact,Get-AzureImpactLevel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleBaseImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-AzureRoleTierFromPermissions,Resolve-AzureRoleTier,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Merge-HigherImpact,Get-AzureImpactLevel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
