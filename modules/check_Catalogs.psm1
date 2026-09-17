@@ -687,7 +687,7 @@ function Get-CatalogExistingRoleInfo {
         $roleOriginId = if ($role) { [string]$role.originId } else { '' }
         $roleDefinitionMatch = [regex]::Match($roleOriginId, '/roleDefinitions/([^/]+)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
         $roleDefinitionId = if ($roleDefinitionMatch.Success) { $roleDefinitionMatch.Groups[1].Value } elseif ([string]::IsNullOrWhiteSpace($roleOriginId)) { '' } else { ($roleOriginId.TrimEnd('/') -split '/')[-1] }
-        $tierValue = if (-not [string]::IsNullOrWhiteSpace($roleDefinitionId) -and $GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) { $GLOBALAzureRoleRating[$roleDefinitionId] } else { '?' }
+        $tierValue = (Resolve-AzureRoleTier -RoleDefinitionId $roleDefinitionId).Tier
         $tier = ConvertTo-CatalogTierLabel $tierValue
         $impact = switch ($tier) {
             'Tier-0' { $GLOBALImpactScore['AzureRoleTier0'] }

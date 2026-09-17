@@ -1590,7 +1590,7 @@ function Invoke-CheckAccessPackages {
         } elseif ($originSystem -match "Azure|Arm|Management") {
             # AzureResources roles expose the role definition in role.originId.
             $roleDefinitionId = Get-AccessPackageAzureRoleDefinitionId -OriginId ([string](Get-AccessPackageObjectValue -Object $role -Names @("originId")))
-            $roleTierValue = if (-not [string]::IsNullOrWhiteSpace($roleDefinitionId) -and $GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) { $GLOBALAzureRoleRating[$roleDefinitionId] } else { "?" }
+            $roleTierValue = (Resolve-AzureRoleTier -RoleDefinitionId $roleDefinitionId).Tier
             $azureTier = ConvertTo-AccessPackageTierLabel -Tier $roleTierValue
             $azureImpactContext = Get-AzureRoleAssignmentImpact -RoleTier $roleTierValue -RoleName $roleName -RawScope $originId -TenantId $CurrentTenant.Id
             $impact = $azureImpactContext.AssignmentImpact
