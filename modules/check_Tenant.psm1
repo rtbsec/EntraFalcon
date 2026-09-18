@@ -285,7 +285,7 @@ function Format-AzurePrincipalRoleEvidence {
         }
         $maximumImpact = [int](($sparseEntries | Measure-Object -Property Impact -Maximum).Maximum)
         $sourceLabel = if ($source -eq 'GroupOwner') { 'Access as group owner' } else { 'Group-inherited access' }
-        $lineText = "$sourceLabel$evidenceSeparator$groupList${detailSeparator}highest impact $maximumImpact"
+        $lineText = "$sourceLabel$evidenceSeparator$groupList${detailSeparator}highest level $(Get-AzureImpactLevel -Impact $maximumImpact)"
         $roleLinesByText[$lineText] = [pscustomobject]@{
             Text = $lineText
             Impact = $maximumImpact
@@ -843,6 +843,37 @@ function Invoke-CheckTenant {
         }
 
         return @($entries)
+    }
+
+    function Get-AzurePrincipalRoleCount {
+        param([Parameter(Mandatory = $true)]$Principal)
+
+        $directRoles = @($Principal.AzureRoleDetails | Where-Object { $null -ne $_ })
+        $eligibleRoles = @($Principal.EligibleAzureRoleDetails | Where-Object { $null -ne $_ })
+        $roleCount = $directRoles.Count + $eligibleRoles.Count
+        if ($roleCount -eq 0) {
+            if ($Principal.PSObject.Properties['AzureRolesDirect']) {
+                $roleCount = Get-IntSafe $Principal.AzureRolesDirect
+            } else {
+                $roleCount = Get-IntSafe $Principal.AzureRoles
+            }
+        }
+
+        $missingGroupCount = $false
+        foreach ($group in @($Principal.GroupMember) + @($Principal.GroupOwner)) {
+            if ($null -eq $group) { continue }
+            $groupRoleCount = (Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -IncludeEligible).RoleCount
+            $roleCount += $groupRoleCount
+            if ($groupRoleCount -eq 0 -and $group.Id -and $AzureGroupExposureImpactIndex.ContainsKey([string]$group.Id) -and
+                (Get-IntSafe $AzureGroupExposureImpactIndex[[string]$group.Id]) -gt 0) {
+                $missingGroupCount = $true
+            }
+        }
+
+        if ($missingGroupCount -or ($roleCount -eq 0 -and (Get-AzurePrincipalExposure -Principal $Principal).Impact -gt 0)) {
+            return '?'
+        }
+        return $roleCount
     }
 
     function Write-CapHardFailureTrace {
@@ -6336,7 +6367,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Publisher Name" = $app.PublisherName
                 "Role Count" = $roleCount
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Roles" = $roleDisplay
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -6820,12 +6851,12 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $app
+            $roleCount = Get-AzurePrincipalRoleCount -Principal $app
             $entAzureAffected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
-                "Tier 0 Azure Roles" = $tier0Count
-                "Tier 1 Azure Roles" = $tier1Count
-                "Max Azure Impact" = $azureExposure.Impact
-                "Azure Roles" = $roleDisplay
+                "Azure Roles" = $roleCount
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
+                "Azure Access Summary" = $roleDisplay
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
@@ -7838,6 +7869,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $tier0Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "0" }).Count
             $tier1Count = @($azureRoleEntries | Where-Object { (Get-NormalizedRoleTierLabel -RoleTier $_.Role.RoleTier) -eq "1" }).Count
             $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $agentIdentity
+            $roleCount = Get-AzurePrincipalRoleCount -Principal $agentIdentity
             $parentPrincipal = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
@@ -7849,10 +7881,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
                 "Publisher Name" = $agentIdentity.PublisherName
-                "Tier 0 Azure Roles" = $tier0Count
-                "Tier 1 Azure Roles" = $tier1Count
-                "Max Azure Impact" = $azureExposure.Impact
-                "Azure Roles" = $roleDisplay
+                "Azure Roles" = $roleCount
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
+                "Azure Access Summary" = $roleDisplay
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
@@ -8409,6 +8440,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             }
 
             $roleDisplay = Get-AzurePrincipalRoleEvidence -Principal $agentIdentity
+            $roleCount = Get-AzurePrincipalRoleCount -Principal $agentIdentity
             $parentPrincipal = "-"
             if (-not [string]::IsNullOrWhiteSpace("$($agentIdentity.ParentBlueprintPrincipalId)")) {
                 $parentPrincipalName = $agentIdentity.ParentBlueprintPrincipalDisplayName
@@ -8419,10 +8451,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $agt009Affected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($agentIdentity.Id)`" target=`"_blank`">$($agentIdentity.DisplayName)</a>"
                 "Parent Blueprint Principal" = $parentPrincipal
-                "Tier 0 Azure Roles" = $tier0Count
-                "Tier 1 Azure Roles" = $tier1Count
-                "Max Azure Impact" = $azureExposure.Impact
-                "Azure Roles" = $roleDisplay
+                "Azure Roles" = $roleCount
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
+                "Azure Access Summary" = $roleDisplay
                 "_SortAzureImpact" = $azureExposure.Impact
             })
         }
@@ -8613,7 +8644,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Azure Access Summary" = Get-AzurePrincipalRoleEvidence -Principal $user
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -8753,7 +8784,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Parent Blueprint Principal" = $parentBlueprintPrincipal
                 "Parent Agent Identity" = $parentAgentIdentity
                 "Azure Roles" = $user.AzureRoles
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Azure Access Summary" = Get-AzurePrincipalRoleEvidence -Principal $user
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -9223,7 +9254,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $maiAzureAffected.Add([pscustomobject][ordered]@{
                 "DisplayName" = "<a href=`"ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($app.Id)`" target=`"_blank`">$($app.DisplayName)</a>"
                 "Role Count" = $roleCount
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Azure Roles" = $roleDisplay
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -11188,7 +11219,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "OnPrem" = $user.OnPrem
                 "Azure Roles" = $user.AzureRoles
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -11236,7 +11267,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $usr009Affected.Add([pscustomobject][ordered]@{
                     "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                     "Azure Roles" = $user.AzureRoles
-                    "Max Azure Impact" = $azureExposure.Impact
+                    "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                     "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
                     "_SortAzureImpact" = $azureExposure.Impact
                 })
@@ -11306,7 +11337,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$displayName</a>"
                 "Protected" = $user.Protected
                 "Azure Roles" = $user.AzureRoles
-                "Max Azure Impact" = $azureExposure.Impact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $azureExposure.Impact
                 "Azure Access Summary" = $(Get-AzurePrincipalRoleEvidence -Principal $user)
                 "_SortAzureImpact" = $azureExposure.Impact
             })
@@ -11623,7 +11654,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Entra Roles" = $group.EntraRoles
                 "Entra Tier" = $group.EntraMaxTier
                 "Azure Roles" = $group.AzureRoles
-                "Max Azure Impact" = $entry.AzureExposureImpact
+                "Max Azure Level" = Get-AzureImpactLevel -Impact $entry.AzureExposureImpact
                 "Intune Roles" = $group.IntuneRoles
                 "CAPs" = $group.CAPs
             }
