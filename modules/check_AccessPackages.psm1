@@ -532,6 +532,21 @@ function Get-AccessPackageResourceType {
     return $labels.Other
 }
 
+function Get-AccessPackageAzureRoleDefinitionId {
+    param([string]$OriginId)
+
+    if ([string]::IsNullOrWhiteSpace($OriginId)) { return "" }
+    $roleDefinitionMatch = [regex]::Match($OriginId, "/roleDefinitions/([^/]+)$", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($roleDefinitionMatch.Success) { return $roleDefinitionMatch.Groups[1].Value }
+    return ($OriginId.TrimEnd("/") -split "/")[-1]
+}
+
+function Resolve-AccessPackageAzureRoleTier {
+    param([string]$RoleDefinitionId)
+
+    return (Resolve-AzureRoleTier -RoleDefinitionId $RoleDefinitionId)
+}
+
 # Builds lightweight resource type counts for target annotations.
 function Get-AccessPackageResourceCounts {
     param(
@@ -1420,16 +1435,6 @@ function Invoke-CheckAccessPackages {
         return 1
     }
 
-    # Extracts an Azure role definition ID from a resource ID.
-    function Get-AccessPackageAzureRoleDefinitionId {
-        param([string]$OriginId)
-
-        if ([string]::IsNullOrWhiteSpace($OriginId)) { return "" }
-        $roleDefinitionMatch = [regex]::Match($OriginId, "/roleDefinitions/([^/]+)$", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if ($roleDefinitionMatch.Success) { return $roleDefinitionMatch.Groups[1].Value }
-        return ($OriginId.TrimEnd("/") -split "/")[-1]
-    }
-
     # Resolves target display names, links, and object kind.
     function Get-AccessPackageTargetInfo {
         param($Target)
@@ -1589,10 +1594,10 @@ function Invoke-CheckAccessPackages {
             $entraRoles = 1
         } elseif ($originSystem -match "Azure|Arm|Management") {
             # AzureResources roles expose the role definition in role.originId.
-            $roleDefinitionId = Get-AccessPackageAzureRoleDefinitionId -OriginId ([string](Get-AccessPackageObjectValue -Object $role -Names @("originId")))
-            $roleTierValue = (Resolve-AzureRoleTier -RoleDefinitionId $roleDefinitionId).Tier
+            $azureRoleDefinitionId = Get-AccessPackageAzureRoleDefinitionId -OriginId ([string](Get-AccessPackageObjectValue -Object $role -Names @("originId")))
+            $roleTierValue = (Resolve-AccessPackageAzureRoleTier -RoleDefinitionId $azureRoleDefinitionId).Tier
             $azureTier = ConvertTo-AccessPackageTierLabel -Tier $roleTierValue
-            $azureImpactContext = Get-AzureRoleAssignmentImpact -RoleTier $roleTierValue -RoleName $roleName -RawScope $originId -TenantId $CurrentTenant.Id
+            $azureImpactContext = Get-AzureRoleAssignmentImpact -RoleTier $roleTierValue -RoleName $roleName -RawScope $originId -TenantId $CurrentTenant.Id -RoleDefinitionId $azureRoleDefinitionId
             $impact = $azureImpactContext.AssignmentImpact
             $azureImpact = $azureImpactContext.AssignmentImpact
             $azureRoles = 1

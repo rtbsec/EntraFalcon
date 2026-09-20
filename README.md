@@ -404,7 +404,11 @@ The goal is to assign a higher impact score to users with more powerful roles (e
 <details>
 <summary>Azure Roles</summary>
 
-EntraFalcon starts with the role tier and adjusts its impact using three kinds of context:
+EntraFalcon uses curated ratings for the roles listed below. When a referenced built-in or custom role has no curated rating, EntraFalcon derives a tier from its permissions. If a restriction cannot be proven from the available permissions or conditions, the role keeps the more cautious, higher-risk rating.
+
+Base impacts are Tier-0 `300`, Tier-1 `100`, Tier-2 `50`, Tier-3 `10`, and unknown `50`. Selected high-impact Tier-1 role IDs use a base of `125`. Context is applied afterward, and the resulting exposure levels are Medium `50+`, High `80+`, and Critical `200+`.
+
+EntraFalcon adjusts the base impact using three kinds of context:
 
 - **Scope:** Assignments covering the tenant root, management groups, or subscriptions have more impact than assignments on a resource group or individual resource. The tenant root receives reserved headroom above the role's base score.
 - **Environment:** Common naming patterns such as `prod`, `prd`, `dev`, `test`, and `uat` help distinguish environments. Likely production increases the score, likely nonproduction lowers it, and mixed or unknown names are treated neutrally.
@@ -419,6 +423,10 @@ This model helps prioritize Azure role assignments for review. If scope or inven
 | Contributor                                                        | 0          | b24988ac-6180-42a0-ab88-20f7382dd24c   |
 | Role Based Access Control Administrator                            | 0          | f58310d9-a9f6-439a-9e8d-f62e7b41a168   |
 | Reservations Administrator                                         | 0          | a8889054-8d42-49c9-bc1c-52486c10e7cd   |
+| Azure Resilience Management Drills Administrator                   | 0          | c914561b-1575-4601-af9c-a1356bf59818   |
+| Azure Resilience Management Drills Assets Administrator            | 0          | 5a2ec2f1-2375-4950-9906-59ec1d979249   |
+| Azure Resilience Management Drills Target Resource Administrator   | 0          | e4c7f620-39b8-4688-bba2-70dd82ef367b   |
+| Azure Resilience Management Goals Administrator                    | 0          | a2b7cc47-30ec-462f-a2f4-9ac6e1c266af   |
 | Security Admin                                                     | 1          | fb1c8493-542b-48eb-b624-b4c8fea62acd   |
 | Virtual Machine Contributor                                        | 1          | 9980e02c-c2be-4d73-94e8-173b1dc7cf3c   |
 | Virtual Machine Data Access Administrator                          | 1          | 66f75aeb-eabe-4b70-9f1e-c350c4c9ad04   |
@@ -457,6 +465,7 @@ This model helps prioritize Azure role assignments for review. If scope or inven
 | Backup Contributor                                                 | 1          | 5e467623-bb1f-42f4-a55d-6e525e11384b   |
 | Storage File Data Privileged Contributor                           | 1          | 69566ab7-960f-475b-8e7c-b3118f30c6bd   |
 | Network Contributor                                                | 1          | 4d97b98b-1d4f-4787-a291-c67834d212e7   |
+| Azure Programmable Connectivity Gateway User                       | 1          | 609c0c20-e0a0-4a71-b99f-e7e755ac493d   |
 | Reader                                                             | 2          | acdd72a7-3385-48ef-bd42-f606fba81ae7   |
 | SecurityReader                                                     | 2          | 39bc4728-0917-49c7-9d2c-d95423bc2eb4   |
 | Key Vault Reader                                                   | 2          | 21090545-7ca7-4776-b22c-e363652d74d2   |
@@ -465,7 +474,7 @@ This model helps prioritize Azure role assignments for review. If scope or inven
 | Backup Reader                                                      | 2          | a795c7a0-d4a2-40c1-ae25-d81f01202912   |
 | AcrPull                                                            | 2          | 7f951dda-4ed3-4680-a7ca-43fe172d538d   |
 | Container Registry Repository Reader                               | 2          | b93aa761-3e63-49ed-ac28-beffa264f7ac   |
-| Virtual Machine User Login                                         | 3          | fb879df8-f326-4884-b1cf-06f3ad86be52   |
+| Virtual Machine User Login                                         | 2          | fb879df8-f326-4884-b1cf-06f3ad86be52   |
 | Desktop Virtualization User                                        | 3          | 1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63   |
 | Management Group Reader                                            | 3          | ac63b705-f282-497d-ac71-919bf39d939d   |
 | Azure File Sync Reader                                             | 3          | 754c1a27-40dc-4708-8ad4-2bffdeee09e8   |

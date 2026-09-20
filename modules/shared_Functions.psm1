@@ -9161,6 +9161,10 @@ $global:GLOBALAzureRoleRating = @{
     "b24988ac-6180-42a0-ab88-20f7382dd24c" = 0 #Contributor
     "f58310d9-a9f6-439a-9e8d-f62e7b41a168" = 0 #Role Based Access Control Administrator
     "a8889054-8d42-49c9-bc1c-52486c10e7cd" = 0 #Reservations Administrator
+    "c914561b-1575-4601-af9c-a1356bf59818" = 0 #Azure Resilience Management Drills Administrator
+    "5a2ec2f1-2375-4950-9906-59ec1d979249" = 0 #Azure Resilience Management Drills Assets Administrator
+    "e4c7f620-39b8-4688-bba2-70dd82ef367b" = 0 #Azure Resilience Management Drills Target Resource Administrator
+    "a2b7cc47-30ec-462f-a2f4-9ac6e1c266af" = 0 #Azure Resilience Management Goals Administrator
     "fb1c8493-542b-48eb-b624-b4c8fea62acd" = 1 #Security Admin
     "9980e02c-c2be-4d73-94e8-173b1dc7cf3c" = 1 #Virtual Machine Contributor
     "66f75aeb-eabe-4b70-9f1e-c350c4c9ad04" = 1 #Virtual Machine Data Access Administrator
@@ -9199,6 +9203,7 @@ $global:GLOBALAzureRoleRating = @{
     "5e467623-bb1f-42f4-a55d-6e525e11384b" = 1 #Backup Contributor
     "69566ab7-960f-475b-8e7c-b3118f30c6bd" = 1 #Storage File Data Privileged Contributor
     "4d97b98b-1d4f-4787-a291-c67834d212e7" = 1 #Network Contributor
+    "609c0c20-e0a0-4a71-b99f-e7e755ac493d" = 1 #Azure Programmable Connectivity Gateway User; data API access is absent from the ARM permission list
     "acdd72a7-3385-48ef-bd42-f606fba81ae7" = 2 #Reader
     "39bc4728-0917-49c7-9d2c-d95423bc2eb4" = 2 #SecurityReader
     "21090545-7ca7-4776-b22c-e363652d74d2" = 2 #Key Vault Reader
@@ -9207,7 +9212,7 @@ $global:GLOBALAzureRoleRating = @{
     "a795c7a0-d4a2-40c1-ae25-d81f01202912" = 2 #Backup Reader
     "7f951dda-4ed3-4680-a7ca-43fe172d538d" = 2 #AcrPull
     "b93aa761-3e63-49ed-ac28-beffa264f7ac" = 2 #Container Registry Repository Reader
-    "fb879df8-f326-4884-b1cf-06f3ad86be52" = 3 #Virtual Machine User Login
+    "fb879df8-f326-4884-b1cf-06f3ad86be52" = 2 #Virtual Machine User Login
     "1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63" = 3 #Desktop Virtualization User
     "ac63b705-f282-497d-ac71-919bf39d939d" = 3 #Management Group Reader
     "754c1a27-40dc-4708-8ad4-2bffdeee09e8" = 3 #Azure File Sync Reader
@@ -9241,8 +9246,39 @@ $global:GLOBALAzureExposureLevels = @{
 }
 
 $global:GLOBALAzureRoleImpactPolicy = @{
-    Version = "2.5"
+    Version = "2.6"
     MaximumAssignmentFactor = 1.20
+    CriticalTier1BaseImpact = 125
+    CriticalTier1RoleIds = @{
+        "00482a5a-887f-4fb3-b363-3b7fe8e74483" = $true
+        "b86a8fe4-44ce-4948-aee5-eccb2c155cd7" = $true
+        "4633458b-17de-408a-b874-0445c86b69e6" = $true
+        "a4417e6f-fecd-4de8-b567-7b0420556985" = $true
+        "db79e9a7-68ee-4b58-9aeb-b90e7c24fcba" = $true
+        "14b46e9e-c2b7-41b4-b07b-48a6ebf60603" = $true
+        "17d1049b-9a84-46fb-8f53-869881c3d3ab" = $true
+        "81a9662b-bebf-436f-a333-f67b29880f12" = $true
+        "c12c1c16-33a1-487b-954d-41c89c60f349" = $true
+        "8b54135c-b56d-4d72-a534-26097cfdc8d8" = $true
+        "66f75aeb-eabe-4b70-9f1e-c350c4c9ad04" = $true
+        "e40ec5ca-96e0-45a2-b4ff-59039f2c2b59" = $true
+        "7e559ce2-48d7-4b27-9128-fa1b247f1308" = $true
+        "1c0163c0-47e6-4577-8991-ea5c82e286e4" = $true
+        "a6333a3e-0164-44c3-b281-7a577aff287f" = $true
+        "b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b" = $true
+        "0ab0b1a8-8aac-4efd-b8c2-3ee1fb270be8" = $true
+        "8393591c-06b9-48a2-a542-1bd6b377f6a2" = $true
+        "9980e02c-c2be-4d73-94e8-173b1dc7cf3c" = $true
+        "3498e952-d568-435e-9b2c-8d77e338d7f7" = $true
+        "a7ffa36f-339b-4b5c-8bdf-e2c188b2c0eb" = $true
+        "dffb1e0c-446f-4dde-a09f-99eb5cc68b96" = $true
+        "f353d9bd-d4a6-484e-a77a-8050b599b867" = $true
+        "87a39d53-fc1b-424a-814c-f7e04687dc9e" = $true
+        "de139f84-1756-47ae-9be6-808fbbe84772" = $true
+        "48b40c6e-82e0-4eb3-90d5-19e40f49b624" = $true
+        "b748a06d-6150-4f8a-aaa9-ce3940cd96cb" = $true
+        "f25e0fa2-a7c8-4377-a976-54943a77a395" = $true
+    }
     ScopeFactors = @{
         Root            = 1.20
         ManagementGroup = 0.90
@@ -9526,12 +9562,23 @@ function Invoke-EntraRoleProcessing {
 function Get-AzureRoleBaseImpact {
     param(
         [Parameter(Mandatory = $false)]
-        [object]$RoleTier
+        [object]$RoleTier,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoleDefinitionId
     )
 
     switch ([string]$RoleTier) {
         { $_ -in @("0", "Tier-0") } { return [int]$GLOBALImpactScore["AzureRoleTier0"] }
-        { $_ -in @("1", "Tier-1") } { return [int]$GLOBALImpactScore["AzureRoleTier1"] }
+        { $_ -in @("1", "Tier-1") } {
+            if (-not [string]::IsNullOrWhiteSpace($RoleDefinitionId)) {
+                $normalizedRoleDefinitionId = ($RoleDefinitionId.Trim().TrimEnd('/') -split '/')[-1]
+                if ($GLOBALAzureRoleImpactPolicy.CriticalTier1RoleIds.ContainsKey($normalizedRoleDefinitionId)) {
+                    return [int]$GLOBALAzureRoleImpactPolicy.CriticalTier1BaseImpact
+                }
+            }
+            return [int]$GLOBALImpactScore["AzureRoleTier1"]
+        }
         { $_ -in @("2", "Tier-2") } { return [int]$GLOBALImpactScore["AzureRoleTier2"] }
         { $_ -in @("3", "Tier-3") } { return [int]$GLOBALImpactScore["AzureRoleTier3"] }
         default { return [int]$GLOBALImpactScore["AzureRoleTier?"] }
@@ -9611,8 +9658,22 @@ function Resolve-AzureRoleTier {
 
         if ($GLOBALAzureDerivedRoleTiers -and $GLOBALAzureDerivedRoleTiers.ContainsKey($RoleDefinitionId)) {
             $derived = $GLOBALAzureDerivedRoleTiers[$RoleDefinitionId]
-            if ($null -ne $derived -and [string]$derived.Tier -ne '?') {
-                return [pscustomobject]@{ Tier = $derived.Tier; Source = 'Derived'; Reason = $derived.Reason }
+            if ($null -ne $derived) {
+                if ($global:GLOBALAzureRoleTierCacheStats) { $global:GLOBALAzureRoleTierCacheStats.CacheHits++ }
+                if ([string]$derived.Tier -ne '?') {
+                    return [pscustomobject]@{ Tier = $derived.Tier; Source = 'Derived'; Reason = $derived.Reason }
+                }
+                return [pscustomobject]@{ Tier = '?'; Source = 'Unknown'; Reason = 'no rating and no permission data' }
+            }
+        }
+
+        if ($GLOBALAzureRoleDefinitions -and $GLOBALAzureRoleDefinitions.ContainsKey($RoleDefinitionId)) {
+            [void](Update-AzureRoleTierCache -RoleDefinitionIds @($RoleDefinitionId) -SeedSource 'OnDemand')
+            if ($GLOBALAzureDerivedRoleTiers -and $GLOBALAzureDerivedRoleTiers.ContainsKey($RoleDefinitionId)) {
+                $derived = $GLOBALAzureDerivedRoleTiers[$RoleDefinitionId]
+                if ($null -ne $derived -and [string]$derived.Tier -ne '?') {
+                    return [pscustomobject]@{ Tier = $derived.Tier; Source = 'Derived'; Reason = $derived.Reason }
+                }
             }
         }
     }
@@ -9620,51 +9681,272 @@ function Resolve-AzureRoleTier {
     return [pscustomobject]@{ Tier = '?'; Source = 'Unknown'; Reason = 'no rating and no permission data' }
 }
 
-# Derives a curated-scale tier (0-3) from an Azure role's permissions for roles missing from GLOBALAzureRoleRating.
-function Get-AzureRoleTierFromPermissions {
-    param (
-        [Parameter(Mandatory = $false)]
-        [object[]]$Permissions
-    )
+# Returns an operator only at a word boundary, so attribute names cannot be split into Boolean tokens.
+function Get-AzureRoleConditionOperatorAt {
+    param([string]$Condition, [int]$Index)
 
-    $actions = [System.Collections.Generic.List[string]]::new()
-    $notActions = [System.Collections.Generic.List[string]]::new()
-    $dataActions = [System.Collections.Generic.List[string]]::new()
-    $notDataActions = [System.Collections.Generic.List[string]]::new()
-    foreach ($block in @($Permissions)) {
-        if ($null -eq $block) { continue }
-        foreach ($entry in @($block.actions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$actions.Add([string]$entry) } }
-        foreach ($entry in @($block.notActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$notActions.Add([string]$entry) } }
-        foreach ($entry in @($block.dataActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$dataActions.Add([string]$entry) } }
-        foreach ($entry in @($block.notDataActions)) { if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [void]$notDataActions.Add([string]$entry) } }
+    foreach ($entry in @(@('AND', 'And'), @('OR', 'Or'), @('NOT', 'Not'))) {
+        $word = [string]$entry[0]
+        $end = $Index + $word.Length
+        if ($end -gt $Condition.Length -or -not $Condition.Substring($Index, $word.Length).Equals($word, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ($end -lt $Condition.Length -and ([char]::IsLetterOrDigit($Condition[$end]) -or $Condition[$end] -eq '_')) { continue }
+        return [string]$entry[1]
     }
+    return $null
+}
 
-    if ($actions.Count -eq 0 -and $dataActions.Count -eq 0) {
-        return [pscustomobject]@{ Tier = '?'; Reason = 'no permission data' }
+# Splits Boolean structure without treating operators inside quoted strings, attributes, or value lists as syntax.
+function ConvertTo-AzureRoleConditionTokens {
+    param([string]$Condition)
+
+    if ([System.Text.Encoding]::UTF8.GetByteCount($Condition) -gt 65536) { return $null }
+    $tokens = [System.Collections.Generic.List[object]]::new()
+    $index = 0
+    while ($index -lt $Condition.Length) {
+        if ([char]::IsWhiteSpace($Condition[$index])) { $index++; continue }
+
+        $type = $null
+        $width = 1
+        switch ($Condition[$index]) {
+            '(' { $type = 'Open' }
+            ')' { $type = 'Close' }
+            '!' { $type = 'Not' }
+            '&' { if ($index + 1 -lt $Condition.Length -and $Condition[$index + 1] -eq '&') { $type = 'And'; $width = 2 } else { return $null } }
+            '|' { if ($index + 1 -lt $Condition.Length -and $Condition[$index + 1] -eq '|') { $type = 'Or'; $width = 2 } else { return $null } }
+        }
+        if ($null -eq $type) {
+            $type = Get-AzureRoleConditionOperatorAt -Condition $Condition -Index $index
+            if ($null -ne $type) { $width = if ($type -eq 'Or') { 2 } else { 3 } }
+        }
+        if ($null -ne $type) {
+            [void]$tokens.Add([pscustomobject]@{ Type = $type; Text = $null })
+            if ($tokens.Count -gt 2048) { return $null }
+            $index += $width
+            continue
+        }
+
+        $start = $index
+        $quote = [char]0
+        $braces = 0
+        $brackets = 0
+        while ($index -lt $Condition.Length) {
+            $character = $Condition[$index]
+            if ($quote -ne [char]0) {
+                if ($character -eq $quote) {
+                    if ($index + 1 -lt $Condition.Length -and $Condition[$index + 1] -eq $quote) { $index += 2; continue }
+                    $quote = [char]0
+                } elseif ($character -eq '\' -and $index + 1 -lt $Condition.Length -and $Condition[$index + 1] -eq $quote) {
+                    $index += 2
+                    continue
+                }
+                $index++
+                continue
+            }
+            if ($character -eq "'" -or $character -eq '"') { $quote = $character; $index++; continue }
+            if ($character -eq '{') { $braces++; $index++; continue }
+            if ($character -eq '}') { if ($braces -eq 0) { return $null }; $braces--; $index++; continue }
+            if ($character -eq '[') { $brackets++; $index++; continue }
+            if ($character -eq ']') { if ($brackets -eq 0) { return $null }; $brackets--; $index++; continue }
+            if ($braces -eq 0 -and $brackets -eq 0) {
+                if ($character -eq '(' -or $character -eq ')' -or $character -eq '!' -or $character -eq '&' -or $character -eq '|') { break }
+                if ($index -gt $start -and ([char]::IsWhiteSpace($Condition[$index - 1]) -or $Condition[$index - 1] -in @('}', ']', "'", '"'))) {
+                    if ($null -ne (Get-AzureRoleConditionOperatorAt -Condition $Condition -Index $index)) { break }
+                }
+            }
+            $index++
+        }
+        if ($quote -ne [char]0 -or $braces -ne 0 -or $brackets -ne 0) { return $null }
+        $atom = $Condition.Substring($start, $index - $start).Trim()
+        if ([string]::IsNullOrWhiteSpace($atom)) { return $null }
+        [void]$tokens.Add([pscustomobject]@{ Type = 'Atom'; Text = $atom })
+        if ($tokens.Count -gt 2048) { return $null }
     }
+    return ,$tokens.ToArray()
+}
 
-    $allow = $actions.ToArray()
-    $deny = $notActions.ToArray()
+# A bound is Any, None, or a finite set of role IDs that might satisfy the condition for assignment writes.
+function Get-AzureRoleConditionAtomBound {
+    param([string]$Text)
 
-    foreach ($operation in @(
-        'Microsoft.Authorization/roleAssignments/write',
-        'Microsoft.Authorization/roleDefinitions/write',
-        'Microsoft.Authorization/elevateAccess/action'
-    )) {
-        if (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny) {
-            return [pscustomobject]@{ Tier = 0; Reason = $operation }
+    $action = [regex]::Match($Text, "^\s*ActionMatches\s*\{\s*'([^']+)'\s*\}\s*$", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($action.Success) {
+        $operation = [string]$action.Groups[1].Value
+        if ($operation -cmatch '^[A-Za-z0-9./_-]+$') {
+            $matchesWrite = $operation.Equals('Microsoft.Authorization/roleAssignments/write', [System.StringComparison]::OrdinalIgnoreCase)
+            $kind = if ($matchesWrite) { 'Any' } else { 'None' }
+            return [pscustomobject]@{ Kind = $kind; Ids = @(); ActionTruth = $matchesWrite }
         }
     }
 
-    $unrestrictedWrite = $true
-    foreach ($operation in @('Microsoft.Compute/virtualMachines/write', 'Microsoft.Storage/storageAccounts/write', 'Microsoft.Resources/deployments/write')) {
-        if (-not (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny)) { $unrestrictedWrite = $false; break }
+    $roleIds = [regex]::Match($Text, '^\s*@Request\[Microsoft\.Authorization/roleAssignments:RoleDefinitionId\]\s*ForAnyOfAnyValues:GuidEquals\s*\{([^{}]*)\}\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($roleIds.Success) {
+        $ids = [System.Collections.Generic.List[string]]::new()
+        foreach ($rawId in ([string]$roleIds.Groups[1].Value -split ',')) {
+            $candidate = $rawId.Trim()
+            if ($candidate -cnotmatch '^([0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$') {
+                return [pscustomobject]@{ Kind = 'Any'; Ids = @(); ActionTruth = $null }
+            }
+            $id = ([guid]::Parse($candidate)).ToString('D')
+            if (-not $ids.Contains($id)) { [void]$ids.Add($id) }
+        }
+        if ($ids.Count -gt 0) { return [pscustomobject]@{ Kind = 'Set'; Ids = $ids.ToArray(); ActionTruth = $null } }
     }
-    if ($unrestrictedWrite) {
-        return [pscustomobject]@{ Tier = 0; Reason = 'unrestricted write across resource providers' }
-    }
+    return [pscustomobject]@{ Kind = 'Any'; Ids = @(); ActionTruth = $null }
+}
 
-    foreach ($operation in @(
+function Merge-AzureRoleConditionBounds {
+    param($Left, $Right, [string]$Operator)
+
+    if ($Operator -eq 'And') {
+        if ($Left.Kind -eq 'None' -or $Right.Kind -eq 'None') { return [pscustomobject]@{ Kind = 'None'; Ids = @(); ActionTruth = $null } }
+        if ($Left.Kind -eq 'Any') { return [pscustomobject]@{ Kind = $Right.Kind; Ids = @($Right.Ids); ActionTruth = $null } }
+        if ($Right.Kind -eq 'Any') { return [pscustomobject]@{ Kind = $Left.Kind; Ids = @($Left.Ids); ActionTruth = $null } }
+        $ids = @($Left.Ids | Where-Object { $Right.Ids -contains $_ })
+        $kind = if ($ids.Count -eq 0) { 'None' } else { 'Set' }
+        return [pscustomobject]@{ Kind = $kind; Ids = $ids; ActionTruth = $null }
+    }
+    if ($Left.Kind -eq 'Any' -or $Right.Kind -eq 'Any') { return [pscustomobject]@{ Kind = 'Any'; Ids = @(); ActionTruth = $null } }
+    if ($Left.Kind -eq 'None') { return [pscustomobject]@{ Kind = $Right.Kind; Ids = @($Right.Ids); ActionTruth = $null } }
+    if ($Right.Kind -eq 'None') { return [pscustomobject]@{ Kind = $Left.Kind; Ids = @($Left.Ids); ActionTruth = $null } }
+    $ids = [System.Collections.Generic.List[string]]::new()
+    foreach ($id in @($Left.Ids) + @($Right.Ids)) { if (-not $ids.Contains($id)) { [void]$ids.Add($id) } }
+    return [pscustomobject]@{ Kind = 'Set'; Ids = $ids.ToArray(); ActionTruth = $null }
+}
+
+function Read-AzureRoleConditionTerm {
+    param([hashtable]$State, [int]$Depth)
+
+    if ($State.Index -ge $State.Tokens.Count) { return $null }
+    $token = $State.Tokens[$State.Index]
+    if ($token.Type -eq 'Not') {
+        if ($Depth -ge 64) { return $null }
+        $State.Index++
+        $operand = Read-AzureRoleConditionTerm -State $State -Depth ($Depth + 1)
+        if ($null -eq $operand) { return $null }
+        if ($null -eq $operand.ActionTruth) { return [pscustomobject]@{ Kind = 'Any'; Ids = @(); ActionTruth = $null } }
+        $truth = -not [bool]$operand.ActionTruth
+        $kind = if ($truth) { 'Any' } else { 'None' }
+        return [pscustomobject]@{ Kind = $kind; Ids = @(); ActionTruth = $truth }
+    }
+    if ($token.Type -eq 'Open') {
+        if ($Depth -ge 64) { return $null }
+        $State.Index++
+        $inner = Read-AzureRoleConditionExpression -State $State -Depth ($Depth + 1)
+        if ($null -eq $inner -or $State.Index -ge $State.Tokens.Count -or $State.Tokens[$State.Index].Type -ne 'Close') { return $null }
+        $State.Index++
+        return $inner
+    }
+    if ($token.Type -ne 'Atom') { return $null }
+    $State.Index++
+    return Get-AzureRoleConditionAtomBound -Text $token.Text
+}
+
+function Read-AzureRoleConditionExpression {
+    param([hashtable]$State, [int]$Depth)
+
+    $bound = Read-AzureRoleConditionTerm -State $State -Depth $Depth
+    if ($null -eq $bound) { return $null }
+    $groupOperator = $null
+    while ($State.Index -lt $State.Tokens.Count -and $State.Tokens[$State.Index].Type -in @('And', 'Or')) {
+        $operator = [string]$State.Tokens[$State.Index].Type
+        if ($null -ne $groupOperator -and $operator -ne $groupOperator) { return $null }
+        $groupOperator = $operator
+        $State.Index++
+        $right = Read-AzureRoleConditionTerm -State $State -Depth $Depth
+        if ($null -eq $right) { return $null }
+        $bound = Merge-AzureRoleConditionBounds -Left $bound -Right $right -Operator $operator
+    }
+    return $bound
+}
+
+# Returns only role IDs proven to bound every role-assignment write path.
+function Get-AzureRoleAssignableRoleIds {
+    param (
+        [Parameter(Mandatory = $false)]
+        [string]$Condition
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Condition)) { return $null }
+    $tokens = ConvertTo-AzureRoleConditionTokens -Condition $Condition
+    if ($null -eq $tokens -or @($tokens).Count -eq 0) { return $null }
+    $state = @{ Tokens = @($tokens); Index = 0 }
+    $bound = Read-AzureRoleConditionExpression -State $state -Depth 0
+    if ($null -eq $bound -or $state.Index -ne $state.Tokens.Count -or $bound.Kind -ne 'Set' -or @($bound.Ids).Count -eq 0) { return $null }
+    return @($bound.Ids)
+}
+
+# A wildcard grant is Contributor-like only when its exclusions do not remove more than Contributor's.
+function Test-AzureRoleContributorLikePermissionBlock {
+    param([object]$Permission)
+
+    if ($null -eq $Permission -or @($Permission.actions) -notcontains '*') { return $false }
+    $contributorExclusions = @(
+        'Microsoft.Authorization/*/Delete',
+        'Microsoft.Authorization/*/Write',
+        'Microsoft.Authorization/elevateAccess/Action',
+        'Microsoft.Blueprint/blueprintAssignments/write',
+        'Microsoft.Blueprint/blueprintAssignments/delete',
+        'Microsoft.Compute/galleries/share/action',
+        'Microsoft.Purview/consents/write',
+        'Microsoft.Purview/consents/delete',
+        'Microsoft.Resources/deploymentStacks/manageDenySetting/action',
+        'Microsoft.Subscription/cancel/action',
+        'Microsoft.Subscription/enable/action'
+    )
+    foreach ($exclusion in @($Permission.notActions)) {
+        if ([string]::IsNullOrWhiteSpace([string]$exclusion)) { continue }
+        if ($contributorExclusions -notcontains [string]$exclusion) { return $false }
+    }
+    return $true
+}
+
+# Derives a curated-scale tier (0-3) from an Azure role's permissions for roles missing from GLOBALAzureRoleRating.
+function Get-AzureRoleTierFromPermissionSet {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object[]]$Permissions,
+        [Parameter(Mandatory = $false)]
+        [string[]]$ExcludedOperations = @()
+    )
+
+    $hasPermissionData = $false
+    $metadataDataGranted = $false
+    $ordinaryDataReadGranted = $false
+    $reviewedOperationalActionGranted = $false
+    $deploymentHelperGranted = $false
+    $broadReadGranted = $false
+    $narrowReadGranted = $false
+    $boundedMutationFamilies = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $metadataOnlyDataOperations = @(
+        '*/readMetadata/action',
+        'Microsoft.KeyVault/vaults/*/read',
+        'Microsoft.ContainerRegistry/registries/catalog/read',
+        'Microsoft.ContainerRegistry/registries/repositories/metadata/read'
+    )
+    $ordinaryDataReads = @(
+        'Microsoft.DeviceUpdate/accounts/instances/updates/read',
+        'Microsoft.DeviceUpdate/accounts/instances/management/read',
+        'Microsoft.Maps/accounts/services/render/read',
+        'Microsoft.Maps/accounts/services/search/read',
+        'Microsoft.AppPlatform/Spring/eurekaService/read',
+        'Microsoft.AppPlatform/Spring/jobs/executions/listInstances/action',
+        'Microsoft.Monitor/accounts/data/metrics/read',
+        'Microsoft.EventHub/namespaces/schemas/read',
+        'Microsoft.SignalRService/SignalR/group/read',
+        'Microsoft.SignalRService/SignalR/clientConnection/read',
+        'Microsoft.SignalRService/SignalR/user/read'
+    )
+    $reviewedOperationalActions = @(
+        'Microsoft.Carbon/carbonEmissionReports/action',
+        'Microsoft.Quota/register/action',
+        'Microsoft.AzureArcData/sqlServerInstances/getTelemetry/action',
+        'Microsoft.AzureArcData/sqlServerInstances/availabilityGroups/getDetailView/action'
+    )
+    $nonPrivilegedOperations = @('Microsoft.Support/*', 'Microsoft.Insights/alertRules/*')
+    $highRiskControlProviders = '^Microsoft\.(?:Authorization|ManagedIdentity|Security|Network|Management|ManagedServices|Relationships)/'
+    $highRiskRuntimeProviders = '^Microsoft\.(?:Compute|HybridCompute|Web|ContainerService|Automation|Logic|Sql|RecoveryServices|KeyVault|Storage|KubernetesConfiguration|KubernetesRuntime|Kubernetes|DesktopVirtualization|GuestConfiguration|StandbyPool|Edge)/'
+    $highRiskServiceProviders = '^Microsoft\.(?:ApiManagement|EventGrid|Attestation|AzureArcData|Chaos|OperationalInsights|D365CustomerInsights|EnterpriseKnowledgeGraph|HealthBot|PowerBI|SaaSHub)/'
+    $tierOneOperations = @(
         'Microsoft.Compute/virtualMachines/runCommand/action',
         'Microsoft.Compute/virtualMachines/extensions/write',
         'Microsoft.Compute/virtualMachines/write',
@@ -9688,61 +9970,288 @@ function Get-AzureRoleTierFromPermissions {
         'Microsoft.RecoveryServices/vaults/write',
         'Microsoft.Network/networkSecurityGroups/write',
         'Microsoft.Security/policies/write'
-    )) {
-        if (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny) {
-            return [pscustomobject]@{ Tier = 1; Reason = $operation }
-        }
-    }
-
-    # Data-plane access is access to the underlying data; only metadata reads are excluded. Secret values need getSecret, not read.
-    $metadataOnlyDataOperations = @(
-        '*/readMetadata/action',
-        'Microsoft.KeyVault/vaults/*/read',
-        'Microsoft.ContainerRegistry/registries/catalog/read',
-        'Microsoft.ContainerRegistry/registries/repositories/metadata/read'
     )
-    $dataAllow = $dataActions.ToArray()
-    $dataDeny = $notDataActions.ToArray()
-    $metadataDataGranted = $false
-    foreach ($pattern in $dataAllow) {
-        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read', 'action', 'write'))) {
-            if (-not (Test-AzureRbacOperationGranted -Operation $probe -Allow $dataAllow -Deny $dataDeny)) { continue }
-            if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $metadataOnlyDataOperations) {
-                $metadataDataGranted = $true
-                continue
-            }
-            return [pscustomobject]@{ Tier = 1; Reason = "data access: $pattern" }
-        }
-    }
-
-    # Operations that Microsoft ships inside reader roles and that grant no access to resources or their data
-    $nonPrivilegedOperations = @('Microsoft.Support/*', 'Microsoft.Insights/alertRules/*')
-    foreach ($pattern in $allow) {
-        if ($pattern.Trim() -imatch '/read$') { continue }
-        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('write', 'delete', 'action'))) {
-            if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $nonPrivilegedOperations) { continue }
-            if (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny) {
-                return [pscustomobject]@{ Tier = 1; Reason = "unrecognized write or action: $pattern" }
+    foreach ($block in @($Permissions)) {
+        if ($null -eq $block) { continue }
+        $blockAllow = @($block.actions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        $blockDeny = @($block.notActions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ }) + @($ExcludedOperations)
+        foreach ($operation in @(
+            'Microsoft.Authorization/roleAssignments/write',
+            'Microsoft.Authorization/roleDefinitions/write',
+            'Microsoft.Authorization/elevateAccess/action'
+        )) {
+            if (Test-AzureRbacOperationGranted -Operation $operation -Allow $blockAllow -Deny $blockDeny) {
+                return [pscustomobject]@{ Tier = 0; Reason = $operation }
             }
         }
-    }
-
-    if (Test-AzureRbacOperationGranted -Operation 'Microsoft.EfProbe/efprobe/read' -Allow $allow -Deny $deny) {
-        return [pscustomobject]@{ Tier = 2; Reason = 'broad read access' }
-    }
-
-    $narrowReadGranted = $metadataDataGranted
-    foreach ($pattern in $allow) {
-        foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read'))) {
-            if ($probe -imatch '/read$' -and (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny)) { $narrowReadGranted = $true; break }
+        if (Test-AzureRoleContributorLikePermissionBlock -Permission $block) {
+            return [pscustomobject]@{ Tier = 0; Reason = 'Contributor-like broad control' }
         }
-        if ($narrowReadGranted) { break }
     }
+    foreach ($block in @($Permissions)) {
+        if ($null -eq $block) { continue }
+        $allow = @($block.actions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        $deny = @($block.notActions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ }) + @($ExcludedOperations)
+        $dataAllow = @($block.dataActions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        $dataDeny = @($block.notDataActions | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        if ($allow.Count -eq 0 -and $dataAllow.Count -eq 0) { continue }
+        $hasPermissionData = $true
+
+        foreach ($operation in $tierOneOperations) {
+            if (Test-AzureRbacOperationGranted -Operation $operation -Allow $allow -Deny $deny) {
+                return [pscustomobject]@{ Tier = 1; Reason = $operation }
+            }
+        }
+        if ($allow -icontains 'Microsoft.Insights/snapshots/read' -and
+            (Test-AzureRbacOperationGranted -Operation 'Microsoft.Insights/snapshots/read' -Allow $allow -Deny $deny)) {
+            return [pscustomobject]@{ Tier = 1; Reason = 'sensitive snapshot read' }
+        }
+
+        foreach ($pattern in $dataAllow) {
+            foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read', 'action', 'write', 'delete'))) {
+                if (-not (Test-AzureRbacOperationGranted -Operation $probe -Allow $dataAllow -Deny $dataDeny)) { continue }
+                if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $metadataOnlyDataOperations) {
+                    $metadataDataGranted = $true
+                    continue
+                }
+                if ($pattern -notmatch '\*' -and $probe -in $ordinaryDataReads) {
+                    $ordinaryDataReadGranted = $true
+                    continue
+                }
+                return [pscustomobject]@{ Tier = 1; Reason = "data access: $pattern" }
+            }
+        }
+
+        foreach ($pattern in $allow) {
+            if ($pattern.Trim() -imatch '/read$') { continue }
+            foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('write', 'delete', 'action'))) {
+                if (Test-AzureRbacPatternMatch -Operation $probe -Patterns $nonPrivilegedOperations) { continue }
+                if (-not (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny)) { continue }
+                if ($pattern -notmatch '\*' -and $probe -in $reviewedOperationalActions) {
+                    $reviewedOperationalActionGranted = $true
+                    continue
+                }
+                if ($pattern -ieq 'Microsoft.Resources/deployments/*' -or $probe -imatch '^Microsoft\.Resources/deployments/(?:write|delete|validate/action|whatIf/action)$') {
+                    $deploymentHelperGranted = $true
+                    continue
+                }
+                if ($pattern -match '\*' -or $probe -imatch '/action$' -or
+                    $probe -imatch $highRiskControlProviders -or
+                    $probe -imatch $highRiskRuntimeProviders -or
+                    $probe -imatch $highRiskServiceProviders -or
+                    $probe -imatch '^Microsoft\.Cdn/profiles/customdomains/' -or
+                    $probe -imatch '^Microsoft\.ContainerRegistry/registries/(?:credentialSets|cacheRules|exportPipelines|importPipelines|pipelineRuns)/' -or
+                    $probe -imatch '^Microsoft\.Resources/dataBoundaries/' -or
+                    $probe -imatch '/[^/]*(?:secrets?|keys?|credentials?|tokens?|connectionstrings?)[^/]*(?:/|$)') {
+                    return [pscustomobject]@{ Tier = 1; Reason = "high-risk write or action: $pattern" }
+                }
+                if ($probe -imatch '^([^/]+/[^/]+)/(?:.+/)?(?:write|delete)$') {
+                    [void]$boundedMutationFamilies.Add($Matches[1])
+                } else {
+                    return [pscustomobject]@{ Tier = 1; Reason = "unrecognized write or action: $pattern" }
+                }
+            }
+        }
+
+        if (Test-AzureRbacOperationGranted -Operation 'Microsoft.EfProbe/efprobe/read' -Allow $allow -Deny $deny) {
+            $broadReadGranted = $true
+        }
+        foreach ($pattern in $allow) {
+            foreach ($probe in (Get-AzureRbacPatternProbes -Pattern $pattern -Verbs @('read'))) {
+                if ($probe -imatch '/read$' -and (Test-AzureRbacOperationGranted -Operation $probe -Allow $allow -Deny $deny)) { $narrowReadGranted = $true; break }
+            }
+        }
+    }
+
+    if (-not $hasPermissionData) { return [pscustomobject]@{ Tier = '?'; Reason = 'no permission data' } }
+    if ($boundedMutationFamilies.Count -gt 1) { return [pscustomobject]@{ Tier = 1; Reason = 'cross-family resource control' } }
+    if ($boundedMutationFamilies.Count -eq 1) { return [pscustomobject]@{ Tier = 2; Reason = 'bounded resource write or delete' } }
+    if ($ordinaryDataReadGranted) { return [pscustomobject]@{ Tier = 2; Reason = 'ordinary data read' } }
+    if ($reviewedOperationalActionGranted) { return [pscustomobject]@{ Tier = 2; Reason = 'reviewed operational action' } }
+    if ($deploymentHelperGranted) { return [pscustomobject]@{ Tier = 2; Reason = 'deployment helper permissions' } }
+    if ($broadReadGranted) { return [pscustomobject]@{ Tier = 2; Reason = 'broad read access' } }
+    $narrowReadGranted = $narrowReadGranted -or $metadataDataGranted
     if ($narrowReadGranted) {
         return [pscustomobject]@{ Tier = 3; Reason = 'narrow read access' }
     }
 
     return [pscustomobject]@{ Tier = 3; Reason = 'no effective permissions' }
+}
+
+# Classifies a role and reports whether its role-assignment rights are limited by an ABAC condition to specific role definitions.
+function Get-AzureRoleTierFromPermissions {
+    param (
+        [Parameter(Mandatory = $false)]
+        [object[]]$Permissions
+    )
+
+    $assignmentOperation = 'Microsoft.Authorization/roleAssignments/write'
+    $assignableRoleIds = [System.Collections.Generic.List[string]]::new()
+    $constrainedAssignment = $false
+    $grantingBlocks = 0
+    $unconstrainedBlock = $false
+
+    foreach ($block in @($Permissions)) {
+        if ($null -eq $block) { continue }
+        $blockAllow = @(@($block.actions) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        $blockDeny = @(@($block.notActions) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        if (-not (Test-AzureRbacOperationGranted -Operation $assignmentOperation -Allow $blockAllow -Deny $blockDeny)) { continue }
+
+        $grantingBlocks++
+        $blockRoleIds = Get-AzureRoleAssignableRoleIds -Condition ([string]$block.condition)
+        if ($null -eq $blockRoleIds) {
+            $unconstrainedBlock = $true
+            continue
+        }
+        foreach ($roleId in $blockRoleIds) { if (-not $assignableRoleIds.Contains($roleId)) { [void]$assignableRoleIds.Add($roleId) } }
+    }
+
+    # Only treat the grant as constrained when every block granting it names the roles it may assign
+    $excludedOperations = @()
+    if ($grantingBlocks -gt 0 -and -not $unconstrainedBlock -and $assignableRoleIds.Count -gt 0) {
+        $constrainedAssignment = $true
+        $excludedOperations = @($assignmentOperation)
+    }
+
+    $result = Get-AzureRoleTierFromPermissionSet -Permissions $Permissions -ExcludedOperations $excludedOperations
+
+    return [pscustomobject]@{
+        Tier                  = $result.Tier
+        Reason                = $result.Reason
+        ConstrainedAssignment = $constrainedAssignment
+        AssignableRoleIds     = $assignableRoleIds.ToArray()
+    }
+}
+
+# Classifies only requested roles and the transitive targets of constrained role-assignment conditions.
+function Update-AzureRoleTierCache {
+    param (
+        [Parameter(Mandatory = $false)]
+        [string[]]$RoleDefinitionIds = @(),
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Assigned', 'OnDemand')]
+        [string]$SeedSource = 'OnDemand'
+    )
+
+    if (-not $global:GLOBALAzureDerivedRoleTiers) { $global:GLOBALAzureDerivedRoleTiers = @{} }
+    if (-not $global:GLOBALAzureRoleClassifications) { $global:GLOBALAzureRoleClassifications = @{} }
+    if (-not $global:GLOBALAzureRoleTierCacheStats) {
+        $global:GLOBALAzureRoleTierCacheStats = @{
+            AssignedSeeds          = 0
+            OnDemandSeeds          = 0
+            CuratedSkips           = 0
+            CacheHits              = 0
+            ConstrainedTargets     = 0
+            DerivedClassifications = 0
+            PropagationPasses      = 0
+        }
+    }
+
+    $definitions = $global:GLOBALAzureRoleDefinitions
+    if (-not $definitions) {
+        return [pscustomobject]@{ Classified = 0; ConstrainedTargets = 0; PropagationPasses = 0 }
+    }
+
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    $queued = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($roleDefinitionId in @($RoleDefinitionIds)) {
+        $normalizedId = ([string]$roleDefinitionId).Trim()
+        if ([string]::IsNullOrWhiteSpace($normalizedId) -or -not $queued.Add($normalizedId)) { continue }
+        $queue.Enqueue($normalizedId)
+    }
+    if ($SeedSource -eq 'Assigned') {
+        $global:GLOBALAzureRoleTierCacheStats.AssignedSeeds += $queued.Count
+    } else {
+        $global:GLOBALAzureRoleTierCacheStats.OnDemandSeeds += $queued.Count
+    }
+
+    $classifiedThisCall = 0
+    $targetsThisCall = 0
+    while ($queue.Count -gt 0) {
+        $roleDefinitionId = $queue.Dequeue()
+        if ($GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) {
+            $global:GLOBALAzureRoleTierCacheStats.CuratedSkips++
+            continue
+        }
+        if ($global:GLOBALAzureRoleClassifications.ContainsKey($roleDefinitionId)) {
+            $global:GLOBALAzureRoleTierCacheStats.CacheHits++
+            continue
+        }
+        if (-not $definitions.ContainsKey($roleDefinitionId)) { continue }
+
+        $roleEntry = $definitions[$roleDefinitionId]
+        $classification = Get-AzureRoleTierFromPermissions -Permissions @($roleEntry.Permissions)
+        $global:GLOBALAzureRoleClassifications[$roleDefinitionId] = $classification
+        $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId] = [pscustomobject]@{ Tier = $classification.Tier; Reason = $classification.Reason }
+        $classifiedThisCall++
+        $global:GLOBALAzureRoleTierCacheStats.DerivedClassifications++
+
+        if ($classification.ConstrainedAssignment) {
+            foreach ($targetId in @($classification.AssignableRoleIds)) {
+                $normalizedTargetId = ([string]$targetId).Trim()
+                if ([string]::IsNullOrWhiteSpace($normalizedTargetId) -or -not $queued.Add($normalizedTargetId)) { continue }
+                $queue.Enqueue($normalizedTargetId)
+                $targetsThisCall++
+                $global:GLOBALAzureRoleTierCacheStats.ConstrainedTargets++
+            }
+        }
+    }
+
+    # Restore the base results before propagating constrained target tiers through the cached closure.
+    foreach ($roleDefinitionId in @($global:GLOBALAzureRoleClassifications.Keys)) {
+        $classification = $global:GLOBALAzureRoleClassifications[$roleDefinitionId]
+        $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId] = [pscustomobject]@{ Tier = $classification.Tier; Reason = $classification.Reason }
+    }
+
+    $resolutionPasses = 0
+    for ($pass = 1; $pass -le 5; $pass++) {
+        $resolutionPasses = $pass
+        $tierChanged = $false
+        foreach ($roleDefinitionId in @($global:GLOBALAzureRoleClassifications.Keys)) {
+            $classification = $global:GLOBALAzureRoleClassifications[$roleDefinitionId]
+            if (-not $classification.ConstrainedAssignment) { continue }
+
+            $strongestTier = $null
+            $strongestRoleId = $null
+            foreach ($assignableRoleId in @($classification.AssignableRoleIds)) {
+                if ($assignableRoleId -eq $roleDefinitionId) { continue }
+
+                $assignableTier = $null
+                if ($GLOBALAzureRoleRating.ContainsKey($assignableRoleId)) {
+                    $assignableTier = [int]$GLOBALAzureRoleRating[$assignableRoleId]
+                } elseif ($global:GLOBALAzureDerivedRoleTiers.ContainsKey($assignableRoleId)) {
+                    $derivedTier = $global:GLOBALAzureDerivedRoleTiers[$assignableRoleId].Tier
+                    if ([string]$derivedTier -ne '?') { $assignableTier = [int]$derivedTier }
+                }
+                if ($null -ne $assignableTier -and ($null -eq $strongestTier -or $assignableTier -lt $strongestTier)) {
+                    $strongestTier = $assignableTier
+                    $strongestRoleId = $assignableRoleId
+                }
+            }
+            if ($null -eq $strongestTier) { continue }
+
+            $currentEntry = $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId]
+            $currentTier = if ([string]$currentEntry.Tier -eq '?') { 9 } else { [int]$currentEntry.Tier }
+            if ($strongestTier -lt $currentTier) {
+                $targetName = if ($definitions.ContainsKey($strongestRoleId)) { [string]$definitions[$strongestRoleId].RoleName } else { $strongestRoleId }
+                $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId] = [pscustomobject]@{ Tier = $strongestTier; Reason = "constrained role assignment: may assign $targetName" }
+                $tierChanged = $true
+            }
+        }
+        if (-not $tierChanged) { break }
+    }
+    $global:GLOBALAzureRoleTierCacheStats.PropagationPasses += $resolutionPasses
+
+    if ($SeedSource -eq 'OnDemand' -and $classifiedThisCall -gt 0) {
+        Write-Log -Level Debug -Message "Azure role tier cache classified $classifiedThisCall on-demand role definition(s), added $targetsThisCall constrained target(s), and used $resolutionPasses propagation pass(es)"
+    }
+
+    return [pscustomobject]@{
+        Classified         = $classifiedThisCall
+        ConstrainedTargets = $targetsThisCall
+        PropagationPasses  = $resolutionPasses
+    }
 }
 
 function Get-AzureRoleEnvironmentClassification {
@@ -9798,10 +10307,13 @@ function Get-AzureRoleAssignmentImpact {
         [string]$RawScope,
 
         [Parameter(Mandatory = $false)]
-        [string]$TenantId
+        [string]$TenantId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoleDefinitionId
     )
 
-    $baseImpact = Get-AzureRoleBaseImpact -RoleTier $RoleTier
+    $baseImpact = Get-AzureRoleBaseImpact -RoleTier $RoleTier -RoleDefinitionId $RoleDefinitionId
     $policyVersion = [string]$GLOBALAzureRoleImpactPolicy.Version
     $scopeType = "Unknown"
     $scopeFactor = [double]$GLOBALAzureRoleImpactPolicy.ScopeFactors.Unknown
@@ -10100,7 +10612,14 @@ function Get-AzureRoleExposureImpact {
             } else {
                 $null
             }
-            $impactDetails = Get-AzureRoleAssignmentImpact -RoleTier $roleTier -RoleName $roleName -RawScope $rawScope -TenantId $TenantId
+            $roleDefinitionId = if ($role.PSObject.Properties['RoleDefinitionId']) {
+                [string]$role.RoleDefinitionId
+            } elseif ($role.PSObject.Properties['RoleId']) {
+                [string]$role.RoleId
+            } else {
+                $null
+            }
+            $impactDetails = Get-AzureRoleAssignmentImpact -RoleTier $roleTier -RoleName $roleName -RawScope $rawScope -TenantId $TenantId -RoleDefinitionId $roleDefinitionId
             $roleImpact = [int]$impactDetails.AssignmentImpact
         }
 
@@ -10128,34 +10647,44 @@ function Invoke-AzureRoleProcessing {
         $roleSummary = ""
         
         foreach ($Role in $RoleDetails) {
-            $RoleImpact = 0
-            switch ($Role.RoleTier) {
+            $normalizedRoleTier = switch ([string]$Role.RoleTier) {
+                { $_ -in @('0', 'Tier-0') } { 0; break }
+                { $_ -in @('1', 'Tier-1') } { 1; break }
+                { $_ -in @('2', 'Tier-2') } { 2; break }
+                { $_ -in @('3', 'Tier-3') } { 3; break }
+                default { '?'; break }
+            }
+            switch ($normalizedRoleTier) {
                 0 {
-                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier0"]
                     $Tier0Count++
                     break
                 }
                 1 {
-                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier1"]
                     $Tier1Count++
                     break
                 }
                 2 {
-                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier2"]
                     $Tier2Count++
                     break
                 }
                 3 {
-                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier3"]
                     $Tier3Count++
                     break
                 }
                 default {
                     $UnknownTierCount++
-                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier?"]
                     break
                 }
             }
+
+            $roleDefinitionId = if ($Role.PSObject.Properties["RoleDefinitionId"]) {
+                [string]$Role.RoleDefinitionId
+            } elseif ($Role.PSObject.Properties["RoleId"]) {
+                [string]$Role.RoleId
+            } else {
+                $null
+            }
+            $RoleImpact = Get-AzureRoleBaseImpact -RoleTier $normalizedRoleTier -RoleDefinitionId $roleDefinitionId
 
             if ($Role.PSObject.Properties["AssignmentImpact"] -and $null -ne $Role.AssignmentImpact) {
                 $contextualImpact = 0
@@ -10626,9 +11155,35 @@ function Get-AllAzureIAMAssignmentsNative {
         }
     }
 
-    #Get all Azure roles for lookup
-    $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
-    $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    # Preview API versions expose the ABAC conditions that constrain which roles a role may assign; the GA version omits them.
+    # Fall back to GA when no preview version answers with a usable payload, which only costs the constrained-assignment detail.
+    $roleDefinitionApiVersion = "2022-04-01"
+    $response = $null
+    foreach ($candidateApiVersion in @("2023-07-01-preview", "2022-05-01-preview")) {
+        try {
+            $candidateResponse = @(Send-ApiRequest -Method GET -Uri "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=$candidateApiVersion" -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+        } catch {
+            Write-Log -Level Debug -Message "Azure role definitions unavailable with api-version $($candidateApiVersion): $($_.Exception.Message)"
+            continue
+        }
+
+        # A retired preview version answers with 404, but a changed payload would not throw
+        $usableResponse = @($candidateResponse | Where-Object { $null -ne $_ -and $null -ne $_.properties -and -not [string]::IsNullOrWhiteSpace([string]$_.properties.roleName) -and $null -ne $_.properties.permissions })
+        if ($usableResponse.Count -eq 0) {
+            Write-Log -Level Debug -Message "Azure role definitions returned no usable entries with api-version $candidateApiVersion"
+            continue
+        }
+
+        $roleDefinitionApiVersion = $candidateApiVersion
+        $response = $candidateResponse
+        break
+    }
+
+    if ($null -eq $response) {
+        $response = @(Send-ApiRequest -Method GET -Uri "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=$roleDefinitionApiVersion" -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    }
+    Write-Log -Level Debug -Message "Using api-version $roleDefinitionApiVersion for Azure role definitions"
+
     $roleHashTable = @{}
     $response | ForEach-Object {
         # Extract RoleName and ObjectId
@@ -10646,7 +11201,7 @@ function Get-AllAzureIAMAssignmentsNative {
     }
 
     #Get all custom roles and add them to the HT
-    $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?`$filter=type+eq+'CustomRole'&api-version=2022-04-01"
+    $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?`$filter=type+eq+'CustomRole'&api-version=$roleDefinitionApiVersion"
     $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
 
     $response | ForEach-Object {
@@ -10665,15 +11220,12 @@ function Get-AllAzureIAMAssignmentsNative {
     }
     Write-Log -Level Debug -Message "Got $($roleHashTable.count) role definitions"
 
-    # Derive a tier from the permissions of every role the curated rating table does not cover
+    # Retain definitions so assigned and configured roles can be classified when they are used.
+    $global:GLOBALAzureRoleDefinitions = $roleHashTable
     $global:GLOBALAzureDerivedRoleTiers = @{}
-    foreach ($roleEntry in $roleHashTable.Values) {
-        $roleDefinitionId = [string]$roleEntry.RoleId
-        if ([string]::IsNullOrWhiteSpace($roleDefinitionId) -or $GLOBALAzureRoleRating.ContainsKey($roleDefinitionId)) { continue }
-        $global:GLOBALAzureDerivedRoleTiers[$roleDefinitionId] = Get-AzureRoleTierFromPermissions -Permissions @($roleEntry.Permissions)
-    }
-    Write-Log -Level Debug -Message "Derived a tier from permissions for $($global:GLOBALAzureDerivedRoleTiers.Count) unrated role definitions"
-
+    $global:GLOBALAzureRoleClassifications = @{}
+    $global:GLOBALAzureRoleTierCacheStats = $null
+    $collectedAssignments = [System.Collections.Generic.List[object]]::new()
 
     foreach ($subscription in $subscriptions) {       
         # Two lookup strategies are used for Azure PIM activations:
@@ -10741,10 +11293,6 @@ function Get-AllAzureIAMAssignmentsNative {
             $RoleDetails = $roleHashTable[$roleId]
             $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
 
-
-            $TierResolution = Resolve-AzureRoleTier -RoleDefinitionId ([string]$RoleDetails.RoleId)
-            $RoleTier = $TierResolution.Tier
-
             # Prefer an explicit origin-roleAssignment match. Only fall back to
             # the composite key when ARM did not expose an origin assignment id.
             $ActiveScheduleAssignment = $null
@@ -10764,9 +11312,6 @@ function Get-AllAzureIAMAssignmentsNative {
                 RoleDefinitionId   = $RoleDetails.RoleId
                 RoleDefinitionName = $RoleDetails.RoleName
                 RoleType           = $RoleDetails.RoleType
-                RoleTier           = $RoleTier
-                TierSource         = $TierResolution.Source
-                TierReason         = $TierResolution.Reason
                 RawScope           = $rawScope
                 Scope              = $resolvedScope
                 Conditions         = $hasCondition 
@@ -10803,16 +11348,11 @@ function Get-AllAzureIAMAssignmentsNative {
                 $RoleDetails = $roleHashTable[$roleId]
                 $resolvedScope = Resolve-AzureIamScopePath -Scope $_.properties.scope
                 $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
-                $TierResolution = Resolve-AzureRoleTier -RoleDefinitionId ([string]$RoleDetails.RoleId)
-                $RoleTier = $TierResolution.Tier
                 [PSCustomObject]@{
                     ObjectId          = $_.properties.principalId
                     RoleDefinitionId   = $RoleDetails.RoleId
                     RoleDefinitionName = $RoleDetails.RoleName
                     RoleType           = $RoleDetails.RoleType
-                    RoleTier           = $RoleTier
-                    TierSource         = $TierResolution.Source
-                    TierReason         = $TierResolution.Reason
                     RawScope           = [string]$_.properties.scope
                     Scope              = $resolvedScope
                     Conditions         = $hasCondition 
@@ -10829,50 +11369,57 @@ function Get-AllAzureIAMAssignmentsNative {
         # Keep the existing "Active" vs "Eligible" model and enrich only the
         # active entries with PIM activation metadata.
         $AllAssignments = @($AssignmentsActive) + @($AssignmentsEligible)
-
         foreach ($assignment in $AllAssignments) {
-            # Create a unique key for each role assignment
-            $uniqueKey = "$($assignment.ObjectId)|$($assignment.RoleDefinitionName)|$($assignment.Scope)|$($assignment.AssignmentType)"
-
-            # Check if the role assignment has already been processed
-            if (-not $seenAssignments.Contains($uniqueKey)) {
-                # Add the key to the HashSet to mark it as seen
-                $seenAssignments.Add($uniqueKey) | Out-Null
-
-                # Ensure the ObjectId exists in the hashtable
-                if (-not $IamAssignmentsHT.ContainsKey($assignment.ObjectId)) {
-                    $IamAssignmentsHT[$assignment.ObjectId] = @()
-                }
-
-                $impactContext = Get-AzureRoleAssignmentImpact -RoleTier $assignment.RoleTier -RoleName $assignment.RoleDefinitionName -RawScope $assignment.RawScope
-
-                # Add the assignment to the hashtable
-                $IamAssignmentsHT[$assignment.ObjectId] += [PSCustomObject]@{
-                    RoleDefinitionName = $assignment.RoleDefinitionName
-                    RoleDefinitionId = $assignment.RoleDefinitionId
-                    RawScope = $assignment.RawScope
-                    Scope = $assignment.Scope
-                    RoleType = $assignment.RoleType
-                    RoleTier = $assignment.RoleTier
-                    TierSource = $assignment.TierSource
-                    TierReason = $assignment.TierReason
-                    ScopeType = $impactContext.ScopeType
-                    Environment = $impactContext.Environment
-                    ObservedResources = $impactContext.ObservedResources
-                    InventoryStatus = $impactContext.InventoryStatus
-                    AssignmentImpact = $impactContext.AssignmentImpact
-                    ImpactExplanation = $impactContext.ImpactExplanation
-                    ScoringPolicyVersion = $impactContext.ScoringPolicyVersion
-                    Conditions = $assignment.Conditions
-                    PrincipalType = $assignment.PrincipalType
-                    AssignmentType = $assignment.AssignmentType
-                    ActivatedViaPIM = $assignment.ActivatedViaPIM
-                    StartDateTime = $assignment.StartDateTime
-                    EndDateTime = $assignment.EndDateTime
-                }
-            }
+            [void]$collectedAssignments.Add($assignment)
         }
     }
+
+    $assignedRoleIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($assignment in $collectedAssignments) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$assignment.RoleDefinitionId)) {
+            [void]$assignedRoleIds.Add([string]$assignment.RoleDefinitionId)
+        }
+    }
+    $cacheResult = Update-AzureRoleTierCache -RoleDefinitionIds @($assignedRoleIds) -SeedSource 'Assigned'
+    Write-Log -Level Debug -Message "Azure role tier cache seeded by $($assignedRoleIds.Count) assigned role definitions; classified $($cacheResult.Classified), added $($cacheResult.ConstrainedTargets) constrained target(s), used $($cacheResult.PropagationPasses) propagation pass(es)"
+
+    foreach ($assignment in $collectedAssignments) {
+        $tierResolution = Resolve-AzureRoleTier -RoleDefinitionId ([string]$assignment.RoleDefinitionId)
+        $uniqueKey = "$($assignment.ObjectId)|$($assignment.RoleDefinitionName)|$($assignment.Scope)|$($assignment.AssignmentType)"
+        if ($seenAssignments.Contains($uniqueKey)) { continue }
+        [void]$seenAssignments.Add($uniqueKey)
+
+        if (-not $IamAssignmentsHT.ContainsKey($assignment.ObjectId)) {
+            $IamAssignmentsHT[$assignment.ObjectId] = @()
+        }
+        $impactContext = Get-AzureRoleAssignmentImpact -RoleTier $tierResolution.Tier -RoleName $assignment.RoleDefinitionName -RawScope $assignment.RawScope -RoleDefinitionId $assignment.RoleDefinitionId
+        $IamAssignmentsHT[$assignment.ObjectId] += [PSCustomObject]@{
+            RoleDefinitionName = $assignment.RoleDefinitionName
+            RoleDefinitionId = $assignment.RoleDefinitionId
+            RawScope = $assignment.RawScope
+            Scope = $assignment.Scope
+            RoleType = $assignment.RoleType
+            RoleTier = $tierResolution.Tier
+            TierSource = $tierResolution.Source
+            TierReason = $tierResolution.Reason
+            ScopeType = $impactContext.ScopeType
+            Environment = $impactContext.Environment
+            ObservedResources = $impactContext.ObservedResources
+            InventoryStatus = $impactContext.InventoryStatus
+            AssignmentImpact = $impactContext.AssignmentImpact
+            ImpactExplanation = $impactContext.ImpactExplanation
+            ScoringPolicyVersion = $impactContext.ScoringPolicyVersion
+            Conditions = $assignment.Conditions
+            PrincipalType = $assignment.PrincipalType
+            AssignmentType = $assignment.AssignmentType
+            ActivatedViaPIM = $assignment.ActivatedViaPIM
+            StartDateTime = $assignment.StartDateTime
+            EndDateTime = $assignment.EndDateTime
+        }
+    }
+
+    $cacheStats = $global:GLOBALAzureRoleTierCacheStats
+    Write-Log -Level Debug -Message "Azure role tier cache totals: assigned seeds $($cacheStats.AssignedSeeds), on-demand seeds $($cacheStats.OnDemandSeeds), curated skips $($cacheStats.CuratedSkips), cache hits $($cacheStats.CacheHits), derived classifications $($cacheStats.DerivedClassifications), constrained targets $($cacheStats.ConstrainedTargets), propagation passes $($cacheStats.PropagationPasses)"
 
     return $IamAssignmentsHT
 }
@@ -13652,6 +14199,9 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALEntraRoleRating -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleRating -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureDerivedRoleTiers -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureRoleDefinitions -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureRoleClassifications -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureRoleTierCacheStats -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleImpactPolicy -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALImpactScore -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMsGraphAccessToken -ErrorAction SilentlyContinue

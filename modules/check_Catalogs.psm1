@@ -689,17 +689,11 @@ function Get-CatalogExistingRoleInfo {
         $roleDefinitionId = if ($roleDefinitionMatch.Success) { $roleDefinitionMatch.Groups[1].Value } elseif ([string]::IsNullOrWhiteSpace($roleOriginId)) { '' } else { ($roleOriginId.TrimEnd('/') -split '/')[-1] }
         $tierValue = (Resolve-AzureRoleTier -RoleDefinitionId $roleDefinitionId).Tier
         $tier = ConvertTo-CatalogTierLabel $tierValue
-        $impact = switch ($tier) {
-            'Tier-0' { $GLOBALImpactScore['AzureRoleTier0'] }
-            'Tier-1' { $GLOBALImpactScore['AzureRoleTier1'] }
-            'Tier-2' { $GLOBALImpactScore['AzureRoleTier2'] }
-            'Tier-3' { $GLOBALImpactScore['AzureRoleTier3'] }
-            'Uncategorized' { $GLOBALImpactScore['AzureRoleTier?'] }
-            default { 0 }
-        }
+        $impact = if ($tier -eq '-') { 0 } else { Get-AzureRoleBaseImpact -RoleTier $tier -RoleDefinitionId $roleDefinitionId }
         return [pscustomobject]@{
             OriginSystem     = $originSystem
             ResourceOriginId = $resourceOriginId
+            RoleDefinitionId = $roleDefinitionId
             Type             = 'Azure Role'
             Role             = $roleName
             TierOrCategory   = $tier
@@ -902,7 +896,7 @@ function Invoke-CheckCatalogs {
                     $azureTier = Merge-HigherTierLabel -CurrentTier $azureTier -CandidateTier $existingRole.TierOrCategory
                     $packageAzureTier = Merge-HigherTierLabel -CurrentTier $packageAzureTier -CandidateTier $existingRole.TierOrCategory
                     # Score the configured grant on its scope, as the Access Packages report does, instead of the flat tier base
-                    $existingRoleAzureImpact = (Get-AzureRoleAssignmentImpact -RoleTier $existingRole.TierOrCategory -RoleName ([string]$existingRole.Role) -RawScope ([string]$existingRole.ResourceOriginId) -TenantId ([string]$CurrentTenant.Id)).AssignmentImpact
+                    $existingRoleAzureImpact = (Get-AzureRoleAssignmentImpact -RoleTier $existingRole.TierOrCategory -RoleName ([string]$existingRole.Role) -RawScope ([string]$existingRole.ResourceOriginId) -TenantId ([string]$CurrentTenant.Id) -RoleDefinitionId ([string]$existingRole.RoleDefinitionId)).AssignmentImpact
                     $existingRole.Impact = [double]$existingRoleAzureImpact
                     $azureImpactMax = Merge-HigherImpact -CurrentImpact $azureImpactMax -CandidateImpact $existingRoleAzureImpact
                     $packageAzureImpact = Merge-HigherImpact -CurrentImpact $packageAzureImpact -CandidateImpact $existingRoleAzureImpact

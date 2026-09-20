@@ -145,6 +145,36 @@ function Format-AzureRoleEvidenceScope {
     return "${resourceLabel}: $resourcePath ($context)"
 }
 
+function Get-AzureRoleFallbackBaseImpact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$RoleTier,
+
+        [Parameter(Mandatory = $false)]
+        [object[]]$RoleDetails
+    )
+
+    $maximumImpact = Get-AzureRoleBaseImpact -RoleTier $RoleTier
+    foreach ($role in @($RoleDetails)) {
+        if ($null -eq $role) { continue }
+
+        $roleDefinitionId = if ($role.PSObject.Properties['RoleDefinitionId']) {
+            [string]$role.RoleDefinitionId
+        } elseif ($role.PSObject.Properties['RoleId']) {
+            [string]$role.RoleId
+        } else {
+            $null
+        }
+        if ([string]::IsNullOrWhiteSpace($roleDefinitionId)) { continue }
+
+        $candidateImpact = Get-AzureRoleBaseImpact -RoleTier $RoleTier -RoleDefinitionId $roleDefinitionId
+        if ($candidateImpact -gt $maximumImpact) { $maximumImpact = $candidateImpact }
+    }
+
+    return [int]$maximumImpact
+}
+
 function Format-AzurePrincipalRoleEvidence {
     [CmdletBinding()]
     param(
@@ -492,7 +522,18 @@ function Invoke-CheckTenant {
                 }
                 if ($groupImpact -lt 1 -and (Get-IntSafe $group.AzureRoles) -gt 0) {
                     $normalizedTier = Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier
-                    $groupImpact = Get-AzureRoleBaseImpact -RoleTier $normalizedTier
+                    $groupFallbackRoleDetails = [System.Collections.Generic.List[object]]::new()
+                    if ($group.PSObject.Properties['AzureRoleDetails']) {
+                        foreach ($role in @($group.AzureRoleDetails)) {
+                            if ($null -ne $role) { [void]$groupFallbackRoleDetails.Add($role) }
+                        }
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($groupId) -and $AzureIAMAssignments.ContainsKey($groupId)) {
+                        foreach ($role in @($AzureIAMAssignments[$groupId])) {
+                            if ($null -ne $role) { [void]$groupFallbackRoleDetails.Add($role) }
+                        }
+                    }
+                    $groupImpact = Get-AzureRoleFallbackBaseImpact -RoleTier $normalizedTier -RoleDetails @($groupFallbackRoleDetails)
                     $usedFallback = $true
                 }
             }
@@ -501,7 +542,7 @@ function Invoke-CheckTenant {
 
         if ($maximumImpact -lt 1 -and (Get-IntSafe $Principal.AzureRoles) -gt 0) {
             $normalizedTier = Get-NormalizedRoleTierLabel -RoleTier $Principal.AzureMaxTier
-            $maximumImpact = Get-AzureRoleBaseImpact -RoleTier $normalizedTier
+            $maximumImpact = Get-AzureRoleFallbackBaseImpact -RoleTier $normalizedTier -RoleDetails @($directRoles)
             $usedFallback = $true
         }
 
@@ -4341,7 +4382,16 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 } else {
                     $azureExposureImpact = Get-AzureRoleExposureImpact -RoleDetails @($group.AzureRoleDetails) -TenantId ([string]$CurrentTenant.Id)
                     if ($azureExposureImpact -lt 1 -and (Get-IntSafe $group.AzureRoles) -gt 0) {
-                        $azureExposureImpact = Get-AzureRoleBaseImpact -RoleTier (Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier)
+                        $groupFallbackRoleDetails = [System.Collections.Generic.List[object]]::new()
+                        foreach ($role in @($group.AzureRoleDetails)) {
+                            if ($null -ne $role) { [void]$groupFallbackRoleDetails.Add($role) }
+                        }
+                        if ($AzureIAMAssignments.ContainsKey([string]$entry.Key)) {
+                            foreach ($role in @($AzureIAMAssignments[[string]$entry.Key])) {
+                                if ($null -ne $role) { [void]$groupFallbackRoleDetails.Add($role) }
+                            }
+                        }
+                        $azureExposureImpact = Get-AzureRoleFallbackBaseImpact -RoleTier (Get-NormalizedRoleTierLabel -RoleTier $group.AzureMaxTier) -RoleDetails @($groupFallbackRoleDetails)
                     }
                 }
 

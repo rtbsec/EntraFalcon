@@ -499,10 +499,11 @@ function Invoke-CheckRoles {
                     default { $RoleTier = "Uncategorized" }
                 }
                 $CanonicalRawScope = if ($Assignment.PSObject.Properties["RawScope"]) { [string]$Assignment.RawScope } else { $null }
+                $AssignmentRoleDefinitionId = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { [string]$Assignment.RoleDefinitionId } else { $null }
                 $ImpactContext = if ($Assignment.PSObject.Properties["AssignmentImpact"]) {
                     $Assignment
                 } else {
-                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id
+                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id -RoleDefinitionId $AssignmentRoleDefinitionId
                 }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
@@ -510,7 +511,7 @@ function Invoke-CheckRoles {
                     PrincipalDisplayNameLink  = $PrincipalDisplayNameLink
                     PrincipalType             = if ($PrincipalDetails -and $PrincipalDetails.Type -ne "Unknown Object") { $PrincipalDetails.Type } else { $Assignment.PrincipalType }
                     RoleType                  = $Assignment.RoleType
-                    RoleDefinitionId          = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { $Assignment.RoleDefinitionId } else { $null }
+                    RoleDefinitionId          = $AssignmentRoleDefinitionId
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
                     RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
@@ -544,10 +545,11 @@ function Invoke-CheckRoles {
                     default { $RoleTier = "Uncategorized" }
                 }
                 $CanonicalRawScope = if ($Assignment.PSObject.Properties["RawScope"]) { [string]$Assignment.RawScope } else { $null }
+                $AssignmentRoleDefinitionId = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { [string]$Assignment.RoleDefinitionId } else { $null }
                 $ImpactContext = if ($Assignment.PSObject.Properties["AssignmentImpact"]) {
                     $Assignment
                 } else {
-                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id
+                    Get-AzureRoleAssignmentImpact -RoleTier $Assignment.RoleTier -RoleName $Assignment.RoleDefinitionName -RawScope $CanonicalRawScope -TenantId $CurrentTenant.Id -RoleDefinitionId $AssignmentRoleDefinitionId
                 }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
@@ -555,7 +557,7 @@ function Invoke-CheckRoles {
                     PrincipalDisplayNameLink  = $PrincipalDetails.DisplayNameLink
                     PrincipalType             = $PrincipalDetails.Type
                     RoleType                  = $Assignment.RoleType
-                    RoleDefinitionId          = if ($Assignment.PSObject.Properties["RoleDefinitionId"]) { $Assignment.RoleDefinitionId } else { $null }
+                    RoleDefinitionId          = $AssignmentRoleDefinitionId
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
                     RawScope                  = if ($Assignment.PSObject.Properties["RawScope"]) { $Assignment.RawScope } else { $null }
