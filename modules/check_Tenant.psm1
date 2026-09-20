@@ -6191,7 +6191,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-006] Found $($entAppsForeignRoles.Count) foreign enterprise apps with Entra ID roles."
         Set-FindingOverride -FindingId "ENT-006" -Props $ENT006VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-006" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&EntraRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&EntraRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -6308,7 +6308,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-007] Found $($entAppsForeignAzureRoles.Count) foreign enterprise apps with Azure exposure impact of at least $AzureForeignExposureThreshold."
         Set-FindingOverride -FindingId "ENT-007" -Props $ENT007VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-007" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&AzureRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DTrue&AzureRoles=%3E0&Enabled=%3Dtrue&columns=DisplayName%2CPublisherName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -6645,7 +6645,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-011] Found $($entAppsInternalTier0.Count) internal enterprise apps with privileged Entra ID roles."
         Set-FindingOverride -FindingId "ENT-011" -Props $ENT011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-011" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -6785,7 +6785,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[ENT-012] Found $($entAppsInternalAzureTier.Count) internal enterprise apps with high-impact Azure access."
         Set-FindingOverride -FindingId "ENT-012" -Props $ENT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "ENT-012" -Props @{
-            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "EnterpriseApps_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3DFalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CForeign%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -7720,7 +7720,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-004] Found $($foreignAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled foreign agent identities with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-004" -Props $AGT004VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-004" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1%7C%7CTier-2%7C%7CUncategorized&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -7830,7 +7830,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-005" -Props $AGT005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-005" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Foreign=%3Dtrue&MSOwned=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8219,7 +8219,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-008] Found $($internalAgentIdentitiesWithPrivilegedEntraRoles.Count) enabled internal agent identities with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-008" -Props $AGT008VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-008" -Props @{
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8360,7 +8360,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "AGT-009" -Props $AGT009VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-009" -Props @{
             Confidence = "Requires Verification"
-            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "AgentIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?group1_Foreign=%3Dfalse&group1_MSOwned=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=DisplayName%2CPublisherName%2CForeign%2CMSOwned%2CEnabled%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8573,7 +8573,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-011] Found $($foreignAgentUsersWithPrivilegedEntraRoles.Count) enabled foreign agent users with Entra ID roles."
         Set-FindingOverride -FindingId "AGT-011" -Props $AGT011VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-011" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&EntraRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8642,7 +8642,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-012] Found $($foreignAgentUsersWithPrivilegedAzureRoles.Count) enabled foreign agent users with impactful Azure access."
         Set-FindingOverride -FindingId "AGT-012" -Props $AGT012VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&ForeignAgent=%3Dtrue&MSOwnedAgent=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8724,7 +8724,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-013] Found $($internalAgentUsersWithPrivilegedEntraRoles.Count) enabled internal agent users with privileged Entra ID roles."
         Set-FindingOverride -FindingId "AGT-013" -Props $AGT013VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-013" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&EntraMaxTier=Tier-0%7C%7CTier-1&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8789,7 +8789,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-014] Found $($internalAgentUsersWithPrivilegedAzureRoles.Count) enabled internal agent users with high-impact Azure access."
         Set-FindingOverride -FindingId "AGT-014" -Props $AGT014VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-014" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&group1_ForeignAgent=%3Dfalse&group1_MSOwnedAgent=%3Dtrue&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -8864,7 +8864,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-015] Found $($agentUsersOwningCapRelatedGroups.Count) enabled agent users owning CAP-related groups."
         Set-FindingOverride -FindingId "AGT-015" -Props $AGT015VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-015" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&GrpOwn=%3E0&Warnings=CAPs%3A&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CGrpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortRisk"
             AffectedSortDir = "DESC"
         }
@@ -8942,7 +8942,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[AGT-016] Found $($inactiveEnabledAgentUsers.Count) enabled inactive agent users."
         Set-FindingOverride -FindingId "AGT-016" -Props $AGT016VariantProps.Vulnerable
         Set-FindingOverride -FindingId "AGT-016" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Agent=%3Dtrue&Enabled=%3Dtrue&Inactive=%3Dtrue&columns=UPN%2CEnabled%2CAgent%2CForeignAgent%2CMSOwnedAgent%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CLastSignInDays%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=LastSignInDays&sortDir=desc"
             AffectedSortKey = "_SortLastSignInDays"
             AffectedSortDir = "DESC"
         }
@@ -9091,7 +9091,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[MAI-002] Found $($managedIdentitiesWithPrivRoles.Count) managed identities with privileged Entra ID roles."
         Set-FindingOverride -FindingId "MAI-002" -Props $MAI002VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-002" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?EntraMaxTier=Tier-0%7C%7CTier-1&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortImpact"
             AffectedSortDir = "DESC"
         }
@@ -9213,7 +9213,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Write-Log -Level Verbose -Message "[MAI-003] Found $($managedIdentitiesWithAzurePrivRoles.Count) managed identities with high-impact Azure access."
         Set-FindingOverride -FindingId "MAI-003" -Props $MAI003VariantProps.Vulnerable
         Set-FindingOverride -FindingId "MAI-003" -Props @{
-            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "ManagedIdentities_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&columns=DisplayName%2CIsExplicit%2CGroupMembership%2CGroupOwnership%2CAppOwnership%2CSpOwn%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
         }
@@ -11279,7 +11279,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $usr008Subject = if ($enabledTier0AzureOnPremUsers.Count -eq 1) { 'hybrid user has' } else { 'hybrid users have' }
         Set-FindingOverride -FindingId "USR-008" -Props @{
             Description = "<p>$($enabledTier0AzureOnPremUsers.Count) $usr008Subject high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr008Critical -High $usr008High)"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&OnPrem=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr008Affected))
@@ -11326,7 +11326,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Set-FindingOverride -FindingId "USR-009" -Props $USR009VariantProps.Vulnerable
             Set-FindingOverride -FindingId "USR-009" -Props @{
                 Description = "<p>$usr009Count enabled users have high-impact Azure access.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr009Critical -High $usr009High)"
-                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxTier%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+                RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?AzureRoles=%3E0&Enabled=%3Dtrue&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
                 AffectedSortKey = "_SortAzureImpact"
                 AffectedSortDir = "DESC"
                 AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr009Affected))
@@ -11397,7 +11397,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $usr011Subject = if ($enabledTier0AzureUnprotectedUsers.Count -eq 1) { 'user with high-impact Azure access is' } else { 'users with high-impact Azure access are' }
         Set-FindingOverride -FindingId "USR-011" -Props @{
             Description = "<p>$($enabledTier0AzureUnprotectedUsers.Count) $usr011Subject not protected against modifications by lower-tier administrators or applications.</p>$(Get-AzureImpactBreakdownHtml -ObjectLabel 'Users' -Critical $usr011Critical -High $usr011High)<p>Users are considered unprotected when they are not direct members of a privileged role, members of a role-assignable group, or members of a Restricted Management Administrative Unit.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&Enabled=%3Dtrue&AzureRoles=%3E0&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CProtected%2CGrpMem%2CGrpOwn%2CAuUnits%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Risk&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = @(Sort-AzureFindingAffectedObjects -Objects @($usr011Affected))
@@ -11475,7 +11475,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         Set-FindingOverride -FindingId "USR-012" -Props @{
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&Agent=%3Dfalse&MfaCap=false&Warnings=%21Sync&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&Agent=%3Dfalse&MfaCap=false&Warnings=%21Sync&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CMfaCap%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "Impact"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr012Affected
@@ -11515,7 +11515,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "USR-013" -Props $USR013VariantProps.Vulnerable
         Set-FindingOverride -FindingId "USR-013" -Props @{
             Description = "<p>$($enabledOnPremNeverSignedInOlderThan90Users.Count) enabled accounts are synchronized from on-premises Active Directory to Entra ID even though they appear not to be used in the cloud.</p><p>These accounts have all of the following characteristics:</p><ul><li>Synchronized from on-premises Active Directory</li><li>Enabled</li><li>Older than three months</li><li>No recorded authentication to Entra ID</li></ul><p>This indicates that these accounts are likely not required for cloud services, but are still exposed through the cloud identity plane.</p>"
-            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&OnPrem=%3Dtrue&LastSignInDays=%3D-&CreatedDays=%3E90&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CLicenseStatus%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxTier%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CLastSignInDays%2CCreatedDays%2CMfaCap%2CPerUserMfa%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Users_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Enabled=%3Dtrue&OnPrem=%3Dtrue&LastSignInDays=%3D-&CreatedDays=%3E90&columns=UPN%2CEnabled%2CUserType%2COnPrem%2CLicenseStatus%2CGrpMem%2CGrpOwn%2CAuUnits%2CEntraRoles%2CEntraMaxTier%2CAzureRoles%2CAzureMaxLevel%2CAzureMaxImpact%2CAppRoles%2CAppRegOwn%2CSPOwn%2CInactive%2CLastSignInDays%2CCreatedDays%2CMfaCap%2CPerUserMfa%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "CreatedDays"
             AffectedSortDir = "DESC"
             AffectedObjects = $usr013Affected
@@ -11727,7 +11727,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "GRP-005" -Props $GRP005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "GRP-005" -Props @{
             Description = "<p>There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul><li>$groupsUsedInCaps groups are used in Conditional Access policies</li><li>$groupsUsedInAzureRoles groups have Azure exposure impact of at least $AzureHighExposureThreshold ($groupsWithHighAzureImpact high and $groupsWithCriticalAzureImpact critical)</li><li>$groupsUsedInEntraRoles groups are used for Entra ID role assignments</li><li>$groupsUsedInIntuneRoles groups are used for Intune RBAC role assignments</li>$catalogUsageDescription</ul><p><strong>Important:</strong> Azure exposure uses the strongest active or eligible direct, membership, or ownership path. Assess the impact if a lower-tier administrator or application can manage these groups.</p>"
-            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureRoles=%3E0&or_IntuneRoles=%3E0&or_CAPs=%3E0$catalogRbacFilter&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CEntraMaxTier%2CAzureMaxTier%2CNestedInGroups%2CAppRoles%2CIntuneRoles%2CCAPs$catalogRbacColumn%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
+            RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureRoles=%3E0&or_IntuneRoles=%3E0&or_CAPs=%3E0$catalogRbacFilter&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CEntraMaxTier%2CAzureMaxLevel%2CAzureMaxImpact%2CNestedInGroups%2CAppRoles%2CIntuneRoles%2CCAPs$catalogRbacColumn%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
             AffectedObjects = $grp005Affected
