@@ -6666,6 +6666,54 @@ function Get-AzureImpactLevel {
     return "-"
 }
 
+# Single owner of the inherited Azure role warning text. The "through group" and "AzureRoles:"
+# substrings are filtered on by preset views (PVU-003, PVE-001, PVE-005, PVM-001), so they must
+# survive any rewording here. MaxImpact describes only the roles counted in RoleCount.
+# Relationship: membership | ownership. Style: Sentence | Token.
+function Get-AzureInheritedRoleWarningText {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [int]$RoleCount,
+        [Parameter(Mandatory = $false)]
+        [object]$MaxImpact,
+        [Parameter(Mandatory = $true)]
+        [string]$Relationship,
+        [Parameter(Mandatory = $false)]
+        [string]$Style = 'Sentence'
+    )
+
+    if ($RoleCount -lt 1) { return "" }
+    if ($Relationship -ne 'membership' -and $Relationship -ne 'ownership') {
+        throw "Unsupported relationship '$Relationship'. Expected 'membership' or 'ownership'."
+    }
+    if ($Style -ne 'Sentence' -and $Style -ne 'Token') {
+        throw "Unsupported style '$Style'. Expected 'Sentence' or 'Token'."
+    }
+
+    # A missing or unresolved level adds nothing, so the suffix is dropped rather than shown as "-".
+    $level = Get-AzureImpactLevel -Impact $MaxImpact
+    $hasLevel = $level -ne '-' -and $level -ne '?'
+
+    if ($Style -eq 'Token') {
+        if ($hasLevel) {
+            return "AzureRoles:$RoleCount ($level)"
+        }
+        return "AzureRoles:$RoleCount"
+    }
+
+    if ($RoleCount -ge 2) {
+        $word = 'roles'
+    } else {
+        $word = 'role'
+    }
+    $text = "$RoleCount Azure $word through group $Relationship"
+    if ($hasLevel) {
+        $text = "$text (max level: $level)"
+    }
+    return $text
+}
+
 # Returns normalized group metadata from the cached AllGroupsDetails hashtable for membership and ownership inheritance paths.
 function Get-GroupDetails {
     param (
@@ -6695,6 +6743,7 @@ function Get-GroupDetails {
             AzureRoles             = $MatchingGroup.AzureRoles
             AzureMaxTier           = $MatchingGroup.AzureMaxTier
             AzureExposureImpact    = $MatchingGroup.AzureExposureImpact
+            AzureCountedMaxImpact  = $MatchingGroup.AzureCountedMaxImpact
             AzureRoleDetails       = $MatchingGroup.AzureRoleDetails
             CAPs                   = $MatchingGroup.CAPs
             APAutoAssign           = if ($MatchingGroup.PSObject.Properties['APAutoAssign']) { [bool]$MatchingGroup.APAutoAssign } else { $false }
@@ -6782,7 +6831,9 @@ function Get-GroupActiveRoleMetrics {
         [ValidateSet("Entra", "Azure")]
         [string]$RoleSystem,
         [Parameter(Mandatory = $false)]
-        [switch]$IncludeEligible
+        [switch]$IncludeEligible,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
     )
 
     $detailsProperty = if ($RoleSystem -eq "Entra") { "EntraRoleDetails" } else { "AzureRoleDetails" }
@@ -6798,16 +6849,25 @@ function Get-GroupActiveRoleMetrics {
         )
         $roleCount = @($assignmentsInScope).Count
 
+        # MaxImpact covers exactly the assignments counted above, so a caller can describe the
+        # counted roles without reaching for the group's broader all-paths exposure.
+        $maxImpact = 0
+        if ($RoleSystem -eq "Azure") {
+            $maxImpact = Get-AzureRoleExposureImpact -RoleDetails $assignmentsInScope -TenantId $TenantId
+        }
+
         return [PSCustomObject]@{
             RoleCount       = $roleCount
             PrivilegedCount = if ($RoleSystem -eq "Entra") { @($assignmentsInScope | Where-Object { $_.IsPrivileged -eq $true }).Count } else { 0 }
             MaxTier         = Get-HighestTierLabel -Assignments $assignmentsInScope
+            MaxImpact       = [int]$maxImpact
             Source          = if ($IncludeEligible) { "DetailsAll" } else { "DetailsActive" }
         }
     }
 
     # Ownership path can rely on group summary counters that already include inherited role context.
     if ($IncludeEligible) {
+        $maxImpact = 0
         if ($RoleSystem -eq "Entra") {
             $roleCount = 0
             [void][int]::TryParse([string]$Group.AssignedRoleCount, [ref]$roleCount)
@@ -6819,12 +6879,19 @@ function Get-GroupActiveRoleMetrics {
             [void][int]::TryParse([string]$Group.AzureRoles, [ref]$roleCount)
             $privilegedCount = 0
             $maxTier = if ($roleCount -gt 0 -and $Group.AzureMaxTier) { $Group.AzureMaxTier } else { "-" }
+            # AzureCountedMaxImpact travels with AzureRoles through the nesting pass, so the two
+            # describe the same assignments. AzureExposureImpact must not be used here: it spreads
+            # recursively across mixed active/eligible chains that the count never follows.
+            if ($roleCount -gt 0) {
+                [void][int]::TryParse([string]$Group.AzureCountedMaxImpact, [ref]$maxImpact)
+            }
         }
 
         return [PSCustomObject]@{
             RoleCount       = $roleCount
             PrivilegedCount = $privilegedCount
             MaxTier         = $maxTier
+            MaxImpact       = [int]$maxImpact
             Source          = "SummaryAll"
         }
     }
@@ -6833,6 +6900,7 @@ function Get-GroupActiveRoleMetrics {
         RoleCount       = 0
         PrivilegedCount = 0
         MaxTier         = "-"
+        MaxImpact       = 0
         Source          = "NoDetails"
     }
 }
@@ -10572,6 +10640,61 @@ function Get-AzureRoleScopeTypeCounts {
 }
 
 # Return the strongest contextual Azure assignment without accumulating unrelated assignments.
+# Resolves the exposure impact of a single Azure assignment. Prefers a precomputed
+# AssignmentImpact and otherwise rebuilds it from the role and its scope. Private on purpose:
+# callers go through Get-AzureRoleExposureImpact or Invoke-AzureRoleProcessing.
+function Get-AzureRoleAssignmentExposureImpact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$Role,
+
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    if ($null -eq $Role) { return 0 }
+
+    $roleImpact = 0
+    $hasContextualImpact = $false
+    if ($Role.PSObject.Properties['AssignmentImpact'] -and $null -ne $Role.AssignmentImpact) {
+        $hasContextualImpact = [int]::TryParse([string]$Role.AssignmentImpact, [ref]$roleImpact) -and $roleImpact -ge 1
+    }
+
+    if (-not $hasContextualImpact) {
+        $roleTier = if ($Role.PSObject.Properties['RoleTier']) { $Role.RoleTier } else { $null }
+        $roleName = if ($Role.PSObject.Properties['RoleName']) {
+            [string]$Role.RoleName
+        } elseif ($Role.PSObject.Properties['RoleDefinitionName']) {
+            [string]$Role.RoleDefinitionName
+        } elseif ($Role.PSObject.Properties['DisplayName']) {
+            [string]$Role.DisplayName
+        } else {
+            'Azure role'
+        }
+        $rawScope = if ($Role.PSObject.Properties['RawScope'] -and -not [string]::IsNullOrWhiteSpace([string]$Role.RawScope)) {
+            [string]$Role.RawScope
+        } elseif ($Role.PSObject.Properties['DirectoryScopeId'] -and -not [string]::IsNullOrWhiteSpace([string]$Role.DirectoryScopeId)) {
+            [string]$Role.DirectoryScopeId
+        } elseif ($Role.PSObject.Properties['Scope'] -and [string]$Role.Scope -match '^/') {
+            [string]$Role.Scope
+        } else {
+            $null
+        }
+        $roleDefinitionId = if ($Role.PSObject.Properties['RoleDefinitionId']) {
+            [string]$Role.RoleDefinitionId
+        } elseif ($Role.PSObject.Properties['RoleId']) {
+            [string]$Role.RoleId
+        } else {
+            $null
+        }
+        $impactDetails = Get-AzureRoleAssignmentImpact -RoleTier $roleTier -RoleName $roleName -RawScope $rawScope -TenantId $TenantId -RoleDefinitionId $roleDefinitionId
+        $roleImpact = [int]$impactDetails.AssignmentImpact
+    }
+
+    return [int]$roleImpact
+}
+
 function Get-AzureRoleExposureImpact {
     [CmdletBinding()]
     param(
@@ -10586,43 +10709,7 @@ function Get-AzureRoleExposureImpact {
     foreach ($role in @($RoleDetails)) {
         if ($null -eq $role) { continue }
 
-        $roleImpact = 0
-        $hasContextualImpact = $false
-        if ($role.PSObject.Properties['AssignmentImpact'] -and $null -ne $role.AssignmentImpact) {
-            $hasContextualImpact = [int]::TryParse([string]$role.AssignmentImpact, [ref]$roleImpact) -and $roleImpact -ge 1
-        }
-
-        if (-not $hasContextualImpact) {
-            $roleTier = if ($role.PSObject.Properties['RoleTier']) { $role.RoleTier } else { $null }
-            $roleName = if ($role.PSObject.Properties['RoleName']) {
-                [string]$role.RoleName
-            } elseif ($role.PSObject.Properties['RoleDefinitionName']) {
-                [string]$role.RoleDefinitionName
-            } elseif ($role.PSObject.Properties['DisplayName']) {
-                [string]$role.DisplayName
-            } else {
-                'Azure role'
-            }
-            $rawScope = if ($role.PSObject.Properties['RawScope'] -and -not [string]::IsNullOrWhiteSpace([string]$role.RawScope)) {
-                [string]$role.RawScope
-            } elseif ($role.PSObject.Properties['DirectoryScopeId'] -and -not [string]::IsNullOrWhiteSpace([string]$role.DirectoryScopeId)) {
-                [string]$role.DirectoryScopeId
-            } elseif ($role.PSObject.Properties['Scope'] -and [string]$role.Scope -match '^/') {
-                [string]$role.Scope
-            } else {
-                $null
-            }
-            $roleDefinitionId = if ($role.PSObject.Properties['RoleDefinitionId']) {
-                [string]$role.RoleDefinitionId
-            } elseif ($role.PSObject.Properties['RoleId']) {
-                [string]$role.RoleId
-            } else {
-                $null
-            }
-            $impactDetails = Get-AzureRoleAssignmentImpact -RoleTier $roleTier -RoleName $roleName -RawScope $rawScope -TenantId $TenantId -RoleDefinitionId $roleDefinitionId
-            $roleImpact = [int]$impactDetails.AssignmentImpact
-        }
-
+        $roleImpact = Get-AzureRoleAssignmentExposureImpact -Role $role -TenantId $TenantId
         if ($roleImpact -gt $maximumImpact) { $maximumImpact = $roleImpact }
     }
 
@@ -10633,19 +10720,26 @@ function Invoke-AzureRoleProcessing {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [array]$RoleDetails
+        [array]$RoleDetails,
+
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
     )
 
         #Process Entra Role assignments
         $ImpactScore = 0
         $EligibleImpactScore = 0
-        $Tier0Count = 0
-        $Tier1Count = 0
-        $Tier2Count = 0
-        $Tier3Count = 0
-        $UnknownTierCount = 0
+        # Warning levels mirror the AzureMaxLevel column. Roles whose tier could not be resolved
+        # stay in their own bucket instead of inheriting the fallback base impact's level.
+        $levelCounts = [ordered]@{
+            'Critical' = 0
+            'High'     = 0
+            'Medium'   = 0
+            'Low'      = 0
+            'Unknown'  = 0
+        }
         $roleSummary = ""
-        
+
         foreach ($Role in $RoleDetails) {
             $normalizedRoleTier = switch ([string]$Role.RoleTier) {
                 { $_ -in @('0', 'Tier-0') } { 0; break }
@@ -10654,28 +10748,15 @@ function Invoke-AzureRoleProcessing {
                 { $_ -in @('3', 'Tier-3') } { 3; break }
                 default { '?'; break }
             }
-            switch ($normalizedRoleTier) {
-                0 {
-                    $Tier0Count++
-                    break
-                }
-                1 {
-                    $Tier1Count++
-                    break
-                }
-                2 {
-                    $Tier2Count++
-                    break
-                }
-                3 {
-                    $Tier3Count++
-                    break
-                }
-                default {
-                    $UnknownTierCount++
-                    break
-                }
+            # Classify from the per-assignment exposure impact, the same value the AzureMaxLevel
+            # column is derived from, never from the clamped scoring impact computed below.
+            if ($normalizedRoleTier -eq '?') {
+                $roleLevel = 'Unknown'
+            } else {
+                $roleLevel = Get-AzureImpactLevel -Impact (Get-AzureRoleAssignmentExposureImpact -Role $Role -TenantId $TenantId)
+                if (-not $levelCounts.Contains($roleLevel)) { $roleLevel = 'Unknown' }
             }
+            $levelCounts[$roleLevel] = [int]$levelCounts[$roleLevel] + 1
 
             $roleDefinitionId = if ($Role.PSObject.Properties["RoleDefinitionId"]) {
                 [string]$Role.RoleDefinitionId
@@ -10702,12 +10783,15 @@ function Invoke-AzureRoleProcessing {
         
         # Build role description parts
         $roleParts = @()
-        if ($Tier0Count -ge 1) { $roleParts += "$Tier0Count (Tier0)" }
-        if ($Tier1Count -ge 1) { $roleParts += "$Tier1Count (Tier1)" }
-        if ($Tier2Count -ge 1) { $roleParts += "$Tier2Count (Tier2)" }
-        if ($Tier3Count -ge 1) { $roleParts += "$Tier3Count (Tier3)" }
-        if ($UnknownTierCount -ge 1) { $roleParts += "$UnknownTierCount (Tier?)" }
-        if (($Tier0Count + $Tier1Count + $Tier2Count + $Tier3Count + $UnknownTierCount) -ge 2) {
+        $totalRoleCount = 0
+        foreach ($levelName in @($levelCounts.Keys)) {
+            $levelCount = [int]$levelCounts[$levelName]
+            if ($levelCount -ge 1) {
+                $roleParts += "$levelCount ($levelName)"
+                $totalRoleCount += $levelCount
+            }
+        }
+        if ($totalRoleCount -ge 2) {
             $word = "roles"
         } else {
             $word = "role"
@@ -14528,4 +14612,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleBaseImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-AzureRoleTierFromPermissions,Resolve-AzureRoleTier,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Merge-HigherImpact,Get-AzureImpactLevel,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,Get-AgentObjectBasics,Get-ServicePrincipalSignInActivityLookup,Test-EntraFalconServicePrincipalInactive,Get-EntraFalconMfaCapabilityState,Get-EntraFalconUsr012Decision,Resolve-DirectoryObjectReference,Export-EntraFalconDebugObjectDump,Export-EntraFalconSecurityFindingsJson,Export-EntraFalconDataJson,start-CleanUp,Format-ReportSection,ConvertTo-EntraFalconHtmlText,Get-OrgInfo,Get-LogLevel,Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-AzureRoleAssignmentImpact,Get-AzureRoleBaseImpact,Get-AzureRoleScopeTypeCounts,Get-AzureRoleExposureImpact,Get-AzureRoleTierFromPermissions,Resolve-AzureRoleTier,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,New-EntraFalconGraphTokenProvider,Reset-EntraFalconTokenProviderState,Get-EntraFalconBatchCoverage,Test-EntraFalconSuccessStatus,Invoke-EntraFalconGraphBatch,Get-EntraFalconObjectRelationshipChunked,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Format-CapGraphError,Get-EntraRoleAssignments,Get-IntuneRbacRoleAssignments,Get-APIPermissionCategory,New-AppRoleReferenceCache,Resolve-AppRoleReference,Get-AppRoleReferenceApiName,Get-AppRoleReferenceResourceAppId,Resolve-DelegatedPermissionGrantDetails,Resolve-AppRoleAssignmentRecord,Get-AppRoleAssignmentImpact,Get-ApiPermissionImpactSummary,Get-ObjectInfo,Initialize-EntraFalconObjectInfoCache,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Set-AssessmentIdentity,Get-HighestTierLabel,Merge-HigherTierLabel,Merge-HigherImpact,Get-AzureImpactLevel,Get-AzureInheritedRoleWarningText,Get-GroupDetails,Merge-EntraFalconCatalogRbacAssignments,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility,Get-KnownMaliciousEnterpriseApp,Get-EntraFalconSPNameAssessment

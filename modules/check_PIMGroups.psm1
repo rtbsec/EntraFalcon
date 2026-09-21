@@ -622,7 +622,7 @@ function Invoke-CheckPIMGroups {
         $headerInfo = [pscustomobject]@{
             "Group" = $item.Group
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
             "Azure Max Impact" = $item.AzureMaxImpact
             "Role" = $item.Role
             "Eligible Assignments" = $item.Eligible
@@ -736,7 +736,7 @@ function Invoke-CheckPIMGroups {
         $generalInformation = [pscustomobject]@{
             Group = $item.GroupReportLink
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
             "Azure Max Impact" = $item.AzureMaxImpact
             Role = $item.Role
             "Last Modified" = if ([string]::IsNullOrWhiteSpace([string]$item.PolicyLastModifiedDateTime)) { '-' } else { $item.PolicyLastModifiedDateTime }

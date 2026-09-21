@@ -418,6 +418,46 @@ function ConvertTo-CatalogTierLabel {
     }
 }
 
+# Display value for the configured-role details. Azure access is shown as its exposure level; the tier on the role info stays the scoring input.
+function Get-CatalogDetailTierOrCategory {
+    param(
+        [Parameter(Mandatory = $true)][object]$RoleInfo,
+        [Parameter(Mandatory = $false)][object]$Group = $null
+    )
+
+    $type = [string]$RoleInfo.Type
+    if ($type -eq 'Azure Role') {
+        $roleImpact = [double]0
+        if ([double]::TryParse([string]$RoleInfo.Impact, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$roleImpact) -and $roleImpact -gt 0) {
+            return Get-AzureImpactLevel -Impact ([int][math]::Round($roleImpact, 0, [System.MidpointRounding]::AwayFromZero))
+        }
+        return '-'
+    }
+
+    if ($type -ne 'Group') {
+        return $RoleInfo.TierOrCategory
+    }
+
+    $labels = [System.Collections.Generic.List[string]]::new()
+    if ($null -ne $Group) {
+        $entraMaxTier = [string]$Group.EntraMaxTier
+        if (-not [string]::IsNullOrWhiteSpace($entraMaxTier) -and $entraMaxTier -ne '-') { [void]$labels.Add("Entra: $entraMaxTier") }
+
+        # Only an explicit "?" marks Azure as not assessed; null, missing, and zero mean no Azure exposure.
+        $exposureProperty = $Group.PSObject.Properties['AzureExposureImpact']
+        $exposureText = if ($null -ne $exposureProperty -and $null -ne $exposureProperty.Value) { ([string]$exposureProperty.Value).Trim() } else { '' }
+        $exposureValue = 0
+        if ($exposureText -eq '?') {
+            [void]$labels.Add('Azure: ?')
+        } elseif ([int]::TryParse($exposureText, [ref]$exposureValue) -and $exposureValue -gt 0) {
+            [void]$labels.Add("Azure: $(Get-AzureImpactLevel -Impact $exposureValue)")
+        }
+    }
+
+    if ($labels.Count -eq 0) { return '-' }
+    return ($labels -join ' / ')
+}
+
 function Get-CatalogLikelihood {
     [CmdletBinding()]
     param(
@@ -860,6 +900,7 @@ function Invoke-CheckCatalogs {
             $packageAzureImpact = 0
             foreach ($roleScope in $roleScopes) {
                 $existingRole = Get-CatalogExistingRoleInfo -ResourceRoleScope $roleScope -AllGroupsDetails $AllGroupsDetails -EnterpriseApps $EnterpriseApps -AppRoleReferenceCache $AppRoleReferenceCache
+                $configuredGroup = $null
                 $resourceKey = "$($existingRole.OriginSystem)|$($existingRole.ResourceOriginId)"
                 [void]$packageResourceKeys.Add($resourceKey)
                 [void]$configuredResourceKeys.Add($resourceKey)
@@ -953,7 +994,7 @@ function Invoke-CheckCatalogs {
                     Resource = if ($resourceReport) { "<a href=$resourceReport>$encodedResourceName</a>" } else { $encodedResourceName }
                     Type = [string]$existingRole.Type
                     RoleOrPermission = ConvertTo-EntraFalconHtmlText $existingRole.Role -DefaultValue '-'
-                    TierOrCategory = [string]$existingRole.TierOrCategory
+                    TierOrCategory = [string](Get-CatalogDetailTierOrCategory -RoleInfo $existingRole -Group $configuredGroup)
                     Impact = [math]::Round([double]$existingRole.Impact, 0)
                     ImpactCounted = $impactCounted
                     EnabledPolicies = $enabledPolicies
@@ -1314,7 +1355,7 @@ function Invoke-CheckCatalogs {
             ConfiguredRoleScopes = $existingRoleRows.Count
             CatalogRBAC = if ($RawCatalogs.RbacAvailable) { $assignments.Count } else { '-' }
             EntraMaxTier = $existingEntraTier
-            AzureMaxTier = $azureTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $catalogAzureImpact
             AzureMaxImpact = $catalogAzureImpact
             Impact = [math]::Round([double]$catalogImpact, 0)
             Likelihood = $catalogLikelihood

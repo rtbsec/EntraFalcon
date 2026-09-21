@@ -2107,7 +2107,8 @@ function Invoke-CheckCaps {
                     UPN          = $userObject.UPN
                     UserType     = $userObject.UserType
                     EntraMaxTier = $userObject.EntraMaxTier
-                    AzureMaxTier = $userObject.AzureMaxTier
+                    AzureMaxLevel = Get-AzureImpactLevel -Impact $userObject.AzureMaxImpact
+                    AzureMaxImpact = $userObject.AzureMaxImpact
                     MfaCap       = $userObject.MfaCap
                     Impact       = $userObject.Impact
                     Reason       = $reason

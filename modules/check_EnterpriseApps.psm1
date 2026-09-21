@@ -688,9 +688,20 @@ function Invoke-CheckEnterpriseApps {
             $EntraMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierThroughGroupMembership -CandidateTier $entraMetrics.MaxTier
 
             if ($GLOBALAzurePsChecks) {
-                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure
+                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -TenantId ([string]$CurrentTenant.Id)
                 $AzureMaxTierThroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupMembership -CandidateTier $azureMetrics.MaxTier
-                $AzureMaxImpactThroughGroupMembership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupMembership -CandidateImpact $group.AzureExposureImpact
+                $candidateAzureExposureImpact = $group.AzureExposureImpact
+                if ($candidateAzureExposureImpact -isnot [int]) {
+                    if ($null -eq $candidateAzureExposureImpact -or $candidateAzureExposureImpact -eq '?' -or $candidateAzureExposureImpact -eq '-') {
+                        $candidateAzureExposureImpact = 0
+                    } else {
+                        $candidateAzureExposureImpact = $candidateAzureExposureImpact -as [int]
+                        if ($null -eq $candidateAzureExposureImpact) { $candidateAzureExposureImpact = 0 }
+                    }
+                }
+                if ($candidateAzureExposureImpact -gt $AzureMaxImpactThroughGroupMembership) {
+                    $AzureMaxImpactThroughGroupMembership = $candidateAzureExposureImpact
+                }
             }
         }
 
@@ -700,9 +711,20 @@ function Invoke-CheckEnterpriseApps {
             $EntraMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierThroughGroupOwnership -CandidateTier $entraMetrics.MaxTier
 
             if ($GLOBALAzurePsChecks) {
-                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -IncludeEligible
+                $azureMetrics = Get-GroupActiveRoleMetrics -Group $group -RoleSystem Azure -TenantId ([string]$CurrentTenant.Id) -IncludeEligible
                 $AzureMaxTierThroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierThroughGroupOwnership -CandidateTier $azureMetrics.MaxTier
-                $AzureMaxImpactThroughGroupOwnership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupOwnership -CandidateImpact $group.AzureExposureImpact
+                $candidateAzureExposureImpact = $group.AzureExposureImpact
+                if ($candidateAzureExposureImpact -isnot [int]) {
+                    if ($null -eq $candidateAzureExposureImpact -or $candidateAzureExposureImpact -eq '?' -or $candidateAzureExposureImpact -eq '-') {
+                        $candidateAzureExposureImpact = 0
+                    } else {
+                        $candidateAzureExposureImpact = $candidateAzureExposureImpact -as [int]
+                        if ($null -eq $candidateAzureExposureImpact) { $candidateAzureExposureImpact = 0 }
+                    }
+                }
+                if ($candidateAzureExposureImpact -gt $AzureMaxImpactThroughGroupOwnership) {
+                    $AzureMaxImpactThroughGroupOwnership = $candidateAzureExposureImpact
+                }
             }
         }
 
@@ -713,8 +735,13 @@ function Invoke-CheckEnterpriseApps {
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierThroughGroupOwnership
 
             $DirectAzureMaxImpact = Get-AzureRoleExposureImpact -RoleDetails $AzureRoleDetails -TenantId ([string]$CurrentTenant.Id)
-            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $DirectAzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupMembership
-            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $AzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupOwnership
+            $AzureMaxImpact = [int]$DirectAzureMaxImpact
+            if ($AzureMaxImpactThroughGroupMembership -gt $AzureMaxImpact) {
+                $AzureMaxImpact = $AzureMaxImpactThroughGroupMembership
+            }
+            if ($AzureMaxImpactThroughGroupOwnership -gt $AzureMaxImpact) {
+                $AzureMaxImpact = $AzureMaxImpactThroughGroupOwnership
+            }
         } else {
             $AzureMaxTier = "?"
             $AzureMaxImpact = "?"
@@ -795,7 +822,7 @@ function Invoke-CheckEnterpriseApps {
 
         if ($AzureRoleCount -ge 1) {
             #Use function to get the impact score and warning message for assigned Azure roles
-            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails
+            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails -TenantId ([string]$CurrentTenant.Id)
             $Warnings += $AzureRolesProcessedDetails.Warning
             $ImpactScore += $AzureRolesProcessedDetails.ImpactScore
         }
@@ -942,6 +969,7 @@ function Invoke-CheckEnterpriseApps {
             $TotalAssignedPrivilegedRoles = 0
             $TotalInheritedHighValue = 0
             $TotalAzureRoles = 0
+            $AzureWarningMaxImpactMembership = 0
 
             #Check each group
             foreach ($Groups in $GroupMember) {
@@ -956,9 +984,13 @@ function Invoke-CheckEnterpriseApps {
 
                 $groupAzureRoleCount = 0
                 if ($GLOBALAzurePsChecks) {
-                    $azureMetrics = Get-GroupActiveRoleMetrics -Group $Groups -RoleSystem Azure
+                    $azureMetrics = Get-GroupActiveRoleMetrics -Group $Groups -RoleSystem Azure -TenantId ([string]$CurrentTenant.Id)
                     $groupAzureRoleCount = $azureMetrics.RoleCount
                     $TotalAzureRoles += $groupAzureRoleCount
+                    $candidateAzureWarningImpact = [int]$azureMetrics.MaxImpact
+                    if ($candidateAzureWarningImpact -gt $AzureWarningMaxImpactMembership) {
+                        $AzureWarningMaxImpactMembership = $candidateAzureWarningImpact
+                    }
                 }
 
                 $groupCapCount = 0
@@ -984,7 +1016,7 @@ function Invoke-CheckEnterpriseApps {
 
             #Check Azure role assignments
             if ($TotalAzureRoles -ge 1) {
-                $Warnings += "$TotalAzureRoles Azure role(s) through group membership"
+                $Warnings += Get-AzureInheritedRoleWarningText -RoleCount $TotalAzureRoles -MaxImpact $AzureWarningMaxImpactMembership -Relationship membership
             }
 
             #Check membership of groups with inherited high value
@@ -1009,6 +1041,7 @@ function Invoke-CheckEnterpriseApps {
             $TotalAssignedPrivilegedRoles = 0
             $TotalInheritedHighValue = 0
             $TotalAzureRoles = 0
+            $AzureWarningMaxImpactOwnership = 0
             $TotalCAPs = 0
             #Basic score for owning a group
 
@@ -1028,9 +1061,13 @@ function Invoke-CheckEnterpriseApps {
 
                     $groupAzureRoleCount = 0
                     if ($GLOBALAzurePsChecks) {
-                        $azureMetrics = Get-GroupActiveRoleMetrics -Group $OwnedGroup -RoleSystem Azure -IncludeEligible
+                        $azureMetrics = Get-GroupActiveRoleMetrics -Group $OwnedGroup -RoleSystem Azure -TenantId ([string]$CurrentTenant.Id) -IncludeEligible
                         $groupAzureRoleCount = $azureMetrics.RoleCount
                         $TotalAzureRoles += $groupAzureRoleCount
+                        $candidateAzureWarningImpact = [int]$azureMetrics.MaxImpact
+                        if ($candidateAzureWarningImpact -gt $AzureWarningMaxImpactOwnership) {
+                            $AzureWarningMaxImpactOwnership = $candidateAzureWarningImpact
+                        }
                     }
 
                     $groupCapCount = 0
@@ -1059,7 +1096,7 @@ function Invoke-CheckEnterpriseApps {
 
                 #Check Azure role assignments
                 if ($TotalAzureRoles -ge 1) {
-                    $Warnings += "$TotalAzureRoles Azure role(s) through group ownership"
+                    $Warnings += Get-AzureInheritedRoleWarningText -RoleCount $TotalAzureRoles -MaxImpact $AzureWarningMaxImpactOwnership -Relationship ownership
                 }
 
                 #Check CAP group ownership

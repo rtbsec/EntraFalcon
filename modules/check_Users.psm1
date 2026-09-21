@@ -752,6 +752,7 @@ function Invoke-CheckUsers {
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
                     AzureExposureImpact = $MatchingGroup.AzureExposureImpact
+                    AzureCountedMaxImpact = $MatchingGroup.AzureCountedMaxImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                     IntuneRoleDetails = if ($MatchingGroup.PSObject.Properties["IntuneRoleDetails"]) { $MatchingGroup.IntuneRoleDetails } else { @() }
                     AppRoles = $MatchingGroup.AppRoles
@@ -779,6 +780,7 @@ function Invoke-CheckUsers {
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
                     AzureExposureImpact = $MatchingGroup.AzureExposureImpact
+                    AzureCountedMaxImpact = $MatchingGroup.AzureCountedMaxImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                     IntuneRoleDetails = if ($MatchingGroup.PSObject.Properties["IntuneRoleDetails"]) { $MatchingGroup.IntuneRoleDetails } else { @() }
                     AppRoles = $MatchingGroup.AppRoles
@@ -879,6 +881,7 @@ function Invoke-CheckUsers {
             $EntraRolesCount = 0
             $CAPs = 0
             $AzureRolesCount = 0
+            $AzureWarningMaxImpactOwnership = 0
             $IntuneRolesCount = 0
             $AppRolesCount = 0
             $Message = ""
@@ -898,7 +901,23 @@ function Invoke-CheckUsers {
                 if ($object.IntuneRoles -is [int]) {$IntuneRolesCount += $object.IntuneRoles} else {$IntuneRolesCount += 0}
                 $EntraMaxTierTroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierTroughGroupOwnership -CandidateTier $object.EntraMaxTier
                 $AzureMaxTierTroughGroupOwnership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierTroughGroupOwnership -CandidateTier $object.AzureMaxTier
-                $AzureMaxImpactThroughGroupOwnership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupOwnership -CandidateImpact $object.AzureExposureImpact
+                $candidateAzureExposureImpact = $object.AzureExposureImpact
+                if ($candidateAzureExposureImpact -isnot [int]) {
+                    if ($null -eq $candidateAzureExposureImpact -or $candidateAzureExposureImpact -eq '?' -or $candidateAzureExposureImpact -eq '-') {
+                        $candidateAzureExposureImpact = 0
+                    } else {
+                        $candidateAzureExposureImpact = $candidateAzureExposureImpact -as [int]
+                        if ($null -eq $candidateAzureExposureImpact) { $candidateAzureExposureImpact = 0 }
+                    }
+                }
+                if ($candidateAzureExposureImpact -gt $AzureMaxImpactThroughGroupOwnership) {
+                    $AzureMaxImpactThroughGroupOwnership = $candidateAzureExposureImpact
+                }
+                # The warning quotes only the counted roles, so it tracks the count's own maximum.
+                $candidateAzureWarningImpact = [int]$object.AzureCountedMaxImpact
+                if ($candidateAzureWarningImpact -gt $AzureWarningMaxImpactOwnership) {
+                    $AzureWarningMaxImpactOwnership = $candidateAzureWarningImpact
+                }
                 
                 $AppRolesCount += $object.AppRoles
             }
@@ -914,7 +933,7 @@ function Invoke-CheckUsers {
                     $MessageParts += "EntraRoles:$EntraRolesCount"
                 }
                 if ($AzureRolesCount -ge 1) {
-                    $MessageParts += "AzureRoles:$AzureRolesCount"
+                    $MessageParts += Get-AzureInheritedRoleWarningText -RoleCount $AzureRolesCount -MaxImpact $AzureWarningMaxImpactOwnership -Relationship ownership -Style Token
                 }
                 if ($IntuneRolesCount -ge 1) {
                     $MessageParts += "IntuneRoles:$IntuneRolesCount"
@@ -940,6 +959,7 @@ function Invoke-CheckUsers {
             $EntraRolesCount = 0
             $ObjectsWithCaps = 0
             $AzureRolesCount = 0
+            $AzureWarningMaxImpactMembership = 0
             $IntuneRolesCount = 0
             $AppRolesCount = 0
             $Message = ""
@@ -961,7 +981,23 @@ function Invoke-CheckUsers {
                 if ($object.IntuneRoles -is [int]) {$IntuneRolesCount += $object.IntuneRoles} else {$IntuneRolesCount += 0}
                 $EntraMaxTierTroughGroupMembership = Merge-HigherTierLabel -CurrentTier $EntraMaxTierTroughGroupMembership -CandidateTier $object.EntraMaxTier
                 $AzureMaxTierTroughGroupMembership = Merge-HigherTierLabel -CurrentTier $AzureMaxTierTroughGroupMembership -CandidateTier $object.AzureMaxTier
-                $AzureMaxImpactThroughGroupMembership = Merge-HigherImpact -CurrentImpact $AzureMaxImpactThroughGroupMembership -CandidateImpact $object.AzureExposureImpact
+                $candidateAzureExposureImpact = $object.AzureExposureImpact
+                if ($candidateAzureExposureImpact -isnot [int]) {
+                    if ($null -eq $candidateAzureExposureImpact -or $candidateAzureExposureImpact -eq '?' -or $candidateAzureExposureImpact -eq '-') {
+                        $candidateAzureExposureImpact = 0
+                    } else {
+                        $candidateAzureExposureImpact = $candidateAzureExposureImpact -as [int]
+                        if ($null -eq $candidateAzureExposureImpact) { $candidateAzureExposureImpact = 0 }
+                    }
+                }
+                if ($candidateAzureExposureImpact -gt $AzureMaxImpactThroughGroupMembership) {
+                    $AzureMaxImpactThroughGroupMembership = $candidateAzureExposureImpact
+                }
+                # The warning quotes only the counted roles, so it tracks the count's own maximum.
+                $candidateAzureWarningImpact = [int]$object.AzureCountedMaxImpact
+                if ($candidateAzureWarningImpact -gt $AzureWarningMaxImpactMembership) {
+                    $AzureWarningMaxImpactMembership = $candidateAzureWarningImpact
+                }
                 $AppRolesCount += $object.AppRoles
             }
 
@@ -980,7 +1016,7 @@ function Invoke-CheckUsers {
                     $MessageParts += "EntraRoles:$EntraRolesCount"
                 }
                 if ($AzureRolesCount -ge 1) {
-                    $MessageParts += "AzureRoles:$AzureRolesCount"
+                    $MessageParts += Get-AzureInheritedRoleWarningText -RoleCount $AzureRolesCount -MaxImpact $AzureWarningMaxImpactMembership -Relationship membership -Style Token
                 }
                 if ($IntuneRolesCount -ge 1) {
                     $MessageParts += "IntuneRoles:$IntuneRolesCount"
@@ -1121,7 +1157,7 @@ function Invoke-CheckUsers {
 
         if ($AzureRoleCount -ge 1) {
             #Use function to get the impact score and warning message for assigned Azure roles
-            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails
+            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails -TenantId ([string]$CurrentTenant.Id)
             [void]$Warnings.Add($AzureRolesProcessedDetails.Warning)
             $Impact += $AzureRolesProcessedDetails.ImpactScore
         }
@@ -1137,8 +1173,13 @@ function Invoke-CheckUsers {
             $AzureMaxTier = Merge-HigherTierLabel -CurrentTier $AzureMaxTier -CandidateTier $AzureMaxTierTroughGroupMembership
 
             $DirectAzureMaxImpact = Get-AzureRoleExposureImpact -RoleDetails $AzureRoleDetails -TenantId ([string]$CurrentTenant.Id)
-            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $DirectAzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupOwnership
-            $AzureMaxImpact = Merge-HigherImpact -CurrentImpact $AzureMaxImpact -CandidateImpact $AzureMaxImpactThroughGroupMembership
+            $AzureMaxImpact = [int]$DirectAzureMaxImpact
+            if ($AzureMaxImpactThroughGroupOwnership -gt $AzureMaxImpact) {
+                $AzureMaxImpact = $AzureMaxImpactThroughGroupOwnership
+            }
+            if ($AzureMaxImpactThroughGroupMembership -gt $AzureMaxImpact) {
+                $AzureMaxImpact = $AzureMaxImpactThroughGroupMembership
+            }
         } else {
             $AzureMaxTier = "?"
             $AzureMaxImpact = "?"
@@ -2106,7 +2147,7 @@ function Write-EntraFalconUsersReport {
             "PerUserMfa" = $item.PerUserMfa
             "Protected" = $item.Protected
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
             "Azure Max Impact" = $item.AzureMaxImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk

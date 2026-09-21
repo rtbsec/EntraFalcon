@@ -1349,6 +1349,8 @@ function Invoke-CheckGroups {
         }
 
         # For all security enabled groups check if there are Azure IAM assignments
+        # Reset per group: the counted maximum must never carry over from a previous iteration.
+        $AzureCountedMaxImpact = 0
         if ($GLOBALAzurePsChecks) {
             if ($group.SecurityEnabled -eq $true) {
                 
@@ -1449,11 +1451,13 @@ function Invoke-CheckGroups {
         if ($GLOBALAzurePsChecks -and $AzureRoleCount -ge 1) {
 
             #Use function to get the impact score and warning message for assigned Azure roles
-            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails
+            $AzureRolesProcessedDetails = Invoke-AzureRoleProcessing -RoleDetails $azureRoleDetails -TenantId ([string]$CurrentTenant.Id)
             [void]$Warnings.Add($AzureRolesProcessedDetails.Warning)
             $ImpactScore += $AzureRolesProcessedDetails.ImpactScore
             $AzureRoleScore = $AzureRolesProcessedDetails.ImpactScore
             $AzureRoleExposureImpact = Get-AzureRoleExposureImpact -RoleDetails $azureRoleDetails -TenantId ([string]$CurrentTenant.Id)
+            # Pairs with AzureRoleCount: the maximum over exactly the roles that count contains.
+            $AzureCountedMaxImpact = $AzureRoleExposureImpact
 
             Set-AzureGroupExposureSeedImpact -GroupId ([string]$group.Id) -Impact $AzureRoleExposureImpact
             foreach ($azureOwnerGroupId in @($AzureOwnerGroupIds)) {
@@ -1470,6 +1474,7 @@ function Invoke-CheckGroups {
 	                "GroupID" = $group.Id
 	                "Message" = "Eligible member or nested in group with AzureRole"
 	                "AzureRoles" = $AzureRoleCount
+	                "AzureCountedMaxImpact" = $AzureCountedMaxImpact
                     "Score" = $AzureRoleScore
 	                "TargetGroups" = $memberGroup.Id
 	            })
@@ -1480,6 +1485,7 @@ function Invoke-CheckGroups {
 	                "GroupID" = $group.Id
 	                "Message" = "Eligible owner of with AzureRole"
                     "AzureRoles" = $AzureRoleCount
+	                "AzureCountedMaxImpact" = $AzureCountedMaxImpact
 	                "Score" = $AzureRoleScore
 	                "TargetGroups" = $ownerGroup.Id
 	            })
@@ -1798,6 +1804,9 @@ function Invoke-CheckGroups {
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
             AzureExposureImpact = 0
+            # Maximum over exactly the assignments AzureRoles counts. Propagates with the count
+            # through the nesting pass below, unlike AzureExposureImpact which spreads recursively.
+            AzureCountedMaxImpact = $AzureCountedMaxImpact
             AzureRoleDetails = $azureRoleDetails
             IntuneRoles = $IntuneRoleCount
             IntuneRoleDetails = $IntuneRoleDetails
@@ -1940,7 +1949,13 @@ function Invoke-CheckGroups {
             # Add role/CAP counts
             if ($highValueGroup.CAPs -and $group.CAPs -is [int])             { $group.CAPs       += $highValueGroup.CAPs }
             if ($highValueGroup.EntraRoles) { $group.EntraRoles += $highValueGroup.EntraRoles }
-            if ($highValueGroup.AzureRoles -and $group.AzureRoles -is [int]) { $group.AzureRoles += $highValueGroup.AzureRoles }
+            if ($highValueGroup.AzureRoles -and $group.AzureRoles -is [int]) {
+                $group.AzureRoles += $highValueGroup.AzureRoles
+                $candidateAzureCountedImpact = [int]$highValueGroup.AzureCountedMaxImpact
+                if ($candidateAzureCountedImpact -gt [int]$group.AzureCountedMaxImpact) {
+                    $group.AzureCountedMaxImpact = $candidateAzureCountedImpact
+                }
+            }
             if ($highValueGroup.IntuneRoles -and $group.IntuneRoles -is [int]) { $group.IntuneRoles += $highValueGroup.IntuneRoles }
     
             # Update owned group (fast lookup through)
@@ -2182,7 +2197,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             "Protected" = $item.Protected
             "Synced from on-prem" = $item.OnPrem
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Tier" = $item.AzureMaxTier
+            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureExposureImpact
             "Azure Max Impact" = $item.AzureExposureImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk
@@ -2584,7 +2599,6 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     $GroupNameLength = $GroupName.Length
                 }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
-                $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
                 $intuneRoles = if ($null -ne $groupDetails -and $groupDetails.PSObject.Properties["IntuneRoles"] -and $null -ne $groupDetails.IntuneRoles) { $groupDetails.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
@@ -3017,7 +3031,6 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 }
                 $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
-                $azureMaxTier = if ($null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
@@ -3107,7 +3120,6 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             foreach ($object in $item.PfGOwnedGroupsDetails) {
                 $groupDetails = $GroupLookup[$object.id]
                 $entraMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
-                $azureMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureMaxTier) { $groupDetails.AzureMaxTier } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxImpact = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                 $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
@@ -3353,6 +3365,7 @@ $headerHtml = @"
             AzureRoles = $group.AzureRoles
             AzureMaxTier = $group.AzureMaxTier
             AzureExposureImpact = $group.AzureExposureImpact
+            AzureCountedMaxImpact = $group.AzureCountedMaxImpact
             AzureRoleDetails = $group.AzureRoleDetails
             IntuneRoles = $group.IntuneRoles
             IntuneRoleDetails = $group.IntuneRoleDetails
