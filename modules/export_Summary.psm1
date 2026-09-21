@@ -1766,6 +1766,8 @@ $CustomCss = @"
 }
 .chart-box {
     width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
     max-width: none;
     height: 270px;
     padding: 10px;
@@ -2299,4 +2301,3 @@ Enumeration Results:
     write-host "[+] Enumeration summary stored at: $summaryHtmlPath"
     write-host "[+] Enumeration summary (json) stored at: $summaryJsonPath"
 }
-
