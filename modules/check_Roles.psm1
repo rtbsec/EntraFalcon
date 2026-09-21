@@ -768,6 +768,11 @@ $headerHtml = @"
         $AzureTier2Count = 0
         $AzureTier3Count = 0
         $AzureTierUncatCount = 0
+        $AzureLevelCriticalCount = 0
+        $AzureLevelHighCount = 0
+        $AzureLevelMediumCount = 0
+        $AzureLevelLowCount = 0
+        $AzureLevelUnknownCount = 0
         $AssignmentsBuiltInRoles = 0
         $AssignmentPrincipalTypUsers = 0
         $AssignmentPrincipalTypGroups = 0
@@ -791,6 +796,14 @@ $headerHtml = @"
                 "Tier-2" { $AzureTier2Count++; break }
                 "Tier-3" { $AzureTier3Count++; break }
                 "Uncategorized" { $AzureTierUncatCount++ }
+            }
+
+            switch (Get-AzureImpactLevel -Impact $assignment.AssignmentImpact) {
+                "Critical" { $AzureLevelCriticalCount++; break }
+                "High" { $AzureLevelHighCount++; break }
+                "Medium" { $AzureLevelMediumCount++; break }
+                "Low" { $AzureLevelLowCount++; break }
+                default { $AzureLevelUnknownCount++ }
             }
 
             switch ($assignment.PrincipalType) {
@@ -821,6 +834,11 @@ $headerHtml = @"
         $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-2" = $AzureTier2Count
         $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-3" = $AzureTier3Count
         $GlobalAuditSummary.AzureRoleAssignments.Tiers.Uncategorized = $AzureTierUncatCount
+        $GlobalAuditSummary.AzureRoleAssignments.Levels.Critical = $AzureLevelCriticalCount
+        $GlobalAuditSummary.AzureRoleAssignments.Levels.High = $AzureLevelHighCount
+        $GlobalAuditSummary.AzureRoleAssignments.Levels.Medium = $AzureLevelMediumCount
+        $GlobalAuditSummary.AzureRoleAssignments.Levels.Low = $AzureLevelLowCount
+        $GlobalAuditSummary.AzureRoleAssignments.Levels.Unknown = $AzureLevelUnknownCount
 
         $azureScopeTypeCounts = Get-AzureRoleScopeTypeCounts -Assignments $SortedAzureRoles
         $GlobalAuditSummary.AzureRoleAssignments.ScopeType = $azureScopeTypeCounts
