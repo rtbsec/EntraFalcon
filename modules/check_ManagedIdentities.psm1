@@ -1279,6 +1279,18 @@ $headerHtml = @"
     $managedIdentityAzureRoleDetails = @($AllServicePrincipal | ForEach-Object { @($_.AzureRoleDetails) })
     $GlobalAuditSummary.ManagedIdentities.AzureScopeType = Get-AzureRoleScopeTypeCounts -Assignments $managedIdentityAzureRoleDetails
 
+    $azureImpactLevelCounts = @{ Critical = 0; High = 0; Medium = 0; Low = 0; Unknown = 0 }
+    foreach ($assignment in $managedIdentityAzureRoleDetails) {
+        switch (Get-AzureImpactLevel -Impact $assignment.AssignmentImpact) {
+            "Critical" { $azureImpactLevelCounts.Critical++; break }
+            "High" { $azureImpactLevelCounts.High++; break }
+            "Medium" { $azureImpactLevelCounts.Medium++; break }
+            "Low" { $azureImpactLevelCounts.Low++; break }
+            default { $azureImpactLevelCounts.Unknown++ }
+        }
+    }
+    $GlobalAuditSummary.ManagedIdentities.AzureImpactLevel = $azureImpactLevelCounts
+
 
     #Convert to Hashtable for faster searches
     $AllServicePrincipalHT = @{}
