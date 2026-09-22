@@ -8070,7 +8070,7 @@ function Get-AgentObjectBasics {
             Enabled              = $item.accountEnabled
             PublisherName        = $publisherName
             Foreign              = $false
-            MSOwned            = $false
+            MSOwned              = $false
             ObjectKind           = 'AgentIdentity'
             TargetReport         = 'AgentIdentities'
             ServicePrincipalType = $item.servicePrincipalType
@@ -10389,6 +10389,7 @@ function Get-AzureRoleAssignmentImpact {
     $environmentFactor = [double]$GLOBALAzureRoleImpactPolicy.EnvironmentFactors.Unknown
     $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Normal
     $observedResources = $null
+    $scoringResourceCount = $null
     $inventoryStatus = "Unavailable"
     $subscriptionId = $null
     $resourceGroupName = $null
@@ -10506,48 +10507,63 @@ function Get-AzureRoleAssignmentImpact {
     switch ($scopeType) {
         "Root" {
             $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
-            if ($inventoryStatus -eq "Complete" -and $null -ne $rootResourceCount) { $observedResources = [int]$rootResourceCount }
+            if ($null -ne $rootResourceCount) {
+                $scoringResourceCount = [int]$rootResourceCount
+                if ($inventoryStatus -eq "Complete") { $observedResources = $scoringResourceCount }
+            }
         }
         "ManagementGroup" {
             if ($resourceInventoryStatus -eq "Complete" -and $managementGroupHierarchyStatus -eq "Complete") {
                 $inventoryStatus = "Complete"
-                $managementGroupCount = Get-AzureRoleContextValue -Map $managementGroupResourceCountMap -Key $managementGroupKey
-                if ($null -ne $managementGroupCount) { $observedResources = [int]$managementGroupCount }
             } elseif ($resourceInventoryStatus -eq "Partial" -or $managementGroupHierarchyStatus -eq "Partial") {
                 $inventoryStatus = "Partial"
             } else {
                 $inventoryStatus = "Unavailable"
             }
+            if ($inventoryStatus -ne "Unavailable") {
+                $managementGroupCount = Get-AzureRoleContextValue -Map $managementGroupResourceCountMap -Key $managementGroupKey
+                if ($null -ne $managementGroupCount) {
+                    $scoringResourceCount = [int]$managementGroupCount
+                    if ($inventoryStatus -eq "Complete") { $observedResources = $scoringResourceCount }
+                }
+            }
         }
         "Subscription" {
             $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
-            if ($inventoryStatus -eq "Complete") {
+            if ($inventoryStatus -ne "Unavailable") {
                 $subscriptionCount = Get-AzureRoleContextValue -Map $subscriptionResourceCountMap -Key $subscriptionKey
-                if ($null -ne $subscriptionCount) { $observedResources = [int]$subscriptionCount }
+                if ($null -ne $subscriptionCount) {
+                    $scoringResourceCount = [int]$subscriptionCount
+                    if ($inventoryStatus -eq "Complete") { $observedResources = $scoringResourceCount }
+                }
             }
         }
         "ResourceGroup" {
             $inventoryStatus = if ($resourceInventoryStatus -eq "Complete") { "Complete" } elseif ($resourceInventoryStatus -eq "Partial") { "Partial" } else { "Unavailable" }
-            if ($inventoryStatus -eq "Complete") {
+            if ($inventoryStatus -ne "Unavailable") {
                 $resourceGroupKey = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionId, $resourceGroupName).ToLowerInvariant()
                 $resourceGroupCount = Get-AzureRoleContextValue -Map $resourceGroupResourceCountMap -Key $resourceGroupKey
-                if ($null -ne $resourceGroupCount) { $observedResources = [int]$resourceGroupCount }
+                if ($null -ne $resourceGroupCount) {
+                    $scoringResourceCount = [int]$resourceGroupCount
+                    if ($inventoryStatus -eq "Complete") { $observedResources = $scoringResourceCount }
+                }
             }
         }
         "Resource" {
             $observedResources = 1
+            $scoringResourceCount = 1
             $inventoryStatus = "NotApplicable"
         }
         default { $inventoryStatus = "Unavailable" }
     }
 
-    if ($scopeType -in @("ResourceGroup", "Subscription", "ManagementGroup") -and $null -ne $observedResources) {
+    if ($scopeType -in @("ResourceGroup", "Subscription", "ManagementGroup") -and $null -ne $scoringResourceCount) {
         $scopeThresholds = $GLOBALAzureRoleImpactPolicy.SizeThresholds[$scopeType]
-        if ($observedResources -eq 0) {
+        if ($inventoryStatus -eq "Complete" -and $scoringResourceCount -eq 0) {
             $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Empty
-        } elseif ($observedResources -ge [int]$scopeThresholds.Large) {
+        } elseif ($scoringResourceCount -ge [int]$scopeThresholds.Large) {
             $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Large
-        } elseif ($observedResources -ge [int]$scopeThresholds.Medium) {
+        } elseif ($scoringResourceCount -ge [int]$scopeThresholds.Medium) {
             $sizeFactor = [double]$GLOBALAzureRoleImpactPolicy.SizeFactors.Medium
         }
     }
@@ -10579,7 +10595,7 @@ function Get-AzureRoleAssignmentImpact {
     } elseif ($scopeType -in @("Root", "ManagementGroup", "Subscription", "ResourceGroup")) {
         $scopeThresholds = if ($GLOBALAzureRoleImpactPolicy.SizeThresholds.ContainsKey($scopeType)) { $GLOBALAzureRoleImpactPolicy.SizeThresholds[$scopeType] } else { $null }
         if ($inventoryStatus -eq "Partial") {
-            $sizeLabel = "Inventory partial"
+            $sizeLabel = if ($null -ne $scoringResourceCount) { "Inventory partial (at least $scoringResourceCount)" } else { "Inventory partial" }
         } elseif ($inventoryStatus -ne "Complete") {
             $sizeLabel = "Inventory unavailable"
         } elseif ($null -eq $observedResources) {
@@ -10809,7 +10825,7 @@ function Invoke-AzureRoleProcessing {
 }
 
 
-# Execute an Azure Resource Graph query with a fixed request budget. Partial rows are exposed only for non-scoring metadata.
+# Execute an Azure Resource Graph query with a fixed request budget.
 function Invoke-AzureResourceGraphPagedQuery {
     [CmdletBinding()]
     param(
@@ -10820,8 +10836,8 @@ function Invoke-AzureResourceGraphPagedQuery {
         [string]$Query,
 
         [Parameter(Mandatory = $false)]
-        [ValidateRange(1, 10)]
-        [int]$MaxPages = 10,
+        [ValidateRange(1, 25)]
+        [int]$MaxPages = 25,
 
         [Parameter(Mandatory = $false)]
         [ValidateRange(1, 1000)]
@@ -10882,17 +10898,17 @@ function Invoke-AzureResourceGraphPagedQuery {
 
             if (-not [string]::IsNullOrWhiteSpace($nextSkipToken)) {
                 if ($pagesRetrieved -ge $MaxPages) {
-                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
                 }
                 if (-not $seenSkipTokens.Add($nextSkipToken)) {
-                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Repeated skip token." }
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = "Repeated skip token." }
                 }
                 $skipToken = $nextSkipToken
                 continue
             }
 
             if ($resultTruncated) {
-                return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Truncated response without a skip token." }
+                return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = "Truncated response without a skip token." }
             }
 
             if ($envelope.PSObject.Properties['totalRecords']) {
@@ -10901,7 +10917,7 @@ function Invoke-AzureResourceGraphPagedQuery {
                     throw "Azure Resource Graph returned an invalid totalRecords value."
                 }
                 if ($rows.Count -ne $totalRecords) {
-                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Returned row count does not match totalRecords." }
+                    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = "Returned row count does not match totalRecords." }
                 }
             }
 
@@ -10909,10 +10925,10 @@ function Invoke-AzureResourceGraphPagedQuery {
         }
     } catch {
         $status = if ($pagesRetrieved -gt 0) { "Partial" } else { "Unavailable" }
-        return [pscustomobject]@{ Status = $status; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = $_.Exception.Message }
+        return [pscustomobject]@{ Status = $status; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = $_.Exception.Message }
     }
 
-    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = @(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
+    return [pscustomobject]@{ Status = "Partial"; PagesRetrieved = $pagesRetrieved; Rows = $rows.ToArray(); RetrievedRows = $rows.ToArray(); FailureReason = "Page limit reached." }
 }
 
 # Function to get Azure IAM assignments
@@ -10956,132 +10972,131 @@ function Get-AllAzureIAMAssignmentsNative {
     $hierarchyQuery = "ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | extend ancestors = properties.managementGroupAncestorsChain | mv-expand with_itemindex=AncestorIndex mg = ancestors | project RowType = 'SubscriptionAncestor', subscriptionId = tostring(subscriptionId), ResourceId = tostring(mg.name), DisplayName = tostring(mg.displayName), ParentId = tostring(ancestors[toint(AncestorIndex) + 1].name), IsDirectParent = (AncestorIndex == 0) | union (ResourceContainers | where type =~ 'microsoft.management/managementgroups' | project RowType = 'ManagementGroup', subscriptionId = '', ResourceId = tostring(name), DisplayName = tostring(properties.displayName), ParentId = tostring(properties.details.managementGroupAncestorsChain[0].name), IsDirectParent = false)"
     $inventoryQuery = "Resources | summarize Count=count() by subscriptionId, resourceGroup=tolower(resourceGroup) | union (ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project subscriptionId = tostring(subscriptionId), resourceGroup = tolower(name), Count = tolong(0)) | union (ResourceContainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId = tostring(subscriptionId), resourceGroup = '', Count = tolong(0)) | summarize Count=max(Count) by subscriptionId, resourceGroup"
 
-    $hierarchyResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $hierarchyQuery -MaxPages 10 -PageSize 1000
+    $hierarchyResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $hierarchyQuery -PageSize 1000
     $hierarchyStatus = [string]$hierarchyResult.Status
     $managementGroupScopeMap = @{}
     $subscriptionManagementGroupMap = @{}
     $managementGroupParentMap = @{}
     $subscriptionParentMap = @{}
 
-    foreach ($row in @($hierarchyResult.RetrievedRows)) {
-        $managementGroupId = [string]$row.ResourceId
-        if ([string]::IsNullOrWhiteSpace($managementGroupId)) { continue }
-        $managementGroupName = [string]$row.DisplayName
-        if ([string]::IsNullOrWhiteSpace($managementGroupName)) { $managementGroupName = $managementGroupId }
-        $managementGroupScopeMap[$managementGroupId.ToLowerInvariant()] = $managementGroupName
-    }
-
-    if ($hierarchyStatus -eq "Complete") {
-        try {
-            foreach ($row in @($hierarchyResult.Rows)) {
-                $rowType = [string]$row.RowType
-                $subscriptionId = [string]$row.subscriptionId
-                $managementGroupId = [string]$row.ResourceId
-                $managementGroupName = [string]$row.DisplayName
-                if ([string]::IsNullOrWhiteSpace($managementGroupId)) {
-                    throw "Management group hierarchy contains a row without ResourceId."
-                }
-                if ([string]::IsNullOrWhiteSpace($managementGroupName)) { $managementGroupName = $managementGroupId }
-
-                $managementGroupKey = $managementGroupId.ToLowerInvariant()
-                $managementGroupScopeMap[$managementGroupKey] = $managementGroupName
-                if ($null -ne $row.ParentId) {
-                    $managementGroupParentMap[$managementGroupKey] = ([string]$row.ParentId).ToLowerInvariant()
-                }
-
-                if ($rowType -eq "ManagementGroup") {
-                    continue
-                }
-                if ($rowType -ne "SubscriptionAncestor" -or [string]::IsNullOrWhiteSpace($subscriptionId)) {
-                    throw "Management group hierarchy contains an invalid row type or subscriptionId."
-                }
-
-                $subscriptionKey = $subscriptionId.ToLowerInvariant()
-                if ($row.IsDirectParent -eq $true) {
-                    $subscriptionParentMap[$subscriptionKey] = $managementGroupKey
-                }
-                if (-not $subscriptionManagementGroupMap.ContainsKey($subscriptionKey)) {
-                    $subscriptionManagementGroupMap[$subscriptionKey] = New-Object System.Collections.Generic.HashSet[string]
-                }
-                [void]$subscriptionManagementGroupMap[$subscriptionKey].Add($managementGroupKey)
+    if ($hierarchyStatus -in @("Complete", "Partial")) {
+        $invalidHierarchyRow = $false
+        foreach ($row in @($hierarchyResult.Rows)) {
+            $rowType = [string]$row.RowType
+            $subscriptionId = [string]$row.subscriptionId
+            $managementGroupId = [string]$row.ResourceId
+            if ([string]::IsNullOrWhiteSpace($managementGroupId) -or $rowType -notin @("ManagementGroup", "SubscriptionAncestor") -or ($rowType -eq "SubscriptionAncestor" -and [string]::IsNullOrWhiteSpace($subscriptionId))) {
+                $invalidHierarchyRow = $true
+                continue
             }
-        } catch {
-            $hierarchyStatus = "Unavailable"
-            $subscriptionManagementGroupMap = @{}
-            $managementGroupParentMap = @{}
-            $subscriptionParentMap = @{}
-            $hierarchyResult.FailureReason = $_.Exception.Message
+
+            $managementGroupName = [string]$row.DisplayName
+            if ([string]::IsNullOrWhiteSpace($managementGroupName)) { $managementGroupName = $managementGroupId }
+            $managementGroupKey = $managementGroupId.ToLowerInvariant()
+            $managementGroupScopeMap[$managementGroupKey] = $managementGroupName
+            if ($null -ne $row.ParentId) {
+                $managementGroupParentMap[$managementGroupKey] = ([string]$row.ParentId).ToLowerInvariant()
+            }
+
+            if ($rowType -eq "ManagementGroup") { continue }
+
+            $subscriptionKey = $subscriptionId.ToLowerInvariant()
+            if ($row.IsDirectParent -eq $true) {
+                $subscriptionParentMap[$subscriptionKey] = $managementGroupKey
+            }
+            if (-not $subscriptionManagementGroupMap.ContainsKey($subscriptionKey)) {
+                $subscriptionManagementGroupMap[$subscriptionKey] = New-Object System.Collections.Generic.HashSet[string]
+            }
+            [void]$subscriptionManagementGroupMap[$subscriptionKey].Add($managementGroupKey)
+        }
+
+        if ($invalidHierarchyRow) {
+            $hierarchyStatus = if ($managementGroupScopeMap.Count -gt 0) { "Partial" } else { "Unavailable" }
+            $validationFailure = "Management group hierarchy contains invalid rows."
+            if ([string]::IsNullOrWhiteSpace([string]$hierarchyResult.FailureReason)) {
+                $hierarchyResult.FailureReason = $validationFailure
+            } else {
+                $hierarchyResult.FailureReason = "$($hierarchyResult.FailureReason) $validationFailure"
+            }
         }
     }
     if ($hierarchyStatus -eq "Complete") {
         Write-Log -Level Debug -Message "Got $($managementGroupScopeMap.Count) management groups in $($hierarchyResult.PagesRetrieved) Resource Graph page(s)"
     } else {
-        Write-Log -Level Debug -Message "Management group hierarchy unavailable ($hierarchyStatus): $($hierarchyResult.FailureReason)"
+        Write-Log -Level Debug -Message "Management group hierarchy incomplete ($hierarchyStatus): $($hierarchyResult.FailureReason)"
     }
     $global:GLOBALAzureManagementGroupScopeMap = $managementGroupScopeMap
     $global:GLOBALAzureManagementGroupHierarchyStatus = $hierarchyStatus
 
-    $inventoryResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $inventoryQuery -MaxPages 10 -PageSize 1000
+    $inventoryResult = Invoke-AzureResourceGraphPagedQuery -Uri $resourceGraphUrl -Query $inventoryQuery -PageSize 1000
     $inventoryStatus = [string]$inventoryResult.Status
     $resourceGroupResourceCounts = @{}
     $subscriptionResourceCounts = @{}
     $managementGroupResourceCounts = @{}
     $rootResourceCount = $null
 
-    if ($inventoryStatus -eq "Complete") {
-        try {
-            $inventoryBuckets = @{}
-            foreach ($row in @($inventoryResult.Rows)) {
-                $subscriptionId = [string]$row.subscriptionId
-                $resourceGroupName = [string]$row.resourceGroup
-                $resourceCount = 0
-                if ([string]::IsNullOrWhiteSpace($subscriptionId) -or -not [int]::TryParse([string]$row.Count, [ref]$resourceCount) -or $resourceCount -lt 0) {
-                    throw "Resource inventory contains an invalid subscriptionId or Count."
-                }
-
-                $subscriptionKey = $subscriptionId.ToLowerInvariant()
-                $resourceGroupKeyPart = if ([string]::IsNullOrWhiteSpace($resourceGroupName)) { "" } else { $resourceGroupName.ToLowerInvariant() }
-                $bucketKey = "$subscriptionKey|$resourceGroupKeyPart"
-                if ($inventoryBuckets.ContainsKey($bucketKey) -and [int]$inventoryBuckets[$bucketKey] -ne $resourceCount) {
-                    throw "Resource inventory contains conflicting duplicate rows."
-                }
-                $inventoryBuckets[$bucketKey] = $resourceCount
+    if ($inventoryStatus -in @("Complete", "Partial")) {
+        $inventoryBuckets = @{}
+        $invalidInventoryRow = $false
+        foreach ($row in @($inventoryResult.Rows)) {
+            $subscriptionId = [string]$row.subscriptionId
+            $resourceGroupName = [string]$row.resourceGroup
+            $resourceCount = 0
+            if ([string]::IsNullOrWhiteSpace($subscriptionId) -or -not [int]::TryParse([string]$row.Count, [ref]$resourceCount) -or $resourceCount -lt 0) {
+                $invalidInventoryRow = $true
+                continue
             }
 
+            $subscriptionKey = $subscriptionId.ToLowerInvariant()
+            $resourceGroupKeyPart = if ([string]::IsNullOrWhiteSpace($resourceGroupName)) { "" } else { $resourceGroupName.ToLowerInvariant() }
+            $bucketKey = "$subscriptionKey|$resourceGroupKeyPart"
+            if ($inventoryBuckets.ContainsKey($bucketKey) -and [int]$inventoryBuckets[$bucketKey] -ne $resourceCount) {
+                $invalidInventoryRow = $true
+                continue
+            }
+            $inventoryBuckets[$bucketKey] = $resourceCount
+        }
+
+        $missingSubscriptionContainer = $false
+        if ($inventoryStatus -eq "Complete") {
             foreach ($subscription in $subscriptions) {
                 $subscriptionKey = ([string]$subscription.Id).ToLowerInvariant()
                 if (-not $inventoryBuckets.ContainsKey("$subscriptionKey|")) {
-                    throw "Resource inventory does not contain an explicit container row for subscription '$($subscription.Id)'."
+                    $missingSubscriptionContainer = $true
                 }
             }
+        }
 
-            foreach ($bucketKey in $inventoryBuckets.Keys) {
-                $separatorIndex = $bucketKey.IndexOf('|')
-                $subscriptionKey = $bucketKey.Substring(0, $separatorIndex)
-                $resourceGroupName = $bucketKey.Substring($separatorIndex + 1)
-                $resourceCount = [int]$inventoryBuckets[$bucketKey]
-                if (-not $subscriptionResourceCounts.ContainsKey($subscriptionKey)) { $subscriptionResourceCounts[$subscriptionKey] = 0 }
-                $subscriptionResourceCounts[$subscriptionKey] = [int]$subscriptionResourceCounts[$subscriptionKey] + $resourceCount
-
-                if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
-                    $canonicalScopeKey = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionKey, $resourceGroupName).ToLowerInvariant()
-                    $resourceGroupResourceCounts[$canonicalScopeKey] = $resourceCount
-                }
+        if ($invalidInventoryRow -or $missingSubscriptionContainer) {
+            $inventoryStatus = if ($inventoryBuckets.Count -gt 0) { "Partial" } else { "Unavailable" }
+            $validationFailure = if ($invalidInventoryRow) { "Resource inventory contains invalid or conflicting rows." } else { "Resource inventory does not contain every expected subscription container row." }
+            if ([string]::IsNullOrWhiteSpace([string]$inventoryResult.FailureReason)) {
+                $inventoryResult.FailureReason = $validationFailure
+            } else {
+                $inventoryResult.FailureReason = "$($inventoryResult.FailureReason) $validationFailure"
             }
+        }
 
-            if ($subscriptionResourceCounts.Count -gt 0) {
-                $rootResourceCount = [int](($subscriptionResourceCounts.Values | Measure-Object -Sum).Sum)
+        foreach ($bucketKey in $inventoryBuckets.Keys) {
+            $separatorIndex = $bucketKey.IndexOf('|')
+            $subscriptionKey = $bucketKey.Substring(0, $separatorIndex)
+            $resourceGroupName = $bucketKey.Substring($separatorIndex + 1)
+            $resourceCount = [int]$inventoryBuckets[$bucketKey]
+            if (-not $subscriptionResourceCounts.ContainsKey($subscriptionKey)) { $subscriptionResourceCounts[$subscriptionKey] = 0 }
+            $subscriptionResourceCounts[$subscriptionKey] = [int]$subscriptionResourceCounts[$subscriptionKey] + $resourceCount
+
+            if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
+                $canonicalScopeKey = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionKey, $resourceGroupName).ToLowerInvariant()
+                $resourceGroupResourceCounts[$canonicalScopeKey] = $resourceCount
             }
-        } catch {
-            $inventoryStatus = "Unavailable"
-            $resourceGroupResourceCounts = @{}
-            $subscriptionResourceCounts = @{}
-            $rootResourceCount = $null
-            $inventoryResult.FailureReason = $_.Exception.Message
+        }
+
+        if ($subscriptionResourceCounts.Count -gt 0) {
+            $rootResourceCount = [int](($subscriptionResourceCounts.Values | Measure-Object -Sum).Sum)
         }
     }
 
-    if ($inventoryStatus -eq "Complete" -and $hierarchyStatus -eq "Complete") {
+    if ($inventoryStatus -ne "Unavailable" -and $hierarchyStatus -ne "Unavailable") {
         foreach ($managementGroupKey in $managementGroupScopeMap.Keys) {
             $managementGroupResourceCounts[$managementGroupKey] = 0
         }
@@ -11096,7 +11111,7 @@ function Get-AllAzureIAMAssignmentsNative {
     if ($inventoryStatus -eq "Complete") {
         Write-Log -Level Debug -Message "Got resource counts for $($resourceGroupResourceCounts.Count) resource groups and $($subscriptionResourceCounts.Count) subscriptions in $($inventoryResult.PagesRetrieved) Resource Graph page(s)"
     } else {
-        Write-Log -Level Debug -Message "Resource inventory unavailable ($inventoryStatus): $($inventoryResult.FailureReason)"
+        Write-Log -Level Debug -Message "Resource inventory incomplete ($inventoryStatus): $($inventoryResult.FailureReason)"
     }
 
     $global:GLOBALAzureResourceInventoryStatus = $inventoryStatus
@@ -11145,7 +11160,7 @@ function Get-AllAzureIAMAssignmentsNative {
         }
     }
     $GlobalAuditSummary.Subscriptions.Details = @($subscriptions | ForEach-Object {
-        $resourceCount = $subscriptionResourceCounts[$_.Id.ToLowerInvariant()]
+        $resourceCount = if ($inventoryStatus -eq "Complete") { $subscriptionResourceCounts[$_.Id.ToLowerInvariant()] } else { $null }
         [PSCustomObject]@{
             Id               = $_.Id
             DisplayName      = $_.DisplayName

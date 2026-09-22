@@ -458,7 +458,10 @@ function Invoke-CheckTenant {
             [string]$PrincipalId,
 
             [Parameter(Mandatory = $true)]
-            [object]$Principal
+            [object]$Principal,
+
+            [Parameter(Mandatory = $false)]
+            [switch]$EvaluateFallback
         )
 
         if ($null -eq $Principal) {
@@ -467,8 +470,20 @@ function Invoke-CheckTenant {
         if ([string]::IsNullOrWhiteSpace($PrincipalId) -and $Principal.PSObject.Properties['Id']) {
             $PrincipalId = [string]$Principal.Id
         }
+        if (-not $GLOBALAzurePsChecks) {
+            return [pscustomobject]@{ Impact = 0; UsedFallback = $false }
+        }
         if (-not [string]::IsNullOrWhiteSpace($PrincipalId) -and $AzurePrincipalExposureCache.ContainsKey($PrincipalId)) {
             return $AzurePrincipalExposureCache[$PrincipalId]
+        }
+
+        $precomputedImpact = 0
+        $hasPrecomputedImpact = $Principal.PSObject.Properties['AzureMaxImpact'] -and
+            [int]::TryParse([string]$Principal.AzureMaxImpact, [ref]$precomputedImpact) -and
+            $precomputedImpact -ge 0
+        if (-not $EvaluateFallback -and $hasPrecomputedImpact) {
+            # Keep fast results uncached so confidence checks can still request full fallback evaluation.
+            return [pscustomobject]@{ Impact = $precomputedImpact; UsedFallback = $false }
         }
 
         $maximumImpact = 0
@@ -574,7 +589,7 @@ function Invoke-CheckTenant {
             $principal = if ($candidate -and $candidate.PSObject.Properties['User']) { $candidate.User } else { $candidate }
             if ($null -eq $principal) { continue }
             $principalId = if ($candidate -and $candidate.PSObject.Properties['Id']) { [string]$candidate.Id } elseif ($principal.PSObject.Properties['Id']) { [string]$principal.Id } else { $null }
-            if ((Get-AzurePrincipalExposure -PrincipalId $principalId -Principal $principal).UsedFallback) {
+            if ((Get-AzurePrincipalExposure -PrincipalId $principalId -Principal $principal -EvaluateFallback).UsedFallback) {
                 Set-FindingOverride -FindingId $FindingId -Props @{ Confidence = 'Requires Verification' }
                 return
             }
