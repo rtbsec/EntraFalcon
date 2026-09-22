@@ -2082,6 +2082,21 @@ $global:GLOBALJavaScript_Table = @'
             }
             return columnTooltips[column] || "";
         }
+
+        // Visible text of report cell HTML. Parsed in an inert <template> so markup from tenant data
+        // (e.g. onerror handlers) never runs; cached per string because filters re-read cells constantly.
+        const visibleTextCache = new Map();
+        function getVisibleTextFromHtml(html) {
+            if (!/[<&\r\0]/.test(html)) return html;
+            let text = visibleTextCache.get(html);
+            if (text === undefined) {
+                const template = document.createElement("template");
+                template.innerHTML = html;
+                text = template.content.textContent || "";
+                visibleTextCache.set(html, text);
+            }
+            return text;
+        }
     
         (function () {    
             const manifestEl = document.getElementById("report-manifest");
@@ -2535,10 +2550,8 @@ $global:GLOBALJavaScript_Table = @'
 
         function stripHtmlToText(html) {
             if (html == null) return "";
-            const tempDiv = document.createElement("div");
-            tempDiv.innerHTML = String(html);
-            return (tempDiv.textContent || tempDiv.innerText || "").trim();
-            }
+            return getVisibleTextFromHtml(String(html)).trim();
+        }
 
             function escapeHtmlAttribute(value) {
             return String(value ?? "")
@@ -3206,9 +3219,7 @@ $global:GLOBALJavaScript_Table = @'
         function parseOperatorFilter(input, rawValue) {
             // Extract visible text only (e.g., from anchor tags)
             function extractText(html) {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
-                return tempDiv.textContent || tempDiv.innerText || '';
+                return getVisibleTextFromHtml(html === null ? "" : String(html));
             }
 
             function normalizeApproximateDisplay(val) {
@@ -3944,17 +3955,13 @@ $global:GLOBALJavaScript_Table = @'
 
                 const _origSync = window.__syncDetailsForCurrentPage;
 
-                // Reusable detached element for HTML stripping — created once, shared across all calls.
-                const _stripEl = document.createElement('div');
-
                 // Recursively collect all primitive values from an object as lowercase strings.
                 // Used so that ^, $, = operators match against individual field values
                 // rather than the full JSON blob. HTML is stripped so that link-wrapped
                 // values (e.g. <a href="...">GlobalAdministrator</a>) match correctly.
                 function extractDetailValues(obj) {
                     function stripHtml(str) {
-                        _stripEl.innerHTML = str;
-                        return _stripEl.textContent || _stripEl.innerText || '';
+                        return getVisibleTextFromHtml(str);
                     }
                     const values = [];
                     function walk(val) {
