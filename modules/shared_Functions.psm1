@@ -2264,10 +2264,21 @@ $global:GLOBALJavaScript_Table = @'
                 return String(row.__efRowKey);
             }
 
+            // Detail anchor ID parsed once at load, so renders do not re-parse the first cell's HTML.
+            function getRowAnchorId(row) {
+                if (!row || row.__efAnchorId == null) return "";
+                return String(row.__efAnchorId);
+            }
+
             data.forEach((row, index) => {
                 const firstColumn = columns[0];
                 const anchor = firstColumn ? extractAnchorIdAndText(row[firstColumn]) : { id: "" };
                 const anchorId = anchor && anchor.id ? anchor.id : "";
+                Object.defineProperty(row, "__efAnchorId", {
+                    value: anchorId,
+                    enumerable: false,
+                    configurable: true
+                });
                 Object.defineProperty(row, "__efRowKey", {
                     value: anchorId ? `${anchorId}::${index}` : `row::${index}`,
                     enumerable: false,
@@ -2947,12 +2958,12 @@ $global:GLOBALJavaScript_Table = @'
             renderInfo(start, end);
 
             const pageIds = pageData
-                .map(row => extractAnchorIdAndText(row[columns[0]]).id)
+                .map(getRowAnchorId)
                 .filter(Boolean);
 
             // Whole filter result, so the details search can cover rows beyond the current page
             window.__filteredDetailIds = viewData
-                .map(row => extractAnchorIdAndText(row[columns[0]]).id)
+                .map(getRowAnchorId)
                 .filter(Boolean);
 
             if (window.__syncDetailsForCurrentPage) {
