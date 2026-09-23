@@ -640,7 +640,7 @@ function Invoke-CheckRoles {
 
     if ($ExportDataJson) {
         Export-EntraFalconDataJson -OutputFolder $outputFolder -DatasetName "EntraRoleAssignments" -Data $SortedEntraRoles | Out-Null
-        $azureRoleReportData = $SortedAzureRoles | Select-Object -Property * -ExcludeProperty InventoryStatus,ImpactExplanation,ScoringPolicyVersion
+        $azureRoleReportData = $SortedAzureRoles | Select-Object -Property *,@{Name = "Level"; Expression = { Get-AzureImpactLevel -Impact $_.AssignmentImpact }} -ExcludeProperty InventoryStatus,ImpactExplanation,ScoringPolicyVersion
         Export-EntraFalconDataJson -OutputFolder $outputFolder -DatasetName "AzureRoleAssignments" -Data $azureRoleReportData | Out-Null
     }
 
