@@ -1803,6 +1803,8 @@ function Invoke-CheckGroups {
             CatalogRbacDetails = $CatalogRbacDetails
             AzureRoles = $AzureRoleCount
             AzureMaxTier = $AzureMaxTier
+            # Placeholder: both are finalized in the propagation pass below.
+            AzureMaxLevel = "-"
             AzureExposureImpact = 0
             # Maximum over exactly the assignments AzureRoles counts. Propagates with the count
             # through the nesting pass below, unlike AzureExposureImpact which spreads recursively.
@@ -1873,6 +1875,9 @@ function Invoke-CheckGroups {
         } elseif ($AzureGroupExposureImpactIndex.ContainsKey($group.Id)) {
             $group.AzureExposureImpact = [int]$AzureGroupExposureImpactIndex[$group.Id]
         }
+        # Authoritative exposure level for this group. Derived only once the impact is final
+        # so every consumer can read it instead of recomputing it.
+        $group.AzureMaxLevel = Get-AzureImpactLevel -Impact $group.AzureExposureImpact
     }
 
     $AutoAssignmentCorrelationTimer.Stop()
@@ -2075,7 +2080,7 @@ function Invoke-CheckGroups {
     $GroupOverviewProperties += @{Name = "APTarget"; Expression = { $_.AccessPackages }}
     $GroupOverviewProperties += "APAutoAssign"
     $GroupOverviewProperties += @("EntraRoles","EntraMaxTier","AzureRoles","AzureMaxTier")
-    $GroupOverviewProperties += @{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureExposureImpact }}
+    $GroupOverviewProperties += "AzureMaxLevel"
     $GroupOverviewProperties += @{Name = "AzureMaxImpact"; Expression = { $_.AzureExposureImpact }}
     $GroupOverviewProperties += @("Impact","Likelihood","Risk","Warnings")
 
@@ -2197,7 +2202,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
             "Protected" = $item.Protected
             "Synced from on-prem" = $item.OnPrem
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureExposureImpact
+            "Azure Max Level" = $item.AzureMaxLevel
             "Azure Max Impact" = $item.AzureExposureImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk
@@ -2270,7 +2275,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                     "Role name"   = $role.RoleName
                     "Assignment"  = $role.AssignmentType
                     "RoleType"    = $role.RoleType
-                    "Level"       = Get-AzureImpactLevel -Impact $role.AssignmentImpact
+                    "Level"       = $role.Level
                     "Impact"      = $role.AssignmentImpact
                     "Scope type"  = $role.ScopeType
                     "Environment" = $role.Environment
@@ -2600,7 +2605,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
-                $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
+                $azureMaxLevel = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureMaxLevel } else { "?" }
                 $intuneRoles = if ($null -ne $groupDetails -and $groupDetails.PSObject.Properties["IntuneRoles"] -and $null -ne $groupDetails.IntuneRoles) { $groupDetails.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                 $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
 
@@ -3032,7 +3037,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $roleAssignable = if ($null -ne $groupDetails.RoleAssignable) { $groupDetails.RoleAssignable } else { $groupDetails.IsAssignableToRole }
                 $entraMaxTier = if ($null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxImpact = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
-                $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
+                $azureMaxLevel = if ($null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureMaxLevel } else { "?" }
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
                 $apTarget = if ($null -ne $groupDetails -and $groupDetails.PSObject.Properties["AccessPackages"] -and $null -ne $groupDetails.AccessPackages) { $groupDetails.AccessPackages } else { 0 }
         
@@ -3121,7 +3126,7 @@ $tableOutput | Format-table -Property $GroupOutputProperties | Out-File -Width 5
                 $groupDetails = $GroupLookup[$object.id]
                 $entraMaxTier = if ($null -ne $groupDetails -and $null -ne $groupDetails.EntraMaxTier) { $groupDetails.EntraMaxTier } else { "-" }
                 $azureMaxImpact = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
-                $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
+                $azureMaxLevel = if ($null -ne $groupDetails -and $null -ne $groupDetails.AzureExposureImpact) { $groupDetails.AzureMaxLevel } else { "?" }
                 $intuneRoles = if ($object.PSObject.Properties["IntuneRoles"] -and $null -ne $object.IntuneRoles) { $object.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
 
                 $GroupName = $object.displayName
@@ -3364,6 +3369,7 @@ $headerHtml = @"
             CAPs = $group.CAPs
             AzureRoles = $group.AzureRoles
             AzureMaxTier = $group.AzureMaxTier
+            AzureMaxLevel = $group.AzureMaxLevel
             AzureExposureImpact = $group.AzureExposureImpact
             AzureCountedMaxImpact = $group.AzureCountedMaxImpact
             AzureRoleDetails = $group.AzureRoleDetails

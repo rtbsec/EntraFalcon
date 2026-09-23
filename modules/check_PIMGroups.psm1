@@ -301,7 +301,7 @@ function Invoke-CheckPIMGroups {
         $entraMaxTier = if ($groupDetails) { [string]$groupDetails.EntraMaxTier } else { '' }
         $azureMaxTier = if ($groupDetails) { [string]$groupDetails.AzureMaxTier } else { '' }
         $azureMaxImpact = if ($groupDetails) { $groupDetails.AzureExposureImpact } else { '' }
-        $azureMaxLevel = Get-AzureImpactLevel -Impact $azureMaxImpact
+        $azureMaxLevel = if ($groupDetails) { $groupDetails.AzureMaxLevel } else { '?' }
         $requiresFourHourActivation = $entraMaxTier -eq 'Tier-0' -or $azureMaxLevel -eq 'Critical'
         $requiresPrivilegedPolicy = $entraMaxTier -in @('Tier-0', 'Tier-1') -or $azureMaxLevel -in @('High', 'Critical')
         $warningCause = if ($entraMaxTier -eq 'Tier-0') {
@@ -565,6 +565,7 @@ function Invoke-CheckPIMGroups {
             Role                      = $roleLabel
             EntraMaxTier              = $entraMaxTier
             AzureMaxTier              = $azureMaxTier
+            AzureMaxLevel             = $azureMaxLevel
             AzureMaxImpact            = $azureMaxImpact
             RoleDefinitionId          = $roleDefinitionId
             PolicyId                  = $policyId
@@ -610,7 +611,7 @@ function Invoke-CheckPIMGroups {
         @{ Expression = { Get-RoleSortRank -Role $_.Role } ; Ascending = $true }, `
         Role
 
-    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, @{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureMaxImpact }}, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
+    $tableOutput = $AllPIMGroupDetails | Select-Object Group, GroupLink, EntraMaxTier, AzureMaxTier, AzureMaxLevel, AzureMaxImpact, Role, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
     $mainTable = $tableOutput | Select-Object -Property @{Name = 'Group'; Expression = { $_.GroupLink } }, Role, EntraMaxTier, AzureMaxTier, AzureMaxLevel, AzureMaxImpact, Eligible, Active, ActivationAuthContext, ActivationMFA, ActivationJustification, ActivationTicketing, ActivationDuration, ActivationApproval, EligibleExpiration, EligibleExpirationTime, ActiveExpiration, ActiveExpirationTime, ActiveAssignMFA, ActiveAssignJustification, AlertAssignEligible, AlertAssignActive, AlertActivation, Warnings
     $mainTableJson = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -622,7 +623,7 @@ function Invoke-CheckPIMGroups {
         $headerInfo = [pscustomobject]@{
             "Group" = $item.Group
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
+            "Azure Max Level" = $item.AzureMaxLevel
             "Azure Max Impact" = $item.AzureMaxImpact
             "Role" = $item.Role
             "Eligible Assignments" = $item.Eligible
@@ -736,7 +737,7 @@ function Invoke-CheckPIMGroups {
         $generalInformation = [pscustomobject]@{
             Group = $item.GroupReportLink
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
+            "Azure Max Level" = $item.AzureMaxLevel
             "Azure Max Impact" = $item.AzureMaxImpact
             Role = $item.Role
             "Last Modified" = if ([string]::IsNullOrWhiteSpace([string]$item.PolicyLastModifiedDateTime)) { '-' } else { $item.PolicyLastModifiedDateTime }

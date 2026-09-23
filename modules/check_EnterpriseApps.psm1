@@ -1322,6 +1322,7 @@ function Invoke-CheckEnterpriseApps {
             AzureRolesEffective = $AzureRolesEffective
             AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $AzureMaxImpact
             AzureMaxImpact = $AzureMaxImpact
             Inactive = $Inactive
             LastSignInDays = $LastSignInDays
@@ -1446,7 +1447,7 @@ function Invoke-CheckEnterpriseApps {
     $SortedServicePrincipalsByRisk = $AllServicePrincipal | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedServicePrincipalsByRisk | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,EnabledInTenant,Inactive,SAML,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,Owners,Credentials,AzureRoles,AzureMaxTier,@{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureMaxImpact }},AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedServicePrincipalsByRisk | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,EnabledInTenant,Inactive,SAML,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,Owners,Credentials,AzureRoles,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,ApiDelegatedDangerous,ApiDelegatedHigh,ApiDelegatedMedium,ApiDelegatedLow,ApiDelegatedMisc,Impact,Likelihood,Risk,Warnings
     
     #Define the apps to be displayed in detail
     $details = $SortedServicePrincipalsByRisk
@@ -1577,7 +1578,7 @@ function Invoke-CheckEnterpriseApps {
                 [pscustomobject]@{ 
                     "Role name" = $($object.RoleName)
                     "RoleType" = $($object.RoleType)
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $($object.AssignmentImpact)
                     "Scope type" = $($object.ScopeType)
                     "Environment" = $($object.Environment)

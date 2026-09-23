@@ -11001,7 +11001,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "MFA Capable" = $user.MfaCap
                 "Type" = $user.UserType
                 "Entra Max Tier" = $user.EntraMaxTier
-                "Max Azure Level" = Get-AzureImpactLevel -Impact $user.AzureMaxImpact
+                "Max Azure Level" = $user.AzureMaxLevel
                 "Impact" = $user.Impact
             })
         }
@@ -11263,7 +11263,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "Entra Roles" = $group.EntraRoles
                 "Entra Tier" = $group.EntraMaxTier
                 "Azure Roles" = $group.AzureRoles
-                "Max Azure Level" = Get-AzureImpactLevel -Impact $entry.AzureExposureImpact
+                "Max Azure Level" = $group.AzureMaxLevel
                 "Intune Roles" = $group.IntuneRoles
                 "CAPs" = $group.CAPs
             }

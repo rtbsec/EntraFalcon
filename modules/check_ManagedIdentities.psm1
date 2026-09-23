@@ -781,6 +781,7 @@ function Invoke-CheckManagedIdentities {
             AzureRolesEffective = $AzureRolesEffective
             AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $AzureMaxImpact
             AzureMaxImpact = $AzureMaxImpact
             AzureRoleDetails = $AzureRoleDetails
             AppCredentials = $AppCredentialsCount
@@ -810,7 +811,7 @@ function Invoke-CheckManagedIdentities {
     $SortedManagedIdentitiesByRisk = $AllServicePrincipal | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedManagedIdentitiesByRisk | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,@{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureMaxImpact }},AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedManagedIdentitiesByRisk | select-object DisplayName,DisplayNameLink,IsExplicit,CreationInDays,GroupMembership,GroupOwnership,AppOwnership,BlueprintOwn,SpOwn,EntraRoles,EntraMaxTier,AppCredentials,AzureRoles,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,CatalogRBAC,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,Impact,Likelihood,Risk,Warnings
     
     #Define the managed identities to be displayed in detail
     $details = $SortedManagedIdentitiesByRisk
@@ -884,7 +885,7 @@ function Invoke-CheckManagedIdentities {
                 [pscustomobject]@{ 
                     "Role name" = $($object.RoleName)
                     "RoleType" = $($object.RoleType)
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $($object.AssignmentImpact)
                     "Scope type" = $($object.ScopeType)
                     "Environment" = $($object.Environment)
@@ -1281,7 +1282,7 @@ $headerHtml = @"
 
     $azureImpactLevelCounts = @{ Critical = 0; High = 0; Medium = 0; Low = 0; Unknown = 0 }
     foreach ($assignment in $managedIdentityAzureRoleDetails) {
-        switch (Get-AzureImpactLevel -Impact $assignment.AssignmentImpact) {
+        switch ($assignment.Level) {
             "Critical" { $azureImpactLevelCounts.Critical++; break }
             "High" { $azureImpactLevelCounts.High++; break }
             "Medium" { $azureImpactLevelCounts.Medium++; break }

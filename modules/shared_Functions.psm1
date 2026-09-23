@@ -6760,6 +6760,7 @@ function Get-GroupDetails {
             EntraRoleDetails       = $MatchingGroup.EntraRoleDetails
             AzureRoles             = $MatchingGroup.AzureRoles
             AzureMaxTier           = $MatchingGroup.AzureMaxTier
+            AzureMaxLevel          = $MatchingGroup.AzureMaxLevel
             AzureExposureImpact    = $MatchingGroup.AzureExposureImpact
             AzureCountedMaxImpact  = $MatchingGroup.AzureCountedMaxImpact
             AzureRoleDetails       = $MatchingGroup.AzureRoleDetails
@@ -11569,6 +11570,7 @@ function Get-AzureRoleDetails {
                 Environment = if ($role.PSObject.Properties["Environment"]) { $role.Environment } else { "Unknown" }
                 ObservedResources = if ($role.PSObject.Properties["ObservedResources"]) { $role.ObservedResources } else { $null }
                 AssignmentImpact = $role.AssignmentImpact
+                Level = Get-AzureImpactLevel -Impact $role.AssignmentImpact
                 AssignmentType  = $role.AssignmentType
                 ActivatedViaPIM = $role.ActivatedViaPIM
                 StartDateTime = $role.StartDateTime

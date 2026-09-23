@@ -751,6 +751,7 @@ function Invoke-CheckUsers {
                     CAPs = $MatchingGroup.CAPs
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
+                    AzureMaxLevel = $MatchingGroup.AzureMaxLevel
                     AzureExposureImpact = $MatchingGroup.AzureExposureImpact
                     AzureCountedMaxImpact = $MatchingGroup.AzureCountedMaxImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
@@ -779,6 +780,7 @@ function Invoke-CheckUsers {
                     CAPs = $MatchingGroup.CAPs
                     AzureRoles = $MatchingGroup.AzureRoles
                     AzureMaxTier = $MatchingGroup.AzureMaxTier
+                    AzureMaxLevel = $MatchingGroup.AzureMaxLevel
                     AzureExposureImpact = $MatchingGroup.AzureExposureImpact
                     AzureCountedMaxImpact = $MatchingGroup.AzureCountedMaxImpact
                     IntuneRoles = if ($MatchingGroup.PSObject.Properties["IntuneRoles"] -and $null -ne $MatchingGroup.IntuneRoles) { $MatchingGroup.IntuneRoles } else { if ($GLOBALIntuneRbacAvailable) { 0 } else { "?" } }
@@ -1318,6 +1320,7 @@ function Invoke-CheckUsers {
             Inactive = $Inactive
             AzureRoles = $TotalAzureRoles
             AzureMaxTier = $AzureMaxTier
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $AzureMaxImpact
             AzureMaxImpact = $AzureMaxImpact
             AzureRoleDetails = $AzureRoleDetails
             IntuneRoles = $TotalIntuneRoles
@@ -2045,7 +2048,7 @@ function Write-EntraFalconUsersReport {
     $SortedUsersByRisk = $AllUsersDetails | Sort-Object Risk -Descending
 
     #Define output of the main table
-    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,MSOwnedAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,@{Name = "AzureMaxLevel"; Expression = { Get-AzureImpactLevel -Impact $_.AzureMaxImpact }},AzureMaxImpact,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $SortedUsersByRisk | select-object UPN,UPNlink,Enabled,UserType,Agent,ForeignAgent,MSOwnedAgent,OnPrem,Licenses,LicenseStatus,Protected,GrpMem,GrpOwn,AuUnits,EntraRoles,EntraMaxTier,AzureRoles,AzureMaxTier,AzureMaxLevel,AzureMaxImpact,AppRoles,IntuneRoles,CatalogRBAC,@{Name = "APTarget"; Expression = { $_.AccessPackages }},AppRegOwn,BlueprintOwn,SPOwn,DeviceOwn,DeviceReg,Inactive,LastSignInDays,CreatedDays,MfaCap,PerUserMfa,Impact,Likelihood,Risk,Warnings
     
     # Apply result limit for the main table
     if ($LimitResults -and $LimitResults -gt 0) {
@@ -2147,7 +2150,7 @@ function Write-EntraFalconUsersReport {
             "PerUserMfa" = $item.PerUserMfa
             "Protected" = $item.Protected
             "Entra Max Tier" = $item.EntraMaxTier
-            "Azure Max Level" = Get-AzureImpactLevel -Impact $item.AzureMaxImpact
+            "Azure Max Level" = $item.AzureMaxLevel
             "Azure Max Impact" = $item.AzureMaxImpact
             "Intune Roles" = $item.IntuneRoles
             "RiskScore" = $item.Risk
@@ -2284,7 +2287,7 @@ function Write-EntraFalconUsersReport {
                     "EntraRoles" = $object.EntraRoles
                     "EntraMaxTier" = $object.EntraMaxTier
                     "AzureRoles" = $object.AzureRoles
-                    "AzureMaxLevel" = if ($null -ne $object.AzureExposureImpact) { Get-AzureImpactLevel -Impact $object.AzureExposureImpact } else { "?" }
+                    "AzureMaxLevel" = if ($null -ne $object.AzureExposureImpact) { $object.AzureMaxLevel } else { "?" }
                     "AzureMaxImpact" = if ($null -ne $object.AzureExposureImpact) { $object.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                     "AppRoles" = $object.AppRoles
                     "IntuneRoles" = $object.IntuneRoles
@@ -2685,7 +2688,7 @@ function Write-EntraFalconUsersReport {
                     "EntraRoles" = $object.EntraRoles
                     "EntraMaxTier" = $object.EntraMaxTier
                     "AzureRoles" = $object.AzureRoles
-                    "AzureMaxLevel" = if ($null -ne $object.AzureExposureImpact) { Get-AzureImpactLevel -Impact $object.AzureExposureImpact } else { "?" }
+                    "AzureMaxLevel" = if ($null -ne $object.AzureExposureImpact) { $object.AzureMaxLevel } else { "?" }
                     "AzureMaxImpact" = if ($null -ne $object.AzureExposureImpact) { $object.AzureExposureImpact } else { if ($GLOBALAzurePsChecks) { "-" } else { "?" } }
                     "AppRoles" = $object.AppRoles
                     "IntuneRoles" = $object.IntuneRoles
@@ -2771,7 +2774,7 @@ function Write-EntraFalconUsersReport {
                     "Role name" = $object.RoleName
                     "Assignment" = $object.AssignmentType
                     "RoleType" = $object.RoleType
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment

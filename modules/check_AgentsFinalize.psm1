@@ -1397,7 +1397,7 @@ Execution Warnings = $($WarningList -join ' / ')
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment
@@ -1415,7 +1415,7 @@ Execution Warnings = $($WarningList -join ' / ')
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment
@@ -1720,7 +1720,7 @@ Appendix: Used API Permission Reference
                 [pscustomobject]@{
                     "Role name" = $object.RoleName
                     "RoleType" = $object.RoleType
-                    "Level" = Get-AzureImpactLevel -Impact $object.AssignmentImpact
+                    "Level" = $object.Level
                     "Impact" = $object.AssignmentImpact
                     "Scope type" = $object.ScopeType
                     "Environment" = $object.Environment

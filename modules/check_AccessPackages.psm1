@@ -1649,6 +1649,9 @@ function Invoke-CheckAccessPackages {
             EntraMaxTier = $entraTier
             AzureRoles   = $azureRoles
             AzureMaxTier = $azureTier
+            # Stays aligned with the exported numeric, so "?" is kept here. The HTML resource
+            # table deliberately renders an unassessed resource as "-" instead.
+            AzureMaxLevel = Get-AzureImpactLevel -Impact $azureImpact
             AzureMaxImpact = $azureImpact
             ScopeType    = if ($azureImpactContext) { $azureImpactContext.ScopeType } else { "-" }
             Environment  = if ($azureImpactContext) { $azureImpactContext.Environment } else { "-" }
