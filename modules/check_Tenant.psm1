@@ -267,7 +267,6 @@ function Format-AzurePrincipalRoleEvidence {
 
     $roleLinesByText = @{}
     $evidenceSeparator = ' ' + [char]0x2014 + ' '
-    $detailSeparator = ' ' + [char]0x00B7 + ' '
     foreach ($entry in $roleEntries) {
         $role = $entry.Role
         $roleName = if ($role.RoleName) {
@@ -286,8 +285,8 @@ function Format-AzurePrincipalRoleEvidence {
         $assignmentType = if ($role.AssignmentType) { ([string]$role.AssignmentType).Trim() } else { $null }
         $assignmentText = if ([string]::IsNullOrWhiteSpace($assignmentType) -or $assignmentType -eq 'Unknown') { '' } else { " ($assignmentType)" }
         $sourceText = switch ([string]$entry.Source) {
-            'GroupMember' { "${detailSeparator}via group $(([string]$entry.GroupDisplayName).Trim())" }
-            'GroupOwner' { "${detailSeparator}via ownership of group $(([string]$entry.GroupDisplayName).Trim())" }
+            'GroupMember' { " (via group $(([string]$entry.GroupDisplayName).Trim()))" }
+            'GroupOwner' { " (via ownership of group $(([string]$entry.GroupDisplayName).Trim()))" }
             default { '' }
         }
         $lineText = "$roleName$assignmentText$evidenceSeparator$scope$sourceText"
@@ -315,7 +314,7 @@ function Format-AzurePrincipalRoleEvidence {
         }
         $maximumImpact = [int](($sparseEntries | Measure-Object -Property Impact -Maximum).Maximum)
         $sourceLabel = if ($source -eq 'GroupOwner') { 'Access as group owner' } else { 'Group-inherited access' }
-        $lineText = "$sourceLabel$evidenceSeparator$groupList${detailSeparator}highest level $(Get-AzureImpactLevel -Impact $maximumImpact)"
+        $lineText = "$sourceLabel$evidenceSeparator$groupList (highest level: $(Get-AzureImpactLevel -Impact $maximumImpact))"
         $roleLinesByText[$lineText] = [pscustomobject]@{
             Text = $lineText
             Impact = $maximumImpact
@@ -11235,6 +11234,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         $groupsUsedInEntraRoles = 0
         $groupsUsedInIntuneRoles = 0
         $groupsUsedInCatalogRbac = 0
+        $showEntraRoleColumns = @($unprotectedSensitiveGroups | Where-Object { $_.HasEntraRolesUsage }).Count -gt 0
+        $showAzureRoleColumns = @($unprotectedSensitiveGroups | Where-Object { $_.HasAzureRolesUsage }).Count -gt 0
+        $showIntuneRoleColumn = @($unprotectedSensitiveGroups | Where-Object { $_.HasIntuneRolesUsage }).Count -gt 0
+        $showCapsColumn = @($unprotectedSensitiveGroups | Where-Object { $_.HasCapsUsage }).Count -gt 0
         $showCatalogRbacColumn = @($unprotectedSensitiveGroups | Where-Object {
             (Get-IntSafe $_.Group.CatalogRBAC) -gt 0
         }).Count -gt 0
@@ -11260,12 +11263,20 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $affectedGroup = [ordered]@{
                 "DisplayName" = "<a href=`"Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html#$($entry.Id)`" target=`"_blank`">$groupDisplayName</a>"
                 "Protected" = $group.Protected
-                "Entra Roles" = $group.EntraRoles
-                "Entra Tier" = $group.EntraMaxTier
-                "Azure Roles" = $group.AzureRoles
-                "Max Azure Level" = $group.AzureMaxLevel
-                "Intune Roles" = $group.IntuneRoles
-                "CAPs" = $group.CAPs
+            }
+            if ($showEntraRoleColumns) {
+                $affectedGroup["Entra Roles"] = $group.EntraRoles
+                $affectedGroup["Entra Tier"] = $group.EntraMaxTier
+            }
+            if ($showAzureRoleColumns) {
+                $affectedGroup["Azure Roles"] = $group.AzureRoles
+                $affectedGroup["Max Azure Level"] = $group.AzureMaxLevel
+            }
+            if ($showIntuneRoleColumn) {
+                $affectedGroup["Intune Roles"] = $group.IntuneRoles
+            }
+            if ($showCapsColumn) {
+                $affectedGroup["CAPs"] = $group.CAPs
             }
             if ($showCatalogRbacColumn) {
                 $affectedGroup["CatalogRBAC"] = $group.CatalogRBAC
@@ -11275,17 +11286,46 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $grp005Affected.Add([pscustomobject]$affectedGroup)
         }
 
-        $catalogUsageDescription = if ($showCatalogRbacColumn) {
-            "<li>$groupsUsedInCatalogRbac groups hold Catalog RBAC roles with a potential impact of at least 100</li>"
+        $groupUsageDescriptions = [System.Collections.Generic.List[string]]::new()
+        if ($groupsUsedInCaps -gt 0) {
+            $capsGroupText = if ($groupsUsedInCaps -eq 1) { "group is" } else { "groups are" }
+            [void]$groupUsageDescriptions.Add("<li>$groupsUsedInCaps $capsGroupText used in Conditional Access policies</li>")
+        }
+        if ($groupsUsedInAzureRoles -gt 0) {
+            $azureLevelDescriptions = [System.Collections.Generic.List[string]]::new()
+            if ($groupsWithHighAzureImpact -gt 0) {
+                [void]$azureLevelDescriptions.Add("$groupsWithHighAzureImpact High ($AzureHighExposureThreshold-$($AzureCriticalExposureThreshold - 1))")
+            }
+            if ($groupsWithCriticalAzureImpact -gt 0) {
+                [void]$azureLevelDescriptions.Add("$groupsWithCriticalAzureImpact Critical ($AzureCriticalExposureThreshold+)")
+            }
+            $azureGroupText = if ($groupsUsedInAzureRoles -eq 1) { "group has" } else { "groups have" }
+            [void]$groupUsageDescriptions.Add("<li>$groupsUsedInAzureRoles $azureGroupText High or Critical Azure exposure ($($azureLevelDescriptions -join ' and '))</li>")
+        }
+        if ($groupsUsedInEntraRoles -gt 0) {
+            $entraGroupText = if ($groupsUsedInEntraRoles -eq 1) { "group is" } else { "groups are" }
+            [void]$groupUsageDescriptions.Add("<li>$groupsUsedInEntraRoles $entraGroupText used for Entra ID role assignments</li>")
+        }
+        if ($groupsUsedInIntuneRoles -gt 0) {
+            $intuneGroupText = if ($groupsUsedInIntuneRoles -eq 1) { "group is" } else { "groups are" }
+            [void]$groupUsageDescriptions.Add("<li>$groupsUsedInIntuneRoles $intuneGroupText used for Intune RBAC role assignments</li>")
+        }
+        if ($groupsUsedInCatalogRbac -gt 0) {
+            $catalogGroupText = if ($groupsUsedInCatalogRbac -eq 1) { "group holds" } else { "groups hold" }
+            [void]$groupUsageDescriptions.Add("<li>$groupsUsedInCatalogRbac $catalogGroupText Catalog RBAC roles with a potential impact of at least 100</li>")
+        }
+
+        $sensitiveGroupsDescription = if ($unprotectedSensitiveGroups.Count -eq 1) {
+            "There is 1 sensitive group that is insufficiently protected. It is:"
         } else {
-            ""
+            "There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:"
         }
         $catalogRbacFilter = if ($showCatalogRbacColumn) { "&or_CatalogRBAC=%3E0" } else { "" }
         $catalogRbacColumn = if ($showCatalogRbacColumn) { "%2CCatalogRBAC" } else { "" }
 
         Set-FindingOverride -FindingId "GRP-005" -Props $GRP005VariantProps.Vulnerable
         Set-FindingOverride -FindingId "GRP-005" -Props @{
-            Description = "<p>There are $($unprotectedSensitiveGroups.Count) sensitive groups that are insufficiently protected. They are:</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul><li>$groupsUsedInCaps groups are used in Conditional Access policies</li><li>$groupsUsedInAzureRoles groups have Azure exposure impact of at least $AzureHighExposureThreshold ($groupsWithHighAzureImpact high and $groupsWithCriticalAzureImpact critical)</li><li>$groupsUsedInEntraRoles groups are used for Entra ID role assignments</li><li>$groupsUsedInIntuneRoles groups are used for Intune RBAC role assignments</li>$catalogUsageDescription</ul><p><strong>Important:</strong> Azure exposure uses the strongest active or eligible direct, membership, or ownership path. Assess the impact if a lower-tier administrator or application can manage these groups.</p>"
+            Description = "<p>$sensitiveGroupsDescription</p><ul><li>Not synchronized from on-premises</li><li>Not configured as role-assignable</li><li>Not protected by a Restricted Management Administrative Unit</li></ul><p>Unprotected group usage:</p><ul>$($groupUsageDescriptions -join '')</ul><p><strong>Important:</strong> Assess the impact if a lower-tier administrator or application can manage these groups.</p>"
             RelatedReportUrl = "Groups_$StartTimestamp`_$($CurrentTenant.FileSafeDisplayNameEncoded).html?Protected=%3Dfalse&or_EntraRoles=%3E0&or_AzureMaxImpact=%3E%3D$AzureHighExposureThreshold&or_IntuneRoles=%3E0&or_CAPs=%3E0$catalogRbacFilter&columns=DisplayName%2CType%2CSecurityEnabled%2CDynamic%2CVisibility%2CProtected%2CUsers%2CEntraMaxTier%2CAzureMaxLevel%2CAzureMaxImpact%2CNestedInGroups%2CAppRoles%2CIntuneRoles%2CCAPs$catalogRbacColumn%2CEntraRoles%2CAzureRoles%2CImpact%2CLikelihood%2CRisk%2CWarnings&sort=Impact&sortDir=desc"
             AffectedSortKey = "_SortAzureImpact"
             AffectedSortDir = "DESC"
