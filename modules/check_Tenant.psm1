@@ -443,11 +443,11 @@ function Invoke-CheckTenant {
             [int]$Medium = 0
         )
 
-        # Lists only non-zero impact levels, most severe first. Ranges follow the exposure thresholds.
+        # Lists only non-zero impact levels, most severe first.
         $items = [System.Collections.Generic.List[string]]::new()
-        if ($Critical -gt 0) { [void]$items.Add("<li>Critical ($AzureCriticalExposureThreshold+): $Critical</li>") }
-        if ($High -gt 0) { [void]$items.Add("<li>High ($AzureHighExposureThreshold-$($AzureCriticalExposureThreshold - 1)): $High</li>") }
-        if ($Medium -gt 0) { [void]$items.Add("<li>Medium ($AzureForeignExposureThreshold-$($AzureHighExposureThreshold - 1)): $Medium</li>") }
+        if ($Critical -gt 0) { [void]$items.Add("<li>Critical: $Critical</li>") }
+        if ($High -gt 0) { [void]$items.Add("<li>High: $High</li>") }
+        if ($Medium -gt 0) { [void]$items.Add("<li>Medium: $Medium</li>") }
         return "<p>$ObjectLabel by highest Azure impact:</p><ul>$($items -join '')</ul><p>Includes Azure roles gained through group membership or group ownership.</p>"
     }
 
@@ -2612,7 +2612,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No hybrid users with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No hybrid users with high-impact Azure access were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2629,7 +2629,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>Fewer than 8 enabled users with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>Fewer than 8 enabled users with high-impact Azure access were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -2657,7 +2657,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No unprotected users with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No unprotected users with high-impact Azure access were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3019,7 +3019,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign enterprise applications with Azure exposure impact of at least 50 were identified.</p>"
+            Description = "<p>No enabled foreign enterprise applications with Azure access of medium or higher impact were identified.</p>"
         }
     }
     $ENT008VariantProps = @{
@@ -3077,7 +3077,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal enterprise applications with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No enabled internal enterprise applications with high-impact Azure access were identified.</p>"
         }
     }
     $ENT013VariantProps = @{
@@ -3234,7 +3234,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign, non-Microsoft agent identities with Azure exposure impact of at least 50 were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent identities with Azure access of medium or higher impact were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3310,7 +3310,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal or Microsoft-owned agent identities with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent identities with high-impact Azure access were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3373,7 +3373,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled foreign, non-Microsoft agent users with Azure exposure impact of at least 50 were identified.</p>"
+            Description = "<p>No enabled foreign, non-Microsoft agent users with Azure access of medium or higher impact were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3411,7 +3411,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No enabled internal or Microsoft-owned agent users with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No enabled internal or Microsoft-owned agent users with high-impact Azure access were identified.</p>"
         }
         Skipped = @{
             Status = "Skipped"
@@ -3539,7 +3539,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
             Status = "NotVulnerable"
-            Description = "<p>No managed identities with Azure exposure impact of at least $AzureHighExposureThreshold were identified.</p>"
+            Description = "<p>No managed identities with high-impact Azure access were identified.</p>"
         }
     }
     #endregion
@@ -8916,7 +8916,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         if ($IncludeAzureRoleColumns) {
             $affected["AzureRoles"] = $Policy.AzureRoles
             $affected["AzureMaxLevel"] = $Policy.AzureMaxLevel
-            $affected["AzureMaxImpact"] = $Policy.AzureMaxImpact
         }
         $affected["Impact"] = $Policy.Impact
 
@@ -11294,10 +11293,10 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         if ($groupsUsedInAzureRoles -gt 0) {
             $azureLevelDescriptions = [System.Collections.Generic.List[string]]::new()
             if ($groupsWithHighAzureImpact -gt 0) {
-                [void]$azureLevelDescriptions.Add("$groupsWithHighAzureImpact High ($AzureHighExposureThreshold-$($AzureCriticalExposureThreshold - 1))")
+                [void]$azureLevelDescriptions.Add("$groupsWithHighAzureImpact High")
             }
             if ($groupsWithCriticalAzureImpact -gt 0) {
-                [void]$azureLevelDescriptions.Add("$groupsWithCriticalAzureImpact Critical ($AzureCriticalExposureThreshold+)")
+                [void]$azureLevelDescriptions.Add("$groupsWithCriticalAzureImpact Critical")
             }
             $azureGroupText = if ($groupsUsedInAzureRoles -eq 1) { "group has" } else { "groups have" }
             [void]$groupUsageDescriptions.Add("<li>$groupsUsedInAzureRoles $azureGroupText High or Critical Azure exposure ($($azureLevelDescriptions -join ' and '))</li>")
