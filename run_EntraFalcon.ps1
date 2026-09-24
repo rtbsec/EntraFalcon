@@ -194,7 +194,7 @@ Param (
 )
 
 #Constants
-$EntraFalconVersion = "V20260909_PRE"
+$EntraFalconVersion = "V20260924"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -409,7 +409,6 @@ if ((EnsureAuthAzurePsNative) -and (checkSubscriptionNative)){
     Write-Host "[!] No AzurePS session: No Azure IAM assignments will be checked"
     $AzureIAMAssignments = @{}
 }
-
 
 if ($TenantPimForGroupsAssignments) {
     Write-Host "[*] Post processing PIM for Groups results..."
