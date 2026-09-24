@@ -16,8 +16,6 @@ The tool helps uncover privileged objects, potentially risky assignments and Con
 
 Findings are presented in interactive HTML reports to support efficient exploration and analysis.
 
-Agent identity and blueprint principal objects and CSV/JSON exports use `MSOwned` (formerly `DefaultMS`) to indicate that the application's owning tenant matches a known Microsoft tenant. Table columns use `MSOwned`; detail labels use “Microsoft-owned”. Consumers of these agent exports must update the field name. Agent inputs must use `MSOwned`; older `DefaultMS` fields are not converted automatically. Enterprise-app exports continue to use `DefaultMS`. This rename does not change classification, scoring, or security findings.
-
 
 ## 🚀 Features
 
@@ -410,11 +408,11 @@ Base impacts are Tier-0 `300`, Tier-1 `100`, Tier-2 `50`, Tier-3 `10`, and unkno
 
 EntraFalcon adjusts the base impact using three kinds of context:
 
-- **Scope:** Assignments covering the tenant root, management groups, or subscriptions have more impact than assignments on a resource group or individual resource. The tenant root receives reserved headroom above the role's base score.
+- **Scope:** Assignments covering the tenant root, management groups, or subscriptions have more impact than assignments on a resource group or individual resource.
 - **Environment:** Common naming patterns such as `prod`, `prd`, `dev`, `test`, and `uat` help distinguish environments. Likely production increases the score, likely nonproduction lowers it, and mixed or unknown names are treated neutrally.
 - **Resources:** Larger scopes receive more weight. An individual resource counts as one, while a confirmed empty resource group, subscription, or management group receives a lower score.
 
-This model helps prioritize Azure role assignments for review. If scope or inventory information is missing or incomplete, EntraFalcon keeps that part of the score neutral instead of assuming a lower impact. Environment classification is based on names and should be verified by an analyst.
+This model helps prioritize Azure role assignments for review. If scope or inventory information is missing or incomplete, EntraFalcon keeps that part of the score neutral instead of assuming a lower impact.
 
 | Role Name                                                          | Tier-Level | GUID                                   |
 |--------------------------------------------------------------------|------------|----------------------------------------|
